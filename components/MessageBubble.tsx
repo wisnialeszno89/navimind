@@ -1,8 +1,12 @@
+"use client";
+
+import ReactMarkdown from "react-markdown";
+
 export default function MessageBubble({
   role,
   content,
 }: {
-  role: string;
+  role: "user" | "assistant" | "system";
   content: string;
 }) {
   const isUser = role === "user";
@@ -17,13 +21,37 @@ export default function MessageBubble({
     >
       <div
         style={{
-          background: isUser ? "#0077cc" : "rgba(255,255,255,0.1)",
-          padding: "10px 14px",
-          borderRadius: 12,
+          background: isUser ? "#0077cc" : "rgba(255,255,255,0.12)",
+          color: isUser ? "#fff" : "#eaeaea",
+          padding: "12px 16px",
+          borderRadius: 14,
           maxWidth: "85%",
+          lineHeight: 1.55,
+          boxShadow: isUser
+            ? "0 6px 18px rgba(0,0,0,0.25)"
+            : "0 4px 12px rgba(0,0,0,0.2)",
         }}
       >
-        {content}
+        <ReactMarkdown
+          components={{
+            strong(props) {
+              return (
+                <strong style={{ color: "#ffffff" }}>
+                  {props.children}
+                </strong>
+              );
+            },
+            li(props) {
+              return (
+                <li style={{ marginBottom: 6 }}>
+                  {props.children}
+                </li>
+              );
+            },
+          }}
+        >
+          {content}
+        </ReactMarkdown>
       </div>
     </div>
   );

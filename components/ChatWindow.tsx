@@ -6,7 +6,6 @@ import SendForm from "./SendForm";
 
 export default function ChatWindow() {
   const messages = useChatStore((s) => s.messages);
-  const loading = useChatStore((s) => s.loading);
 
   return (
     <div
@@ -25,16 +24,11 @@ export default function ChatWindow() {
           flex: 1,
           overflowY: "auto",
           marginBottom: 15,
-          paddingRight: 4,
         }}
       >
         {messages.map((m, i) => (
           <MessageBubble key={i} role={m.role} content={m.content} />
         ))}
-
-        {loading && (
-          <MessageBubble role="assistant" content="Nio pisze…" />
-        )}
       </div>
 
       <SendForm />

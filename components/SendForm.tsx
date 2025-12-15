@@ -2,95 +2,83 @@
 
 import { useState } from "react";
 import { useChatStore } from "@/lib/chatStore";
-import MicButton from "@/components/MicButton";
+import MicrophoneButton from "./MicrophoneButton";
+import UploadButton from "./UploadButton";
+import TypingIndicator from "./TypingIndicator";
 
 export default function SendForm() {
-  const [input, setInput] = useState("");
+  const [msg, setMsg] = useState("");
+  const [typing, setTyping] = useState(false);
 
   const addMessage = useChatStore((s) => s.addMessage);
-  const setLoading = useChatStore((s) => s.setLoading);
+  const updateLast = useChatStore(
+    (s) => s.updateLastAssistantMessage
+  );
+  const getMessages = useChatStore((s) => s.getMessages);
 
-  const send = async () => {
-    if (!input.trim()) return;
+  async function send() {
+    if (!msg.trim()) return;
 
-    const userMsg = {
-      role: "user" as const,   // 🔥 kluczowa poprawka
-      content: input,
-    };
+    addMessage({ role: "user", content: msg });
+    setMsg("");
 
-    addMessage(userMsg);
-    setInput("");
-    setLoading(true);
+    // pusta odpowiedź AI (pod streaming)
+    addMessage({ role: "assistant", content: "" });
+    setTyping(true);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          messages: [userMsg],
-        }),
-      });
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: getMessages(),
+      }),
+    });
 
-      const data = await res.json();
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
 
-      addMessage({
-        role: "assistant" as const,   // 🔥 to też musi być literal
-        content: data.reply ?? "[API ERROR]",
-      });
-    } catch (err) {
-      addMessage({
-        role: "assistant" as const,
-        content: "[API ERROR]",
-      });
-    } finally {
-      setLoading(false);
+    let aiText = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      aiText += decoder.decode(value);
+      updateLast(aiText);
     }
-  };
 
-  const onMic = (text: string) =>
-    setInput((prev) => (prev ? prev + " " : "") + text);
-
-  const uploadPdf = async (file: File | null) => {
-    if (!file) return;
-
-    const fd = new FormData();
-    fd.append("file", file);
-
-    const res = await fetch("/api/pdf", { method: "POST", body: fd });
-    const data = await res.json();
-
-    if (data.text) {
-      setInput((prev) => (prev ? prev + "\n" : "") + data.text);
-    }
-  };
+    setTyping(false);
+  }
 
   return (
-    <div style={{ padding: 8 }}>
-      <div className="input-row">
-        <input
-          className="input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder="Napisz wiadomość..."
+    <div>
+      {typing && <TypingIndicator />}
+
+      <textarea
+        className="chat-input"
+        value={msg}
+        onChange={(e) => setMsg(e.target.value)}
+        placeholder="Napisz..."
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+        }}
+      />
+
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button onClick={send}>Wyślij</button>
+
+        <MicrophoneButton
+          onResult={(text) => setMsg(text)}
         />
 
-        <input
-          type="file"
-          accept="application/pdf"
-          onChange={(e) => uploadPdf(e.target.files?.[0] ?? null)}
+        <UploadButton
+          onText={(text) =>
+            addMessage({ role: "user", content: text })
+          }
         />
-
-        <MicButton onResult={onMic} />
-
-        <button className="button" onClick={send}>
-          Wyślij
-        </button>
       </div>
     </div>
   );

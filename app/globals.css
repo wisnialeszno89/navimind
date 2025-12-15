@@ -43,3 +43,71 @@ body {
 .button:hover {
   background: #0099ff;
 }
+/* ===== NASTRÓJ: CIEMNY, ALE NIE PONURY ===== */
+
+body {
+  background: radial-gradient(
+    ellipse at bottom,
+    #1b2735 0%,
+    #090a0f 70%
+  );
+  color: #e5e7eb;
+}
+
+/* ===== INPUT CHATU ===== */
+
+.chat-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: white;
+  outline: none;
+}
+
+.chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.chat-input:focus {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.18);
+}
+
+/* ===== 3 KROPKI: "AI PISZE" ===== */
+
+.typing {
+  display: inline-flex;
+  gap: 6px;
+  padding: 8px 14px;
+}
+
+.typing span {
+  width: 6px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  animation: blink 1.4s infinite both;
+}
+
+.typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+  0% {
+    opacity: 0.2;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.2;
+  }
+}
