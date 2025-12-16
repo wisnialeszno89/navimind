@@ -18,8 +18,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pl">
-      <body className={`${inter.className} bg-[#020617] text-white min-h-screen`}>
-        {children}
+      <body
+        className={`${inter.className} min-h-screen bg-[#020617] text-white`}
+      >
+        <div className="min-h-screen flex items-center justify-center">
+          {children}
+        </div>
       </body>
     </html>
   );
