@@ -11,18 +11,21 @@ export default function SendForm() {
 
   const add = useChatStore((s) => s.add);
   const messages = useChatStore((s) => s.messages);
+  const limitReached = useChatStore((s) => s.limitReached);
 
   async function send() {
+    if (limitReached) return;
+
     const text = msg.trim();
     if (!text || loading) return;
 
     setLoading(true);
     setMsg("");
 
-    // 1️⃣ zapisujemy snapshot WIADOMOŚCI PRZED wysłaniem
+    // 1️⃣ snapshot WIADOMOŚCI PRZED wysłaniem
     const snapshot = [...messages, { role: "user", content: text }];
 
-    // 2️⃣ dodajemy usera do UI
+    // 2️⃣ dodajemy usera do UI (tu inkrementuje się licznik)
     add({ role: "user", content: text });
 
     try {
@@ -64,7 +67,7 @@ export default function SendForm() {
         className="w-full rounded-lg bg-black/40 border border-white/10 p-3 text-base
                    focus:outline-none focus:ring-2 focus:ring-blue-500"
         placeholder="Napisz…"
-        disabled={loading}
+        disabled={loading || limitReached}
         rows={3}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
@@ -77,7 +80,7 @@ export default function SendForm() {
       <div className="flex gap-2 mt-3 items-center">
         <button
           onClick={send}
-          disabled={loading}
+          disabled={loading || limitReached}
           className="px-5 py-2 bg-blue-600 hover:bg-blue-500 transition
                      rounded-lg font-medium disabled:opacity-50"
         >
@@ -87,6 +90,18 @@ export default function SendForm() {
         <MicrophoneButton onResult={setMsg} />
         <UploadButton />
       </div>
+
+      {limitReached && (
+        <div className="mt-4 text-sm text-center text-gray-400">
+          <p className="mb-1">Na dziś tyle.</p>
+          <p>
+            Jeśli chcesz iść dalej —{" "}
+            <span className="text-blue-400 font-semibold">
+              wersja Pro nie stawia barier.
+            </span>
+          </p>
+        </div>
+      )}
     </div>
   );
 }
