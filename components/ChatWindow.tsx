@@ -2,14 +2,15 @@
 
 import { useChatStore } from "@/lib/chatStore";
 import SendForm from "./SendForm";
+import AppShell from "./AppShell";
 
 export default function ChatWindow() {
   const messages = useChatStore((s) => s.messages);
 
   return (
-    <div className="center-screen stars">
+    <AppShell>
       <div className="chat-box">
-        <div style={{ marginBottom: 12, color: "var(--blue-soft)" }}>
+        <div style={{ marginBottom: 16, color: "#93c5fd" }}>
           👀 Cześć, w czym mogę Ci dzisiaj pomóc?
         </div>
 
@@ -23,6 +24,6 @@ export default function ChatWindow() {
 
         <SendForm />
       </div>
-    </div>
+    </AppShell>
   );
 }

@@ -1,43 +1,37 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import AppShell from "@/components/AppShell";
 
 export default function Home() {
   const router = useRouter();
 
   return (
-    <main className="center-screen stars">
+    <AppShell>
       <div style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: "64px", fontWeight: 700 }}>
+        <h1 style={{ fontSize: 64, fontWeight: 700 }}>
           <span style={{ color: "white" }}>Navi</span>
-          <span style={{ color: "var(--blue-main)" }}>Mind</span>
+          <span style={{ color: "#3b82f6" }}>Mind</span>
         </h1>
 
         <p style={{
           marginTop: 24,
           fontSize: 22,
-          color: "var(--blue-soft)"
+          color: "#93c5fd",
         }}>
-          Spokojna rozmowa. Bez pośpiechu. Bez masek.
+          Rozmowa, która nie udaje.
         </p>
 
         <div style={{ marginTop: 48 }}>
           <button
-            className="button-primary"
             onClick={() => router.push("/chat")}
+            className="button-primary"
           >
             Wejdź do czatu →
           </button>
         </div>
-
-        <div style={{
-          marginTop: 64,
-          fontSize: 14,
-          opacity: .4
-        }}>
-          © 2026 NaviMind
-        </div>
       </div>
-    </main>
+    </AppShell>
   );
 }
+
