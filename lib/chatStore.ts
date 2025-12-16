@@ -1,48 +1,19 @@
 import { create } from "zustand";
 
-export type Msg = {
-  role: "user" | "assistant" | "system";
+export type Message = {
+  role: "user" | "assistant";
   content: string;
 };
 
-interface ChatState {
-  messages: Msg[];
-  loading: boolean;
+type ChatState = {
+  messages: Message[];
+  add: (m: Message) => void;
+  clear: () => void;
+};
 
-  addMessage: (m: Msg) => void;
-  updateLastAssistantMessage: (content: string) => void;
-
-  setLoading: (v: boolean) => void;
-  reset: () => void;
-
-  getMessages: () => Msg[];
-}
-
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>((set) => ({
   messages: [],
-  loading: false,
-
-  addMessage: (m) =>
-    set((s) => ({
-      messages: [...s.messages, m],
-    })),
-
-  // 🔥 KLUCZ DO STREAMINGU
-  updateLastAssistantMessage: (content) =>
-    set((s) => {
-      const messages = [...s.messages];
-      const last = messages[messages.length - 1];
-
-      if (last && last.role === "assistant") {
-        last.content = content;
-      }
-
-      return { messages };
-    }),
-
-  setLoading: (v) => set({ loading: v }),
-
-  reset: () => set({ messages: [] }),
-
-  getMessages: () => get().messages,
+  add: (m) => set((s) => ({ messages: [...s.messages, m] })),
+  clear: () => set({ messages: [] }),
 }));
+

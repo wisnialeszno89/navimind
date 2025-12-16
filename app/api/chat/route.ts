@@ -3,45 +3,33 @@ import OpenAI from "openai";
 export const runtime = "nodejs";
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY!,
 });
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  try {
+    const { messages } = await req.json();
 
-  const stream = await client.responses.stream({
-    model: "gpt-4o-mini",
-    input: messages,
-    max_output_tokens: 900,
-  });
+    const input = messages.map((m: any) => ({
+      role: m.role,
+      content: [{ type: "text", text: m.content }],
+    }));
 
-  const encoder = new TextEncoder();
+    const response = await client.responses.create({
+      model: "gpt-4.1-mini",
+      input,
+    });
 
-  return new Response(
-    new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const event of stream) {
-            if (event.type === "response.output_text.delta") {
-              controller.enqueue(
-                encoder.encode(event.delta)
-              );
-            }
-          }
-        } catch {
-          controller.enqueue(
-            encoder.encode("\n\n[Odpowiedź przerwana]")
-          );
-        } finally {
-          controller.close();
-        }
-      },
-    }),
-    {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Transfer-Encoding": "chunked",
-      },
-    }
-  );
+    return new Response(
+      JSON.stringify({ text: response.output_text }),
+      {
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ text: "Błąd serwera" }),
+      { status: 500 }
+    );
+  }
 }

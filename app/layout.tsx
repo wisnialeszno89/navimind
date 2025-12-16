@@ -1,25 +1,27 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "NaviMind – Testowa wersja",
-  description: "Rozmawiasz z Nio.",
+  title: "NaviMind",
+  description: "Rozmowa, która ma sens.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="pl">
-      <body>
-        <main
-          style={{
-            maxWidth: 700,
-            margin: "0 auto",
-            padding: "20px",
-            color: "white",
-            minHeight: "100vh",
-          }}
-        >
-          {children}
-        </main>
+      <body
+        style={{
+          margin: 0,
+          padding: 0,
+          minHeight: "100vh",
+          background: "#020617",
+          color: "white",
+        }}
+      >
+        {children}
       </body>
     </html>
   );

@@ -4,61 +4,60 @@ import { useState } from "react";
 import { useChatStore } from "@/lib/chatStore";
 import MicrophoneButton from "./MicrophoneButton";
 import UploadButton from "./UploadButton";
-import TypingIndicator from "./TypingIndicator";
 
 export default function SendForm() {
   const [msg, setMsg] = useState("");
-  const [typing, setTyping] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const addMessage = useChatStore((s) => s.addMessage);
-  const updateLast = useChatStore(
-    (s) => s.updateLastAssistantMessage
-  );
-  const getMessages = useChatStore((s) => s.getMessages);
+  const add = useChatStore((s) => s.add);
+  const messages = useChatStore((s) => s.messages);
 
   async function send() {
-    if (!msg.trim()) return;
+    const text = msg.trim();
+    if (!text || loading) return;
 
-    addMessage({ role: "user", content: msg });
+    setLoading(true);
+
+    // 1️⃣ dodajemy usera do store
+    add({ role: "user", content: text });
     setMsg("");
 
-    // pusta odpowiedź AI (pod streaming)
-    addMessage({ role: "assistant", content: "" });
-    setTyping(true);
+    try {
+      // 2️⃣ wysyłamy AKTUALNY stan + nową wiadomość
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, { role: "user", content: text }],
+        }),
+      });
 
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: getMessages(),
-      }),
-    });
+      if (!res.ok) {
+        throw new Error("API error");
+      }
 
-    const reader = res.body!.getReader();
-    const decoder = new TextDecoder();
+      const data = await res.json();
 
-    let aiText = "";
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      aiText += decoder.decode(value);
-      updateLast(aiText);
+      // 3️⃣ odpowiedź AI
+      add({ role: "assistant", content: data.text });
+    } catch (err) {
+      add({
+        role: "assistant",
+        content: "⚠️ Coś poszło nie tak. Spróbuj ponownie.",
+      });
+    } finally {
+      setLoading(false);
     }
-
-    setTyping(false);
   }
 
   return (
-    <div>
-      {typing && <TypingIndicator />}
-
+    <div className="mt-4">
       <textarea
-        className="chat-input"
         value={msg}
         onChange={(e) => setMsg(e.target.value)}
+        className="w-full rounded-lg bg-black/40 border border-white/10 p-2"
         placeholder="Napisz..."
+        disabled={loading}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -67,18 +66,17 @@ export default function SendForm() {
         }}
       />
 
-      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button onClick={send}>Wyślij</button>
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={send}
+          disabled={loading}
+          className="px-4 py-2 bg-blue-600 rounded-lg disabled:opacity-50"
+        >
+          {loading ? "…" : "Wyślij"}
+        </button>
 
-        <MicrophoneButton
-          onResult={(text) => setMsg(text)}
-        />
-
-        <UploadButton
-          onText={(text) =>
-            addMessage({ role: "user", content: text })
-          }
-        />
+        <MicrophoneButton onResult={setMsg} />
+        <UploadButton />
       </div>
     </div>
   );
