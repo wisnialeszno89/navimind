@@ -1,4 +1,10 @@
 import "./globals.css";
+import { Inter } from "next/font/google";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata = {
   title: "NaviMind",
@@ -12,9 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pl">
-      <body
-        className="min-h-screen bg-[#020617] text-white flex flex-col"
-      >
+      <body className={`${inter.className} bg-[#020617] text-white min-h-screen`}>
         {children}
       </body>
     </html>
