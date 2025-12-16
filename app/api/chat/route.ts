@@ -10,25 +10,34 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
 
-    const input = messages.map((m: any) => ({
-      role: m.role,
-      content: [{ type: "text", text: m.content }],
-    }));
+    if (!Array.isArray(messages)) {
+      return new Response(
+        JSON.stringify({ text: "Brak wiadomości." }),
+        { status: 400 }
+      );
+    }
 
-    const response = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input,
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: messages.map((m: any) => ({
+        role: m.role,
+        content: m.content,
+      })),
     });
 
+    const text =
+      completion.choices[0]?.message?.content ??
+      "…";
+
     return new Response(
-      JSON.stringify({ text: response.output_text }),
-      {
-        headers: { "Content-Type": "application/json" },
-      }
+      JSON.stringify({ text }),
+      { headers: { "Content-Type": "application/json" } }
     );
-  } catch (e) {
+  } catch (err) {
+    console.error("CHAT API ERROR:", err);
+
     return new Response(
-      JSON.stringify({ text: "Błąd serwera" }),
+      JSON.stringify({ text: "Błąd serwera." }),
       { status: 500 }
     );
   }

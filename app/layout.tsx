@@ -13,13 +13,7 @@ export default function RootLayout({
   return (
     <html lang="pl">
       <body
-        style={{
-          margin: 0,
-          padding: 0,
-          minHeight: "100vh",
-          background: "#020617",
-          color: "white",
-        }}
+        className="min-h-screen bg-[#020617] text-white flex flex-col"
       >
         {children}
       </body>
