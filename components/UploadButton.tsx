@@ -1,23 +1,25 @@
 "use client";
 
-export default function UploadButton() {
-  const upload = async (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
+type Props = {
+  onUpload: (file: File) => void;
+};
 
-    await fetch("/api/upload", {
-      method: "POST",
-      body: form,
-    });
-  };
-
+export default function UploadButton({ onUpload }: Props) {
   return (
-    <input
-      type="file"
-      accept="application/pdf"
-      onChange={(e) =>
-        e.target.files && upload(e.target.files[0])
-      }
-    />
+    <label
+      className="px-3 py-2 bg-white/10 rounded cursor-pointer hover:bg-white/20 transition"
+      title="Dodaj PDF"
+    >
+      📎
+      <input
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onUpload(file);
+        }}
+      />
+    </label>
   );
 }
