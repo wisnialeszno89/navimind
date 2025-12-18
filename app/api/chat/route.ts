@@ -1,11 +1,10 @@
-import OpenAI from "openai";
-import { systemPrompt } from "@/lib/systemPrompt";
-import { checkAndIncrementLimit } from "@/lib/chatLimit";
-import { getUserId } from "@/lib/userId";
-import { analyzeUserState } from "@/lib/analyzeUserState";
-import { buildSystemPrompt } from "@/lib/buildSystemPrompt";
-import { updatePseudoMemory } from "@/lib/updatePseudoMemory";
-import { getPseudoMemory } from "@/lib/getPseudoMemory";
+import { systemPrompt } from "../../../lib/systemPrompt";
+import { checkAndIncrementLimit } from "../../../lib/chatLimit";
+import { getUserId } from "../../../lib/userId";
+import { analyzeUserState } from "../../../lib/analyzeUserState";
+import { buildSystemPrompt } from "../../../lib/buildSystemPrompt";
+import { updatePseudoMemory } from "../../../lib/updatePseudoMemory";
+import { getPseudoMemory } from "../../../lib/getPseudoMemory";
 
 export const runtime = "nodejs";
 
