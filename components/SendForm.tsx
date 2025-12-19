@@ -22,10 +22,7 @@ export default function SendForm({ setIsTyping }: Props) {
       await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // 👉 Twoja istniejąca logika messages / thread
-          content,
-        }),
+        body: JSON.stringify({ content }),
       });
 
       setText("");
@@ -43,16 +40,10 @@ export default function SendForm({ setIsTyping }: Props) {
 
     try {
       setLoading(true);
-
-      const res = await fetch("/api/upload", {
+      await fetch("/api/upload", {
         method: "POST",
         body: form,
       });
-
-      const data = await res.json();
-      console.log("UPLOADED:", data);
-
-      // 🔜 później: parsowanie PDF → wiadomość do czatu
     } catch (e) {
       console.error("UPLOAD ERROR:", e);
     } finally {
@@ -61,50 +52,42 @@ export default function SendForm({ setIsTyping }: Props) {
   }
 
   return (
-    <div className="border-t border-white/10">
-      {/* ===== FORM ===== */}
+    <div className="border-t border-white/10 mt-4">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           sendMessage(text);
         }}
-        className="flex items-center gap-2 px-3 py-2"
+        className="flex items-center gap-2 px-3 py-3"
       >
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Napisz wiadomość…"
-          className="flex-1 bg-transparent outline-none text-sm"
+          className="flex-1 rounded-xl bg-white/5 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400/40"
           disabled={loading}
         />
 
         <UploadButton onUpload={handleUpload} />
 
         <MicrophoneButton
-          onResult={(t) => {
-            setText((prev) => (prev ? prev + " " + t : t));
-          }}
+          onResult={(t) =>
+            setText((prev) => (prev ? prev + " " + t : t))
+          }
         />
 
         <button
           type="submit"
           disabled={loading}
-          className="px-3 py-2 rounded bg-blue-500/80 hover:bg-blue-500 disabled:opacity-50"
+          className="px-4 py-3 rounded-xl bg-blue-500/80 hover:bg-blue-500 disabled:opacity-50"
         >
           ➤
         </button>
       </form>
 
-      {/* ===== STOPKA PRAWNA ===== */}
-      <div className="px-3 pb-2 text-[11px] leading-snug text-white/50 flex flex-wrap gap-x-2 gap-y-1">
-        <span>
-          NaviMind to narzędzie refleksji, nie terapia.
-        </span>
-        <span>•</span>
-        <a
-          href="/informacje"
-          className="hover:text-white/80 underline underline-offset-2"
-        >
+      <div className="px-4 pb-2 text-[11px] text-white/50 flex gap-1">
+        <span>NaviMind to narzędzie refleksji, nie terapia.</span>
+        <a href="/informacje" className="underline hover:text-white/80">
           Regulamin i prywatność
         </a>
       </div>

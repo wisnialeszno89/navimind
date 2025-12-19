@@ -8,8 +8,10 @@ import { getPseudoMemory } from "../../../lib/getPseudoMemory";
 
 export const runtime = "nodejs";
 
+import OpenAI from "openai";
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY!,
 });
 
 const MAX_HISTORY = 20;
