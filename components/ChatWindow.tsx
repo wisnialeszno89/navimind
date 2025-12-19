@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useChatStore } from "../../lib/chatStore";
-import { extractQuestion } from "../../lib/extractQuestion";
+import { useChatStore } from "../lib/chatStore";
+import { extractQuestion } from "../lib/extractQuestion";
 
 import SendForm from "./SendForm";
 import AppShell from "./AppShell";
