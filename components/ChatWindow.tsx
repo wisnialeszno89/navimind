@@ -7,62 +7,46 @@ import SendForm from "./SendForm";
 import TypingIndicator from "./TypingIndicator";
 import ReactMarkdown from "react-markdown";
 
-const MAX_MESSAGES = 20;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 export default function ChatWindow() {
   const messages = useChatStore((s) => s.messages);
   const [isTyping, setIsTyping] = useState(false);
-  const [blocked, setBlocked] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const [stickToBottom, setStickToBottom] = useState(true);
 
+  // AUTO-SCROLL tylko jeśli user jest na dole
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+    if (stickToBottom) {
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isTyping, stickToBottom]);
 
-  // LIMIT LOGIC
+  // Sprawdzamy czy user ręcznie scrolluje w górę
   useEffect(() => {
-    const count = Number(
-      localStorage.getItem("navimind_message_count") || 0
-    );
-    const ts = Number(
-      localStorage.getItem("navimind_first_message_ts") || 0
-    );
+    const el = containerRef.current;
+    if (!el) return;
 
-    if (!ts && count > 0) {
-      localStorage.setItem(
-        "navimind_first_message_ts",
-        Date.now().toString()
-      );
-    }
+    const onScroll = () => {
+      const atBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      setStickToBottom(atBottom);
+    };
 
-    if (ts && Date.now() - ts > DAY_MS) {
-      localStorage.removeItem("navimind_message_count");
-      localStorage.removeItem("navimind_first_message_ts");
-      setBlocked(false);
-      return;
-    }
-
-    if (count >= MAX_MESSAGES) {
-      setBlocked(true);
-    }
-  }, [messages]);
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+    <div className="flex flex-col flex-1">
       {/* MESSAGES */}
       <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: 20,
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
+        ref={containerRef}
+        className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3
+                   scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
       >
         {messages.length === 0 && (
-          <div style={{ color: "#93c5fd", fontSize: 14 }}>
+          <div className="text-blue-300 text-sm">
             👀 Możemy po prostu pogadać.
             <br />
             Albo od razu przejść do konkretu.
@@ -74,15 +58,7 @@ export default function ChatWindow() {
             return (
               <div
                 key={i}
-                style={{
-                  alignSelf: "flex-end",
-                  maxWidth: "80%",
-                  background: "#3b82f6",
-                  color: "white",
-                  borderRadius: 14,
-                  padding: "10px 14px",
-                  fontSize: 14,
-                }}
+                className="self-end max-w-[80%] bg-blue-600 text-white rounded-xl px-4 py-2 text-sm"
               >
                 {m.content}
               </div>
@@ -94,28 +70,16 @@ export default function ChatWindow() {
           return (
             <div
               key={i}
-              style={{
-                maxWidth: "80%",
-                background: "rgba(255,255,255,0.1)",
-                borderRadius: 14,
-                padding: "12px 14px",
-                fontSize: 14,
-              }}
+              className="max-w-[80%] bg-white/10 rounded-xl px-4 py-3 text-sm"
             >
               {rest && (
-                <div style={{ lineHeight: 1.5 }}>
+                <div className="leading-relaxed">
                   <ReactMarkdown>{rest}</ReactMarkdown>
                 </div>
               )}
 
               {question && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    color: "#93c5fd",
-                    fontWeight: 500,
-                  }}
-                >
+                <div className="mt-3 text-blue-300 font-medium">
                   {question}
                 </div>
               )}
@@ -123,32 +87,13 @@ export default function ChatWindow() {
           );
         })}
 
-        {blocked && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: 14,
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.08)",
-              color: "#e5e7eb",
-              fontSize: 14,
-            }}
-          >
-            <strong>Limit wersji demo osiągnięty.</strong>
-            <br />
-            20 wiadomości / 24h.
-            <br />
-            Wersja Pro: bez limitów.
-          </div>
-        )}
-
         {isTyping && <TypingIndicator />}
 
         <div ref={endRef} />
       </div>
 
       {/* INPUT */}
-      {!blocked && <SendForm setIsTyping={setIsTyping} />}
+      <SendForm setIsTyping={setIsTyping} />
     </div>
   );
 }
