@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useChatStore } from "@/lib/chatStore";
+import { useChatStore } from "../../lib/chatStore";
+import { extractQuestion } from "../../lib/extractQuestion";
+
 import SendForm from "./SendForm";
 import AppShell from "./AppShell";
 import TypingIndicator from "./TypingIndicator";
-import { extractQuestion } from "@/lib/extractQuestion";
 
 export default function ChatWindow() {
   const messages = useChatStore((s) => s.messages);
@@ -22,7 +23,6 @@ export default function ChatWindow() {
   return (
     <AppShell>
       <div className="flex flex-col flex-1 min-h-0">
-
         {/* 🧠 MESSAGES */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
           {isEmpty && (
