@@ -6,25 +6,39 @@ export default function Page() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white">
-      <div className="text-center px-6">
-        <h1 className="text-6xl font-bold">
+    <div className="min-h-screen flex items-center justify-center bg-[#020617] px-4">
+      <div className="text-center max-w-xl">
+        <h1 className="text-6xl font-bold tracking-tight">
           <span className="text-white">Navi</span>
-          <span className="text-blue-400">Mind</span>
+          <span className="text-blue-500">Mind</span>
         </h1>
 
         <p className="mt-6 text-xl text-blue-200">
           Rozmowa, która nie udaje.
         </p>
 
-        <button
-          onClick={() => router.push("/chat")}
-          className="mt-10 px-6 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 transition"
-        >
-          Wejdź do rozmowy →
-        </button>
+        <p className="mt-2 text-sm text-white/50">
+          Bez coachingu. Bez terapii. Bez masek.
+        </p>
 
-        <p className="mt-8 text-sm text-white/50">
+        <div className="mt-10">
+          <button
+            onClick={() => router.push("/chat")}
+            className="
+              rounded-xl
+              bg-blue-500
+              px-8 py-3
+              text-white
+              font-medium
+              hover:bg-blue-400
+              transition
+            "
+          >
+            Wejdź do rozmowy →
+          </button>
+        </div>
+
+        <p className="mt-8 text-xs text-white/40">
           NaviMind to narzędzie refleksji, nie terapia.
         </p>
       </div>

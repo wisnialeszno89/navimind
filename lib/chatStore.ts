@@ -5,7 +5,7 @@ export type Message = {
   content: string;
 };
 
-const MESSAGE_LIMIT = 15;
+const MESSAGE_LIMIT = 20;
 
 type ChatState = {
   messages: Message[];

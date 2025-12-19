@@ -13,6 +13,7 @@ export default function Page() {
           sm:border sm:border-white/10
           sm:shadow-2xl
           backdrop-blur
+          flex
         "
       >
         <ChatWindow />
