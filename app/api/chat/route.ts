@@ -6,15 +6,38 @@ import { buildSystemPrompt } from "../../../lib/buildSystemPrompt";
 import { updatePseudoMemory } from "../../../lib/updatePseudoMemory";
 import { getPseudoMemory } from "../../../lib/getPseudoMemory";
 
-export const runtime = "nodejs";
-
 import OpenAI from "openai";
+
+export const runtime = "nodejs";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
 const MAX_HISTORY = 20;
+
+// 🔒 TWARDY KOTWICZNY STYL (NIE DO DYSKUSJI)
+const STYLE_ANCHOR = `
+Jesteś NaviMind.
+
+Mów krótko i konkretnie.
+Unikaj zwrotów typu:
+- „Widzę, że…”
+- „Rozumiem Cię…”
+- „Wydaje się, że…”
+
+Zamiast tego używaj:
+- „Tu jest sedno.”
+- „Sprawdźmy to.”
+- „To ma sens — ale pod jednym warunkiem.”
+
+Nie jesteś terapeutą ani coachem.
+Jesteś trzeźwym rozmówcą.
+
+Używaj emotek oszczędnie 🙂🔥
+**Pogrubiaj tylko kluczowe informacje.**
+Nigdy nie bądź rozwlekły.
+`;
 
 export async function POST(req: Request) {
   try {
@@ -26,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     // =========================
-    // 1️⃣ IDENTYFIKACJA USERA + LIMIT
+    // 1️⃣ USER + LIMIT
     // =========================
     const userId = getUserId();
     const limit = await checkAndIncrementLimit(userId);
@@ -35,6 +58,9 @@ export async function POST(req: Request) {
       return Response.json(
         {
           error: "LIMIT_REACHED",
+          text:
+            "Limit demo został osiągnięty 🔒\n\n" +
+            "Masz 20 wiadomości na 24h. Wersja PRO nie ma limitów.",
           limit: {
             used: limit.used,
             limit: limit.limit,
@@ -46,7 +72,7 @@ export async function POST(req: Request) {
     }
 
     // =========================
-    // 2️⃣ FILTR + HISTORIA
+    // 2️⃣ HISTORIA (FILTR)
     // =========================
     let history = messages
       .filter(
@@ -57,24 +83,20 @@ export async function POST(req: Request) {
       )
       .slice(-MAX_HISTORY);
 
-    // 🔒 NIE pozwalamy zaczynać od assistant
     if (history[0]?.role === "assistant") {
       history.shift();
     }
 
     // =========================
-    // 3️⃣ ANALIZA STANU (KROK 2.B)
+    // 3️⃣ ANALIZA STANU
     // =========================
     const analysis = await analyzeUserState(history);
 
     // =========================
-    // 4️⃣ PSEUDO-PAMIĘĆ (KROK 2.C)
+    // 4️⃣ PSEUDO-PAMIĘĆ
     // =========================
     const rawMemory = await getPseudoMemory(userId);
-
-    const memory = rawMemory ?? {
-      visits: 0,
-    };
+    const memory = rawMemory ?? { visits: 0 };
 
     const enrichedSystemPrompt = buildSystemPrompt(
       systemPrompt,
@@ -85,18 +107,24 @@ export async function POST(req: Request) {
     await updatePseudoMemory(userId, analysis);
 
     // =========================
-    // 5️⃣ ODPOWIEDŹ AI
+    // 5️⃣ AI RESPONSE
     // =========================
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      messages: ([
-        { role: "system", content: enrichedSystemPrompt },
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: STYLE_ANCHOR },
+        {
+          role: "system",
+          content:
+            enrichedSystemPrompt +
+            "\n\nTo jest wersja DEMO (limit 20 wiadomości).",
+        },
         ...history.map((m: any) => ({
           role: m.role,
           content: m.content,
         })),
-      ] as any),
-      temperature: 0.7,
+      ] as any,
     });
 
     const text =
@@ -104,7 +132,7 @@ export async function POST(req: Request) {
       "Chwila ciszy. Spróbuj jeszcze raz.";
 
     // =========================
-    // 6️⃣ RESPONSE DO UI (TEKST + LIMIT + UI HINTS)
+    // 6️⃣ RESPONSE DO UI
     // =========================
     return Response.json({
       text,

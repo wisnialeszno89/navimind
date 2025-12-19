@@ -1,145 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useChatStore } from "../lib/chatStore";
+import MicrophoneButton from "./MicrophoneButton";
+
+const DEMO_LIMIT = 20;
 
 type Props = {
   setIsTyping: (v: boolean) => void;
 };
 
-declare global {
-  interface Window {
-    webkitSpeechRecognition: any;
-    SpeechRecognition: any;
-  }
-}
-
 export default function SendForm({ setIsTyping }: Props) {
+  const [text, setText] = useState("");
+  const messages = useChatStore((s) => s.messages);
   const add = useChatStore((s) => s.add);
 
-  const [text, setText] = useState("");
-  const [listening, setListening] = useState(false);
-  const [micSupported, setMicSupported] = useState(false);
+  const used = messages.filter((m) => m.role === "user").length;
+  const left = DEMO_LIMIT - used;
+  const limitReached = left <= 0;
 
-  const [pdfText, setPdfText] = useState<string | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
-
-  const recognitionRef = useRef<any>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  /* ===============================
-     MICROPHONE (VOICE → TEXT)
-     =============================== */
-  useEffect(() => {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setMicSupported(false);
-      return;
-    }
-
-    setMicSupported(true);
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "pl-PL";
-    recognition.interimResults = true;
-    recognition.continuous = false;
-
-    recognition.onresult = (event: any) => {
-      let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setText(transcript.trim());
-    };
-
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
-
-    recognitionRef.current = recognition;
-  }, []);
-
-  function toggleMic() {
-    if (!micSupported || !recognitionRef.current) return;
-
-    if (listening) {
-      recognitionRef.current.stop();
-      setListening(false);
-    } else {
-      recognitionRef.current.start();
-      setListening(true);
-    }
-  }
-
-  /* ===============================
-     PDF UPLOAD
-     =============================== */
-  async function handlePdfUpload(file: File) {
-    setPdfLoading(true);
-    setPdfText(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("/api/pdf", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (data.text) {
-        setPdfText(data.text);
-
-        add({
-          role: "assistant",
-          content:
-            "📄 Dokument PDF został załadowany.\n\nMożemy go przeanalizować. Sprawdźmy, co w nim jest istotne.",
-        });
-      } else {
-        throw new Error("Brak tekstu z PDF");
-      }
-    } catch {
-      add({
-        role: "assistant",
-        content:
-          "⚠️ Nie udało się przetworzyć PDF. Jeśli to skan, ten format może nie zawierać tekstu.",
-      });
-    } finally {
-      setPdfLoading(false);
-    }
-  }
-
-  /* ===============================
-     SEND MESSAGE (WITH DEMO LIMIT)
-     =============================== */
   async function send() {
-    if (!text.trim()) return;
-
-    // DEMO MESSAGE COUNTER
-    const current = Number(
-      localStorage.getItem("navimind_message_count") || 0
-    );
-    localStorage.setItem(
-      "navimind_message_count",
-      String(current + 1)
-    );
-
-    if (!localStorage.getItem("navimind_first_message_ts")) {
-      localStorage.setItem(
-        "navimind_first_message_ts",
-        String(Date.now())
-      );
-    }
-
-    let finalText = text;
-
-    if (pdfText) {
-      finalText =
-        `Kontekst (PDF):\n${pdfText.slice(0, 6000)}\n\nPytanie:\n` + text;
-    }
+    if (!text.trim() || limitReached) return;
 
     add({ role: "user", content: text });
     setText("");
@@ -150,11 +31,9 @@ export default function SendForm({ setIsTyping }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: useChatStore.getState().messages.map((m) =>
-            m.role === "user" && m.content === text
-              ? { ...m, content: finalText }
-              : m
-          ),
+          messages: useChatStore.getState().messages,
+          demo: true,
+          left,
         }),
       });
 
@@ -166,104 +45,75 @@ export default function SendForm({ setIsTyping }: Props) {
   }
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        send();
-      }}
-      style={{
-        borderTop: "1px solid rgba(255,255,255,0.1)",
-        padding: 12,
-        display: "flex",
-        gap: 8,
-        alignItems: "center",
-      }}
-    >
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={
-          listening
-            ? "Nagrywam…"
-            : pdfLoading
-            ? "Przetwarzam PDF…"
-            : "Napisz wiadomość…"
-        }
+    <div>
+      {/* LICZNIK */}
+      <div
         style={{
-          flex: 1,
-          background: "rgba(255,255,255,0.1)",
-          border: "none",
-          borderRadius: 12,
-          padding: "10px 14px",
-          color: "white",
-          outline: "none",
-        }}
-      />
-
-      {/* PDF */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="application/pdf"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handlePdfUpload(file);
-          e.currentTarget.value = "";
-        }}
-      />
-
-      <button
-        type="button"
-        title="Dodaj PDF"
-        onClick={() => fileInputRef.current?.click()}
-        style={{
-          background: "rgba(255,255,255,0.1)",
-          color: "white",
-          border: "none",
-          borderRadius: 12,
-          padding: "0 14px",
-          height: 40,
-          cursor: "pointer",
+          fontSize: 12,
+          color: "#93c5fd",
+          padding: "6px 12px",
+          textAlign: "right",
         }}
       >
-        📄
-      </button>
+        Demo · {used}/{DEMO_LIMIT} wiadomości
+      </div>
 
-      {/* MICROPHONE */}
-      {micSupported && (
-        <button
-          type="button"
-          onClick={toggleMic}
-          title={listening ? "Zatrzymaj" : "Mów"}
+      {/* INPUT */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+        style={{
+          borderTop: "1px solid rgba(255,255,255,0.1)",
+          padding: 12,
+          display: "flex",
+          gap: 8,
+        }}
+      >
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={
+            limitReached
+              ? "Limit demo osiągnięty"
+              : "Napisz wiadomość…"
+          }
+          disabled={limitReached}
           style={{
-            background: listening ? "#2563eb" : "rgba(255,255,255,0.1)",
+            flex: 1,
+            background: "rgba(255,255,255,0.1)",
+            border: "none",
+            borderRadius: 12,
+            padding: "10px 14px",
+            color: "white",
+            outline: "none",
+            opacity: limitReached ? 0.5 : 1,
+          }}
+        />
+
+        <MicrophoneButton
+          onResult={(t) =>
+            setText((prev) => (prev ? prev + " " + t : t))
+          }
+        />
+
+        <button
+          type="submit"
+          disabled={limitReached}
+          style={{
+            background: "#3b82f6",
             color: "white",
             border: "none",
             borderRadius: 12,
-            padding: "0 14px",
-            height: 40,
-            cursor: "pointer",
+            padding: "0 16px",
+            cursor: limitReached ? "not-allowed" : "pointer",
+            opacity: limitReached ? 0.5 : 1,
           }}
         >
-          🎤
+          ➤
         </button>
-      )}
-
-      <button
-        type="submit"
-        style={{
-          background: "#3b82f6",
-          color: "white",
-          border: "none",
-          borderRadius: 12,
-          padding: "0 16px",
-          height: 40,
-          cursor: "pointer",
-        }}
-      >
-        ➤
-      </button>
-    </form>
+      </form>
+    </div>
   );
 }
