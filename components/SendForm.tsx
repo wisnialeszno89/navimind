@@ -19,7 +19,7 @@ export default function SendForm({ setIsTyping }: Props) {
 
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
-  const [micSupported, setMicSupported] = useState(true);
+  const [micSupported, setMicSupported] = useState(false);
 
   const [pdfText, setPdfText] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -38,6 +38,8 @@ export default function SendForm({ setIsTyping }: Props) {
       setMicSupported(false);
       return;
     }
+
+    setMicSupported(true);
 
     const recognition = new SpeechRecognition();
     recognition.lang = "pl-PL";
@@ -99,7 +101,7 @@ export default function SendForm({ setIsTyping }: Props) {
       } else {
         throw new Error("Brak tekstu z PDF");
       }
-    } catch (e) {
+    } catch {
       add({
         role: "assistant",
         content:
@@ -111,10 +113,26 @@ export default function SendForm({ setIsTyping }: Props) {
   }
 
   /* ===============================
-     SEND MESSAGE
+     SEND MESSAGE (WITH DEMO LIMIT)
      =============================== */
   async function send() {
     if (!text.trim()) return;
+
+    // DEMO MESSAGE COUNTER
+    const current = Number(
+      localStorage.getItem("navimind_message_count") || 0
+    );
+    localStorage.setItem(
+      "navimind_message_count",
+      String(current + 1)
+    );
+
+    if (!localStorage.getItem("navimind_first_message_ts")) {
+      localStorage.setItem(
+        "navimind_first_message_ts",
+        String(Date.now())
+      );
+    }
 
     let finalText = text;
 
