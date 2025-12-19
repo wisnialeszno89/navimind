@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import AppShell from "@/components/AppShell";
+import AppShell from "../components/AppShell";;
 
 export default function Home() {
   const router = useRouter();
