@@ -4,24 +4,18 @@ import { useState } from "react";
 import { useChatStore } from "../lib/chatStore";
 import MicrophoneButton from "./MicrophoneButton";
 
-const DEMO_LIMIT = 20;
-
 type Props = {
   setIsTyping: (v: boolean) => void;
 };
 
 export default function SendForm({ setIsTyping }: Props) {
   const [text, setText] = useState("");
-  const messages = useChatStore((s) => s.messages);
   const add = useChatStore((s) => s.add);
 
-  const used = messages.filter((m) => m.role === "user").length;
-  const left = DEMO_LIMIT - used;
-  const limitReached = left <= 0;
-
   async function send() {
-    if (!text.trim() || limitReached) return;
+    if (!text.trim()) return;
 
+    // wiadomość usera zawsze dodajemy
     add({ role: "user", content: text });
     setText("");
     setIsTyping(true);
@@ -35,8 +29,23 @@ export default function SendForm({ setIsTyping }: Props) {
         }),
       });
 
+      // 🔒 LIMIT DEMO – JEDYNE ŹRÓDŁO PRAWDY
+      if (res.status === 429) {
+        add({
+          role: "assistant",
+          content:
+            "Limit demo został osiągnięty 🔒\n\n" +
+            "Masz 20 wiadomości na 24 godziny.\n" +
+            "W wersji PRO nie ma limitów i rozmowa nie jest przerywana.",
+        });
+        return;
+      }
+
       const data = await res.json();
-      add({ role: "assistant", content: data.text });
+
+      if (data?.text) {
+        add({ role: "assistant", content: data.text });
+      }
     } finally {
       setIsTyping(false);
     }
@@ -55,7 +64,10 @@ export default function SendForm({ setIsTyping }: Props) {
       });
 
       const data = await res.json();
-      add({ role: "assistant", content: data.text });
+
+      if (data?.text) {
+        add({ role: "assistant", content: data.text });
+      }
     } finally {
       setIsTyping(false);
     }
@@ -63,9 +75,9 @@ export default function SendForm({ setIsTyping }: Props) {
 
   return (
     <div>
-      {/* LICZNIK */}
+      {/* INFO DEMO – UCZCIWE, BEZ LICZNIKA */}
       <div className="text-xs text-blue-300 text-right px-3 pb-1">
-        Demo · {used}/{DEMO_LIMIT} wiadomości
+        Demo · do 20 wiadomości / 24h
       </div>
 
       {/* INPUT BAR */}
@@ -105,20 +117,14 @@ export default function SendForm({ setIsTyping }: Props) {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={
-            limitReached
-              ? "Limit demo osiągnięty"
-              : "Napisz wiadomość…"
-          }
-          disabled={limitReached}
+          placeholder="Napisz wiadomość…"
           className="flex-1 bg-white/10 rounded px-4 py-2 text-white outline-none"
         />
 
         {/* SEND */}
         <button
           type="submit"
-          disabled={limitReached}
-          className="px-4 py-2 bg-blue-600 rounded text-white disabled:opacity-50"
+          className="px-4 py-2 bg-blue-600 rounded text-white"
         >
           ➤
         </button>
