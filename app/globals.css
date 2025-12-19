@@ -1,17 +1,4 @@
-.prose strong {
-  color: white;
-  font-weight: 600;
-}
-
-.prose ul {
-  padding-left: 1.25rem;
-  list-style-type: disc;
-}
-
-.prose li {
-  margin: 0.25rem 0;
-}
-
-.prose p {
-  margin: 0.5rem 0;
+body {
+  background: red !important;
+  color: white !important;
 }
