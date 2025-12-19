@@ -1,47 +1,49 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import AppShell from "../components/AppShell";
 
 export default function Page() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] px-4">
-      <div className="text-center max-w-xl">
-        <h1 className="text-6xl font-bold tracking-tight">
-          <span className="text-white">Navi</span>
-          <span className="text-blue-500">Mind</span>
+    <AppShell>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          gap: 24,
+        }}
+      >
+        <h1 style={{ fontSize: 64, fontWeight: 700 }}>
+          <span style={{ color: "white" }}>Navi</span>
+          <span style={{ color: "#3b82f6" }}>Mind</span>
         </h1>
 
-        <p className="mt-6 text-xl text-blue-200">
+        <p style={{ fontSize: 22, color: "#93c5fd" }}>
           Rozmowa, która nie udaje.
         </p>
 
-        <p className="mt-2 text-sm text-white/50">
-          Bez coachingu. Bez terapii. Bez masek.
-        </p>
-
-        <div className="mt-10">
-          <button
-            onClick={() => router.push("/chat")}
-            className="
-              rounded-xl
-              bg-blue-500
-              px-8 py-3
-              text-white
-              font-medium
-              hover:bg-blue-400
-              transition
-            "
-          >
-            Wejdź do rozmowy →
-          </button>
-        </div>
-
-        <p className="mt-8 text-xs text-white/40">
-          NaviMind to narzędzie refleksji, nie terapia.
-        </p>
+        <button
+          onClick={() => router.push("/chat")}
+          style={{
+            marginTop: 24,
+            padding: "14px 28px",
+            fontSize: 16,
+            borderRadius: 12,
+            background: "#3b82f6",
+            color: "white",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          Przejdź do czatu →
+        </button>
       </div>
-    </div>
+    </AppShell>
   );
 }

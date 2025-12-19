@@ -1,18 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-
 import { useChatStore } from "../lib/chatStore";
 import { extractQuestion } from "../lib/extractQuestion";
-
 import SendForm from "./SendForm";
 import TypingIndicator from "./TypingIndicator";
+import ReactMarkdown from "react-markdown";
 
 export default function ChatWindow() {
   const messages = useChatStore((s) => s.messages);
-  const messageCount = useChatStore((s) => s.messageCount);
-
   const [isTyping, setIsTyping] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -21,11 +17,20 @@ export default function ChatWindow() {
   }, [messages, isTyping]);
 
   return (
-    <div className="flex h-full flex-col bg-transparent">
+    <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
         {messages.length === 0 && (
-          <div className="text-sm text-blue-300/80">
+          <div style={{ color: "#93c5fd", fontSize: 14 }}>
             👀 Możemy po prostu pogadać.
             <br />
             Albo od razu przejść do konkretu.
@@ -37,7 +42,15 @@ export default function ChatWindow() {
             return (
               <div
                 key={i}
-                className="ml-auto max-w-[75%] rounded-2xl bg-blue-500/80 px-4 py-2 text-sm leading-relaxed shadow"
+                style={{
+                  alignSelf: "flex-end",
+                  maxWidth: "80%",
+                  background: "#3b82f6",
+                  color: "white",
+                  borderRadius: 14,
+                  padding: "10px 14px",
+                  fontSize: 14,
+                }}
               >
                 {m.content}
               </div>
@@ -49,16 +62,28 @@ export default function ChatWindow() {
           return (
             <div
               key={i}
-              className="max-w-[75%] rounded-2xl bg-white/10 px-4 py-3 text-sm leading-relaxed shadow"
+              style={{
+                maxWidth: "80%",
+                background: "rgba(255,255,255,0.1)",
+                borderRadius: 14,
+                padding: "12px 14px",
+                fontSize: 14,
+              }}
             >
               {rest && (
-                <div className="prose prose-invert max-w-none">
+                <div style={{ lineHeight: 1.5 }}>
                   <ReactMarkdown>{rest}</ReactMarkdown>
                 </div>
               )}
 
               {question && (
-                <div className="mt-4 text-blue-300 font-medium">
+                <div
+                  style={{
+                    marginTop: 12,
+                    color: "#93c5fd",
+                    fontWeight: 500,
+                  }}
+                >
                   {question}
                 </div>
               )}
@@ -67,18 +92,12 @@ export default function ChatWindow() {
         })}
 
         {isTyping && <TypingIndicator />}
+
         <div ref={endRef} />
       </div>
 
-      {/* LICZNIK */}
-      <div className="px-6 py-1 text-xs text-white/40">
-        {messageCount}/15 wiadomości
-      </div>
-
       {/* INPUT */}
-      <div className="border-t border-white/10">
-        <SendForm setIsTyping={setIsTyping} />
-      </div>
+      <SendForm setIsTyping={setIsTyping} />
     </div>
   );
 }

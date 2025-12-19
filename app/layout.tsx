@@ -7,7 +7,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pl">
-      <body className="min-h-screen bg-[#020617] text-white">
+      <body className="min-h-screen flex items-center justify-center">
         {children}
       </body>
     </html>

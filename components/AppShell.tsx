@@ -4,8 +4,29 @@ export default function AppShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] px-4">
-      <div className="w-full max-w-4xl h-[85vh] rounded-2xl bg-gradient-to-b from-white/5 to-white/[0.02] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#020617",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 900,
+          height: "85vh",
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 16,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
         {children}
       </div>
     </div>
