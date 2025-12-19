@@ -6,10 +6,7 @@ type Props = {
 
 export default function UploadButton({ onUpload }: Props) {
   return (
-    <label
-      className="px-3 py-2 bg-white/10 rounded cursor-pointer hover:bg-white/20 transition"
-      title="Dodaj PDF"
-    >
+    <label className="cursor-pointer px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm flex items-center gap-1">
       📎
       <input
         type="file"

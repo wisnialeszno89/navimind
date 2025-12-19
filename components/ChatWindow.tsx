@@ -1,77 +1,76 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../lib/chatStore";
 import { extractQuestion } from "../lib/extractQuestion";
-
 import SendForm from "./SendForm";
-import AppShell from "./AppShell";
 import TypingIndicator from "./TypingIndicator";
+import ReactMarkdown from "react-markdown";
 
 export default function ChatWindow() {
   const messages = useChatStore((s) => s.messages);
   const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
-  const isEmpty = messages.length === 0;
+  const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
   return (
-    <AppShell>
-      <div className="flex flex-col h-full min-h-0">
-        {/* WIADOMOŚCI */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-          {isEmpty && (
-            <div className="text-sm text-blue-300/90">
-              👀 Możemy po prostu pogadać.
-              <br />
-              Albo od razu przejść do konkretu.
-            </div>
-          )}
+  <div className="chat-root flex flex-col flex-1 bg-transparent">
+      {/* MESSAGES */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        {messages.length === 0 && (
+          <div className="text-sm text-blue-300 opacity-80">
+            👀 Możemy po prostu pogadać.
+            <br />
+            Albo od razu przejść do konkretu.
+          </div>
+        )}
 
-          {messages.map((m, i) => {
-            if (m.role === "user") {
-              return (
-                <div
-                  key={i}
-                  className="self-end max-w-[80%] rounded-2xl bg-blue-500/80 px-4 py-2 text-sm text-white"
-                >
-                  {m.content}
-                </div>
-              );
-            }
-
-            const { rest, question } = extractQuestion(m.content);
-
+        {messages.map((m, i) => {
+          if (m.role === "user") {
             return (
               <div
                 key={i}
-                className="self-start max-w-[80%] rounded-2xl bg-white/10 px-4 py-3 text-sm text-white"
+                className="ml-auto max-w-[80%] rounded-xl bg-blue-500/80 px-4 py-2 text-sm leading-relaxed"
               >
-                {rest && <div>{rest}</div>}
-
-                {question && (
-                  <div className="mt-4 text-blue-300 font-medium">
-                    {question}
-                  </div>
-                )}
+                {m.content}
               </div>
             );
-          })}
+          }
 
-          {isTyping && <TypingIndicator />}
+          const { rest, question } = extractQuestion(m.content);
 
-          <div ref={messagesEndRef} />
-        </div>
+          return (
+            <div
+              key={i}
+              className="max-w-[80%] rounded-xl bg-white/10 px-4 py-3 text-sm leading-relaxed"
+            >
+              {rest && (
+                <div className="prose prose-invert max-w-none">
+                  <ReactMarkdown>{rest}</ReactMarkdown>
+                </div>
+              )}
 
-        {/* INPUT */}
-        <div className="border-t border-white/10 bg-black/40">
-          <SendForm setIsTyping={setIsTyping} />
-        </div>
+              {question && (
+                <div className="mt-4 text-blue-300 font-medium">
+                  {question}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {isTyping && <TypingIndicator />}
+
+        <div ref={endRef} />
       </div>
-    </AppShell>
+
+      {/* INPUT */}
+      <div className="border-t border-white/10">
+        <SendForm setIsTyping={setIsTyping} />
+      </div>
+    </div>
   );
 }
