@@ -15,16 +15,14 @@ export default function ChatWindow() {
 
   const isEmpty = messages.length === 0;
 
-  // 🔽 auto-scroll na dół przy nowych wiadomościach
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
   return (
     <AppShell>
-      {/* GŁÓWNY KONTENER CZATU */}
       <div className="flex flex-col h-full min-h-0">
-        {/* 🧠 OBSZAR WIADOMOŚCI */}
+        {/* WIADOMOŚCI */}
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
           {isEmpty && (
             <div className="text-sm text-blue-300/90">
@@ -66,11 +64,10 @@ export default function ChatWindow() {
 
           {isTyping && <TypingIndicator />}
 
-          {/* anchor scrolla */}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* ✍️ INPUT – ZAWSZE NA DOLE */}
+        {/* INPUT */}
         <div className="border-t border-white/10 bg-black/40">
           <SendForm setIsTyping={setIsTyping} />
         </div>

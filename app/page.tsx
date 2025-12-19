@@ -1,37 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import AppShell from "../components/AppShell";;
+import AppShell from "../components/AppShell";
 
 export default function Home() {
   const router = useRouter();
 
   return (
     <AppShell>
-      <div style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: 64, fontWeight: 700 }}>
-          <span style={{ color: "white" }}>Navi</span>
-          <span style={{ color: "#3b82f6" }}>Mind</span>
+      <div className="flex flex-col items-center text-center">
+        <h1 className="text-6xl font-bold">
+          <span className="text-white">Navi</span>
+          <span className="text-blue-500">Mind</span>
         </h1>
 
-        <p style={{
-          marginTop: 24,
-          fontSize: 22,
-          color: "#93c5fd",
-        }}>
+        <p className="mt-6 text-xl text-blue-300">
           Rozmowa, która nie udaje.
         </p>
 
-        <div style={{ marginTop: 48 }}>
-          <button
-            onClick={() => router.push("/chat")}
-            className="button-primary"
-          >
-            Wejdź do czatu →
-          </button>
-        </div>
+        <button
+          onClick={() => router.push("/chat")}
+          className="mt-12 rounded-xl bg-blue-500 px-6 py-3 text-white font-medium hover:bg-blue-600 transition"
+        >
+          Wejdź do czatu →
+        </button>
       </div>
     </AppShell>
   );
 }
-
