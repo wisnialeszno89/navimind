@@ -1,92 +1,57 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 type Props = {
   onResult: (text: string) => void;
 };
 
-declare global {
-  interface Window {
-    webkitSpeechRecognition: any;
-    SpeechRecognition: any;
-  }
-}
-
 export default function MicrophoneButton({ onResult }: Props) {
-  const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
 
-  // INIT
-  useEffect(() => {
-    const Speech =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+  const start = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
 
-    if (!Speech) {
-      setSupported(false);
+    if (!SpeechRecognition) {
+      alert("Mikrofon działa tylko w Chrome lub Edge (desktop).");
       return;
     }
 
-    setSupported(true);
-
-    const rec = new Speech();
+    const rec = new SpeechRecognition();
     rec.lang = "pl-PL";
     rec.interimResults = false;
-    rec.continuous = false;
+    rec.maxAlternatives = 1;
 
-    rec.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
-      onResult(transcript);
-    };
-
-    rec.onend = () => {
-      setListening(false);
-    };
+    rec.onstart = () => setListening(true);
+    rec.onend = () => setListening(false);
 
     rec.onerror = () => {
       setListening(false);
+      alert("Nie udało się uruchomić mikrofonu.");
     };
 
-    recognitionRef.current = rec;
-  }, [onResult]);
+    rec.onresult = (e: any) => {
+      const text = e.results[0][0].transcript;
+      onResult(text);
+    };
 
-  const toggle = () => {
-    if (!supported) {
-      alert("Mikrofon działa w Chrome lub Edge (desktop).");
-      return;
-    }
-
-    if (!recognitionRef.current) return;
-
-    if (listening) {
-      recognitionRef.current.stop();
-      setListening(false);
-    } else {
-      recognitionRef.current.start();
-      setListening(true);
-    }
+    rec.start();
   };
 
   return (
     <button
       type="button"
-      onClick={toggle}
-      title={
-        supported
-          ? listening
-            ? "Zatrzymaj nagrywanie"
-            : "Mów"
-          : "Mikrofon niedostępny"
-      }
-      className={`px-3 py-2 rounded transition
-        ${
-          listening
-            ? "bg-blue-600 animate-pulse"
-            : "bg-white/10 hover:bg-white/20"
-        }`}
+      onClick={start}
+      title={listening ? "Słucham…" : "Mów (Chrome / Edge)"}
+      className={`px-3 py-2 rounded transition ${
+        listening
+          ? "bg-red-500/30"
+          : "bg-white/10 hover:bg-white/20"
+      }`}
     >
-      🎤
+      {listening ? "🎙️…" : "🎙️"}
     </button>
   );
 }
