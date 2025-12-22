@@ -45,56 +45,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#020617",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 900,
-          height: "85vh",
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 16,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
+    <div className="h-screen w-full bg-[#020617] flex justify-center items-stretch p-4 overflow-hidden">
+      <div className="w-full max-w-[900px] flex flex-col bg-white/5 border border-white/10 rounded-2xl overflow-hidden min-h-0">
         {/* TOP BAR */}
-        <div
-          style={{
-            padding: "8px 14px",
-            fontSize: 13,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            color: "#93c5fd",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
+        <div className="shrink-0 px-4 py-2 text-sm flex justify-between items-center text-blue-300 border-b border-white/10">
           <div>
             Demo · {count}/{MAX_MESSAGES} wiadomości
             {count >= MAX_MESSAGES && (
-              <span style={{ marginLeft: 8, color: "#fca5a5" }}>
+              <span className="ml-2 text-red-300">
                 (reset za {resetIn})
               </span>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 12 }}>
+          <div className="flex gap-3 text-blue-200">
             <Link href="/regulamin">Regulamin</Link>
           </div>
         </div>
 
-        {children}
+        {/* CONTENT (CHAT) */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {children}
+        </div>
       </div>
     </div>
   );
