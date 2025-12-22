@@ -15,7 +15,7 @@ export default function SendForm({ setIsTyping }: Props) {
   async function send() {
     if (!text.trim()) return;
 
-    // wiadomość usera zawsze dodajemy
+    // 1️⃣ wiadomość usera
     add({ role: "user", content: text });
     setText("");
     setIsTyping(true);
@@ -29,7 +29,7 @@ export default function SendForm({ setIsTyping }: Props) {
         }),
       });
 
-      // 🔒 LIMIT DEMO – JEDYNE ŹRÓDŁO PRAWDY
+      // 🔒 LIMIT DEMO
       if (res.status === 429) {
         add({
           role: "assistant",
@@ -43,6 +43,23 @@ export default function SendForm({ setIsTyping }: Props) {
 
       const data = await res.json();
 
+      // 2️⃣ ZAPIS LICZNIKA (JEDYNE ŹRÓDŁO DLA UI)
+      if (data?.limit) {
+        localStorage.setItem(
+          "navimind_message_count",
+          String(data.limit.used)
+        );
+
+        // zapisujemy timestamp pierwszej wiadomości w danym oknie
+        if (!localStorage.getItem("navimind_first_message_ts")) {
+          localStorage.setItem(
+            "navimind_first_message_ts",
+            String(Date.now())
+          );
+        }
+      }
+
+      // 3️⃣ odpowiedź asystenta
       if (data?.text) {
         add({ role: "assistant", content: data.text });
       }
@@ -75,7 +92,7 @@ export default function SendForm({ setIsTyping }: Props) {
 
   return (
     <div>
-      {/* INFO DEMO – UCZCIWE, BEZ LICZNIKA */}
+      {/* INFO DEMO */}
       <div className="text-xs text-blue-300 text-right px-3 pb-1">
         Demo · do 20 wiadomości / 24h
       </div>
@@ -113,7 +130,7 @@ export default function SendForm({ setIsTyping }: Props) {
           }
         />
 
-        {/* TEXT INPUT */}
+        {/* TEXT */}
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
