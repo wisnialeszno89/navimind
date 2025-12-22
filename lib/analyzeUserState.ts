@@ -13,13 +13,13 @@ type Msg = {
 export async function analyzeUserState(
   history: Msg[]
 ): Promise<UserAnalysis> {
-  // bierzemy tylko ostatnie wiadomości – nie analizujemy całej epopei
+  // analizujemy tylko świeży kontekst
   const recent = history.slice(-6);
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
     temperature: 0,
-    messages: ([
+    messages: [
       {
         role: "system",
         content: `
@@ -35,44 +35,80 @@ Zwróć WYŁĄCZNIE czysty JSON w formacie:
 
 {
   "emotionalTone": "calm | anxious | frustrated | overwhelmed | numb",
+  "emotionalCharge": "low | medium | high",
   "clarity": "high | medium | low",
   "avoidance": boolean,
-  "coreIssue": "krótka hipoteza (max 8 słów)",
+
+  "coreTheme": "główny temat rozmowy (1–3 słowa)",
+  "tension": "gdzie rozmowa się napina (opcjonalne)",
+  "avoidanceReason": "co jest omijane (opcjonalne)",
+  "anchor": "jedno zdanie warte zapamiętania (opcjonalne)",
+
   "recommendedStyle": "direct | probing | grounding"
 }
 
 Zasady:
-- Jeśli użytkownik krąży, omija sedno → avoidance = true
-- Jeśli emocje dominują nad treścią → clarity = low
-- coreIssue to HIPOTEZA, nie diagnoza
+- coreTheme opisuje O CZYM to jest, nie problem
+- tension to miejsce utknięcia, nie emocja
+- avoidanceReason tylko jeśli avoidance = true
+- anchor tylko jeśli coś WYRAŹNIE wraca lub jest kluczowe
+- to są HIPOTEZY, nie diagnozy
 - zero komentarzy, zero markdown, zero tekstu poza JSON
         `.trim(),
       },
       ...recent,
-    ] as any),
+    ],
   });
 
   const raw = completion.choices[0]?.message?.content;
 
+  // 🔒 BEZPIECZNY FALLBACK (NIC SIĘ NIE WYWALA)
   if (!raw) {
     return {
       emotionalTone: "calm",
+      emotionalCharge: "low",
       clarity: "medium",
       avoidance: false,
-      coreIssue: "brak danych",
+
+      coreTheme: "brak danych",
+      tension: undefined,
+      avoidanceReason: undefined,
+      anchor: undefined,
+
       recommendedStyle: "probing",
     };
   }
 
   try {
-    return JSON.parse(raw) as UserAnalysis;
-  } catch (err) {
-    // fallback – lepiej bezpiecznie niż głupio
+    const parsed = JSON.parse(raw);
+
+    // 🧠 SANITY CHECK – NIE UFAMY ŚLEPO MODELLOWI
+    return {
+      emotionalTone: parsed.emotionalTone ?? "calm",
+      emotionalCharge: parsed.emotionalCharge ?? "medium",
+      clarity: parsed.clarity ?? "medium",
+      avoidance: Boolean(parsed.avoidance),
+
+      coreTheme: parsed.coreTheme ?? "brak danych",
+      tension: parsed.tension,
+      avoidanceReason: parsed.avoidance ? parsed.avoidanceReason : undefined,
+      anchor: parsed.anchor,
+
+      recommendedStyle: parsed.recommendedStyle ?? "probing",
+    };
+  } catch {
+    // fallback awaryjny – lepiej uprościć niż zgadywać
     return {
       emotionalTone: "overwhelmed",
+      emotionalCharge: "high",
       clarity: "low",
       avoidance: true,
-      coreIssue: "chaos poznawczy",
+
+      coreTheme: "dezorientacja",
+      tension: "brak struktury",
+      avoidanceReason: "konfrontacja z sednem",
+      anchor: undefined,
+
       recommendedStyle: "grounding",
     };
   }
