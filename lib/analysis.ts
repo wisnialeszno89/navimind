@@ -1,7 +1,15 @@
 export type UserAnalysis = {
-  emotionalTone: "calm" | "anxious" | "frustrated" | "overwhelmed" | "numb";
-  clarity: "high" | "medium" | "low";
-  avoidance: boolean;
-  coreIssue: string; // krótka hipoteza
-  recommendedStyle: "direct" | "probing" | "grounding";
+  // ISTNIEJĄCE POLA – ZOSTAWIASZ
+  emotionalTone?: string;
+  avoidance?: boolean;
+  clarity?: "low" | "medium" | "high";
+  recommendedStyle?: string;
+  overload?: boolean;
+  emotionalCharge?: "low" | "medium" | "high";
+
+  // 🔥 NOWE POLA POD MEMORY v2
+  coreTheme?: string;
+  tension?: string;
+  avoidanceReason?: string;
+  anchor?: string;
 };

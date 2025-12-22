@@ -6,6 +6,9 @@ import { buildSystemPrompt } from "../../../lib/buildSystemPrompt";
 import { updatePseudoMemory } from "../../../lib/updatePseudoMemory";
 import { getPseudoMemory } from "../../../lib/getPseudoMemory";
 
+import { detectConversationMode } from "../../../lib/conversation/detectConversationMode";
+import { modeInstructions } from "../../../lib/conversation/conversationModes";
+
 import OpenAI from "openai";
 
 export const runtime = "nodejs";
@@ -92,6 +95,17 @@ export async function POST(req: Request) {
     // =========================
     const analysis = await analyzeUserState(history);
 
+    const lastUserMessage = history
+      .filter((m: any) => m.role === "user")
+      .slice(-1)[0]?.content || "";
+
+    const conversationMode = detectConversationMode(
+      lastUserMessage,
+      analysis
+    );
+
+    const modePrompt = modeInstructions[conversationMode];
+
     // =========================
     // 4️⃣ PSEUDO-PAMIĘĆ
     // =========================
@@ -99,7 +113,9 @@ export async function POST(req: Request) {
     const memory = rawMemory ?? { visits: 0 };
 
     const enrichedSystemPrompt = buildSystemPrompt(
-      systemPrompt,
+      systemPrompt +
+        "\n\nTRYB ROZMOWY:\n" +
+        modePrompt,
       analysis,
       memory
     );
@@ -143,8 +159,8 @@ export async function POST(req: Request) {
       },
       uiHints: {
         returningUser: memory.visits >= 2,
-        shouldPause: analysis.avoidance || analysis.clarity === "low",
-        focusShift: true,
+        shouldPause: conversationMode === "PAUSE",
+        conversationMode,
       },
     });
   } catch (error) {
