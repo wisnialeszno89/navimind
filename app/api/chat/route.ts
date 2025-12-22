@@ -19,7 +19,7 @@ const openai = new OpenAI({
 
 const MAX_HISTORY = 20;
 
-// 🔒 TWARDY KOTWICZNY STYL (NIE DO DYSKUSJI)
+// 🔒 TWARDY KOTWICZNY STYL
 const STYLE_ANCHOR = `
 Jesteś NaviMind.
 
@@ -38,14 +38,14 @@ Nie jesteś terapeutą ani coachem.
 Jesteś trzeźwym rozmówcą.
 
 Używaj emotek oszczędnie 🙂🔥
-**Pogrubiaj tylko kluczowe informacje.**
+Pogrubiaj tylko kluczowe informacje.
 Nigdy nie bądź rozwlekły.
 `;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { messages } = body;
+    const { messages, hiddenContext } = body;
 
     if (!Array.isArray(messages)) {
       throw new Error("messages is not an array");
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     }
 
     // =========================
-    // 2️⃣ HISTORIA (FILTR)
+    // 2️⃣ HISTORIA
     // =========================
     let history = messages
       .filter(
@@ -95,9 +95,8 @@ export async function POST(req: Request) {
     // =========================
     const analysis = await analyzeUserState(history);
 
-    const lastUserMessage = history
-      .filter((m: any) => m.role === "user")
-      .slice(-1)[0]?.content || "";
+    const lastUserMessage =
+      history.filter((m: any) => m.role === "user").slice(-1)[0]?.content || "";
 
     const conversationMode = detectConversationMode(
       lastUserMessage,
@@ -123,7 +122,22 @@ export async function POST(req: Request) {
     await updatePseudoMemory(userId, analysis);
 
     // =========================
-    // 5️⃣ AI RESPONSE
+    // 5️⃣ PDF JAKO KONTEKST
+    // =========================
+    const documentContext = hiddenContext
+      ? {
+          role: "system",
+          content:
+            "Użytkownik udostępnił dokument PDF.\n" +
+            "Traktuj go jako kontekst rozmowy.\n" +
+            "Nie cytuj go w całości.\n" +
+            "Odpowiadaj tylko na to, o co użytkownik pyta.\n\n" +
+            hiddenContext.slice(0, 12000),
+        }
+      : null;
+
+    // =========================
+    // 6️⃣ AI RESPONSE
     // =========================
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
@@ -136,6 +150,7 @@ export async function POST(req: Request) {
             enrichedSystemPrompt +
             "\n\nTo jest wersja DEMO (limit 20 wiadomości).",
         },
+        ...(documentContext ? [documentContext] : []),
         ...history.map((m: any) => ({
           role: m.role,
           content: m.content,
@@ -148,7 +163,7 @@ export async function POST(req: Request) {
       "Chwila ciszy. Spróbuj jeszcze raz.";
 
     // =========================
-    // 6️⃣ RESPONSE DO UI
+    // 7️⃣ RESPONSE DO UI
     // =========================
     return Response.json({
       text,

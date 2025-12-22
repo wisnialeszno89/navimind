@@ -10,12 +10,14 @@ type Props = {
 
 export default function SendForm({ setIsTyping }: Props) {
   const [text, setText] = useState("");
+  const [hiddenContext, setHiddenContext] = useState<string | null>(null);
+
   const add = useChatStore((s) => s.add);
+  const messages = useChatStore((s) => s.messages);
 
   async function send() {
     if (!text.trim()) return;
 
-    // 1️⃣ wiadomość usera
     add({ role: "user", content: text });
     setText("");
     setIsTyping(true);
@@ -25,41 +27,24 @@ export default function SendForm({ setIsTyping }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: useChatStore.getState().messages,
+          messages,
+          hiddenContext,
         }),
       });
 
-      // 🔒 LIMIT DEMO
       if (res.status === 429) {
         add({
           role: "assistant",
           content:
             "Limit demo został osiągnięty 🔒\n\n" +
-            "Masz 20 wiadomości na 24 godziny.\n" +
-            "W wersji PRO nie ma limitów i rozmowa nie jest przerywana.",
+            "Masz 20 wiadomości na 24h.\n" +
+            "W wersji PRO rozmowa nie jest przerywana.",
         });
         return;
       }
 
       const data = await res.json();
 
-      // 2️⃣ ZAPIS LICZNIKA (JEDYNE ŹRÓDŁO DLA UI)
-      if (data?.limit) {
-        localStorage.setItem(
-          "navimind_message_count",
-          String(data.limit.used)
-        );
-
-        // zapisujemy timestamp pierwszej wiadomości w danym oknie
-        if (!localStorage.getItem("navimind_first_message_ts")) {
-          localStorage.setItem(
-            "navimind_first_message_ts",
-            String(Date.now())
-          );
-        }
-      }
-
-      // 3️⃣ odpowiedź asystenta
       if (data?.text) {
         add({ role: "assistant", content: data.text });
       }
@@ -83,7 +68,14 @@ export default function SendForm({ setIsTyping }: Props) {
       const data = await res.json();
 
       if (data?.text) {
-        add({ role: "assistant", content: data.text });
+        setHiddenContext(data.text);
+
+        add({
+          role: "assistant",
+          content:
+            "📄 Dokument został wczytany.\n" +
+            "Możesz teraz pytać o jego treść albo poprosić o poprawki.",
+        });
       }
     } finally {
       setIsTyping(false);
@@ -125,7 +117,7 @@ export default function SendForm({ setIsTyping }: Props) {
 
         {/* MICROPHONE */}
         <MicrophoneButton
-          onResult={(t) =>
+          onResult={(t: string) =>
             setText((prev) => (prev ? prev + " " + t : t))
           }
         />
