@@ -10,14 +10,14 @@ export async function POST(req: Request) {
 
     if (!file) {
       return NextResponse.json(
-        { error: "Brak pliku PDF" },
+        { error: "NO_FILE" },
         { status: 400 }
       );
     }
 
     if (file.type !== "application/pdf") {
       return NextResponse.json(
-        { error: "To nie jest plik PDF" },
+        { error: "NOT_PDF" },
         { status: 400 }
       );
     }
@@ -25,13 +25,29 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const data = await pdfParse(buffer);
 
+    const text = data.text
+      ?.replace(/\n{3,}/g, "\n\n")
+      ?.replace(/[ \t]+\n/g, "\n")
+      ?.trim();
+
+    if (!text) {
+      return NextResponse.json(
+        { error: "EMPTY_PDF" },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json({
-      text: data.text || "",
+      text,
+      meta: {
+        pages: data.numpages,
+        info: data.info ?? null,
+      },
     });
   } catch (err) {
-    console.error("PDF ERROR:", err);
+    console.error("PDF PARSE ERROR:", err);
     return NextResponse.json(
-      { error: "Nie udało się przetworzyć PDF" },
+      { error: "PDF_PARSE_FAILED" },
       { status: 500 }
     );
   }
