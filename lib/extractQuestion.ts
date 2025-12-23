@@ -1,20 +1,34 @@
-export function extractQuestion(text: string) {
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+export function extractQuestion(text: string): {
+  rest: string;
+  question: string | null;
+} {
+  if (!text || typeof text !== "string") {
+    return {
+      rest: "",
+      question: null,
+    };
+  }
 
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].endsWith("?")) {
-      return {
-        question: lines[i],
-        rest: lines.slice(0, i).join("\n"),
-      };
-    }
+  /**
+   * Szukamy pytania TYLKO jeśli:
+   * - jest na końcu
+   * - faktycznie kończy się znakiem zapytania
+   * - jest oddzielone pustą linią (świadome pytanie)
+   *
+   * Przykład:
+   * "To jest odpowiedź.\n\nCo chcesz zrobić dalej?"
+   */
+  const match = text.match(/([\s\S]*?)\n\n(.+?\?)\s*$/);
+
+  if (!match) {
+    return {
+      rest: text.trim(),
+      question: null,
+    };
   }
 
   return {
-    question: null,
-    rest: text,
+    rest: match[1].trim(),
+    question: match[2].trim(),
   };
 }
