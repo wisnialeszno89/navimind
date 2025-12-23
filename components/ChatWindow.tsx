@@ -15,20 +15,20 @@ export default function ChatWindow() {
   const endRef = useRef<HTMLDivElement | null>(null);
   const [stickToBottom, setStickToBottom] = useState(true);
 
-  // 🔽 Auto-scroll TYLKO jeśli user jest na dole
+  // 🔽 Auto-scroll tylko gdy user jest na dole
   useEffect(() => {
     if (stickToBottom) {
       endRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isTyping, stickToBottom]);
 
-  // 👆 Wykrywanie ręcznego scrolla użytkownika
+  // 👆 Ręczny scroll usera
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     const onScroll = () => {
-      const threshold = 40; // px
+      const threshold = 40;
       const atBottom =
         el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
       setStickToBottom(atBottom);
@@ -40,7 +40,7 @@ export default function ChatWindow() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* ===== WIADOMOŚCI (SCROLL) ===== */}
+      {/* ===== WIADOMOŚCI ===== */}
       <div
         ref={containerRef}
         className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-3
@@ -48,14 +48,13 @@ export default function ChatWindow() {
       >
         {messages.length === 0 && (
           <div className="text-blue-300 text-sm opacity-80">
-            👀 Możemy po prostu pogadać.
+            Hej. Co u Ciebie?
             <br />
-            Albo od razu przejść do konkretu.
+            Jeśli chcesz, pogadamy na spokojnie — albo konkretnie, jak wolisz 👀
           </div>
         )}
 
         {messages.map((m, i) => {
-          // ===== USER =====
           if (m.role === "user") {
             return (
               <div
@@ -68,7 +67,6 @@ export default function ChatWindow() {
             );
           }
 
-          // ===== ASSISTANT =====
           const { rest, question } = extractQuestion(m.content);
 
           return (
@@ -94,7 +92,6 @@ export default function ChatWindow() {
 
         {isTyping && <TypingIndicator />}
 
-        {/* kotwica do auto-scroll */}
         <div ref={endRef} />
       </div>
 

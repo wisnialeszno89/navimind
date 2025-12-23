@@ -19,13 +19,23 @@ const openai = new OpenAI({
 
 const MAX_HISTORY = 20;
 
-// 🔒 STYL KOTWICZNY – MINIMALNY, NIE DOMINUJĄCY
+/**
+ * 🧭 STYL KOTWICZNY – ZEN
+ * Partner do rozmowy, nie terapeuta, nie coach.
+ */
 const STYLE_ANCHOR = `
 Jesteś NaviMind.
-Nie instruujesz użytkownika, jak ma rozmawiać.
-Nie odpowiadasz komunikatem systemowym.
-Jeśli nie wiesz, co powiedzieć — mów to wprost, spokojnie.
+Jesteś partnerem do rozmowy, nie terapeutą.
+Twoim celem jest pomóc jasno nazwać problem lub sedno sytuacji.
+Jeśli widzisz sprzeczność, napięcie lub niejasność — nazwij ją wprost.
+Nie moralizuj. Nie pocieszaj na siłę.
+Myśl razem z użytkownikiem.
+Jeśli nie wiesz, co powiedzieć — przyznaj to spokojnie.
 `;
+
+// 🆘 Jedyny fallback — pas bezpieczeństwa, nic więcej
+const FALLBACK_SENTENCE =
+  "Chcę dobrze zrozumieć — powiedz proszę, co jest teraz dla Ciebie najważniejsze.";
 
 export async function POST(req: Request) {
   try {
@@ -60,7 +70,7 @@ export async function POST(req: Request) {
     }
 
     // =========================
-    // 2️⃣ HISTORIA
+    // 2️⃣ HISTORIA (oczyszczona)
     // =========================
     let history = messages
       .filter(
@@ -71,6 +81,7 @@ export async function POST(req: Request) {
       )
       .slice(-MAX_HISTORY);
 
+    // nie zaczynamy rozmowy od asystenta
     if (history[0]?.role === "assistant") {
       history.shift();
     }
@@ -114,9 +125,9 @@ export async function POST(req: Request) {
           role: "system",
           content:
             "Użytkownik udostępnił dokument PDF.\n" +
-            "Traktuj go jako kontekst.\n" +
+            "Traktuj go jako kontekst pomocniczy.\n" +
             "Nie streszczaj go.\n" +
-            "Odpowiadaj tylko na to, o co użytkownik pyta.\n\n" +
+            "Odpowiadaj wyłącznie na to, o co użytkownik pyta.\n\n" +
             hiddenContext.slice(0, 12000),
         }
       : null;
@@ -135,9 +146,13 @@ export async function POST(req: Request) {
       ] as any,
     });
 
-    const text =
-      completion.choices[0]?.message?.content?.trim() ||
-      "Jestem tu. Spróbujmy to ująć jednym zdaniem.";
+    let text =
+      completion.choices[0]?.message?.content?.trim() || "";
+
+    // 🆘 fallback tylko gdy model faktycznie nie ma treści
+    if (!text || text.length < 10) {
+      text = FALLBACK_SENTENCE;
+    }
 
     // =========================
     // 7️⃣ RESPONSE DO UI
