@@ -14,6 +14,10 @@ type ChatState = {
 
   add: (m: Message) => void;
   clear: () => void;
+
+  // 🔥 KONTROLA WYSYŁKI
+  getAllMessages: () => Message[];
+  getLastUserMessageOnly: () => Message[];
 };
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -23,15 +27,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   add: (m) =>
     set((state) => {
-      // 🔒 BEZPIECZNIK: nie pozwól zacząć rozmowy od assistant
-      if (
-        m.role === "assistant" &&
-        state.messages.length === 0
-      ) {
+      // nie zaczynamy od assistant
+      if (m.role === "assistant" && state.messages.length === 0) {
         return state;
       }
 
-      // 🔒 jeśli limit osiągnięty, blokujemy kolejne user messages
+      // blokada po limicie
       if (state.limitReached && m.role === "user") {
         return state;
       }
@@ -54,4 +55,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messageCount: 0,
       limitReached: false,
     }),
+
+  // 👉 normalna rozmowa
+  getAllMessages: () => get().messages,
+
+  // 👉 HARD CUT — tylko ostatnia wiadomość usera
+  getLastUserMessageOnly: () => {
+    const msgs = get().messages;
+    const lastUser = [...msgs].reverse().find(m => m.role === "user");
+    return lastUser ? [lastUser] : [];
+  },
 }));

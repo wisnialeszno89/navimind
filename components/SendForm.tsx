@@ -13,21 +13,61 @@ export default function SendForm({ setIsTyping }: Props) {
   const [hiddenContext, setHiddenContext] = useState<string | null>(null);
 
   const add = useChatStore((s) => s.add);
-  const messages = useChatStore((s) => s.messages);
 
   async function send() {
-    if (!text.trim()) return;
+    const raw = text.trim();
+    if (!raw) return;
 
-    add({ role: "user", content: text });
+    // pokaż użytkownikowi dokładnie to, co wpisał
+    add({ role: "user", content: raw });
     setText("");
     setIsTyping(true);
 
+    /* =====================================================
+       🛠️ TOOL ROUTER – PYTANIA TECHNICZNE (BEZ LLM)
+       ===================================================== */
+    const lower = raw.toLowerCase();
+
+    // 🔧 VERCEL / DEPLOY
+    if (
+      lower.includes("vercel") &&
+      (lower.includes("deploy") || lower.includes("deployment"))
+    ) {
+      add({
+        role: "assistant",
+        content:
+          "Wejdź do panelu Vercel → zakładka **Deployments**.\n" +
+          "Jeśli status jest **Ready**, deploy się udał.\n" +
+          "Kliknij konkretny deployment, żeby zobaczyć logi buildu.",
+      });
+      setIsTyping(false);
+      return;
+    }
+
+    // 🔧 OGÓLNE „JAK SPRAWDZIĆ DEPLOY”
+    if (
+      lower.startsWith("jak ") &&
+      lower.includes("deploy")
+    ) {
+      add({
+        role: "assistant",
+        content:
+          "Sprawdź status deploya w narzędziu, którego używasz (np. Vercel, Netlify).\n" +
+          "Szukaj statusu **Ready / Success** oraz logów buildu.",
+      });
+      setIsTyping(false);
+      return;
+    }
+
+    /* =====================================================
+       🧠 RESZTA → NORMALNY CZAT (LLM)
+       ===================================================== */
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages,
+          messages: useChatStore.getState().messages,
           hiddenContext,
         }),
       });
