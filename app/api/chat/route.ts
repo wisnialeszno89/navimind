@@ -19,27 +19,12 @@ const openai = new OpenAI({
 
 const MAX_HISTORY = 20;
 
-// 🔒 TWARDY KOTWICZNY STYL
+// 🔒 STYL KOTWICZNY – MINIMALNY, NIE DOMINUJĄCY
 const STYLE_ANCHOR = `
 Jesteś NaviMind.
-
-Mów krótko i konkretnie.
-Unikaj zwrotów typu:
-- „Widzę, że…”
-- „Rozumiem Cię…”
-- „Wydaje się, że…”
-
-Zamiast tego używaj:
-- „Tu jest sedno.”
-- „Sprawdźmy to.”
-- „To ma sens — ale pod jednym warunkiem.”
-
-Nie jesteś terapeutą ani coachem.
-Jesteś trzeźwym rozmówcą.
-
-Używaj emotek oszczędnie 🙂🔥
-Pogrubiaj tylko kluczowe informacje.
-Nigdy nie bądź rozwlekły.
+Nie instruujesz użytkownika, jak ma rozmawiać.
+Nie odpowiadasz komunikatem systemowym.
+Jeśli nie wiesz, co powiedzieć — mów to wprost, spokojnie.
 `;
 
 export async function POST(req: Request) {
@@ -63,7 +48,7 @@ export async function POST(req: Request) {
           error: "LIMIT_REACHED",
           text:
             "Limit demo został osiągnięty 🔒\n\n" +
-            "Masz 20 wiadomości na 24h. Wersja PRO nie ma limitów.",
+            "Masz 20 wiadomości na 24h.",
           limit: {
             used: limit.used,
             limit: limit.limit,
@@ -129,8 +114,8 @@ export async function POST(req: Request) {
           role: "system",
           content:
             "Użytkownik udostępnił dokument PDF.\n" +
-            "Traktuj go jako kontekst rozmowy.\n" +
-            "Nie cytuj go w całości.\n" +
+            "Traktuj go jako kontekst.\n" +
+            "Nie streszczaj go.\n" +
             "Odpowiadaj tylko na to, o co użytkownik pyta.\n\n" +
             hiddenContext.slice(0, 12000),
         }
@@ -144,23 +129,15 @@ export async function POST(req: Request) {
       temperature: 0.7,
       messages: [
         { role: "system", content: STYLE_ANCHOR },
-        {
-          role: "system",
-          content:
-            enrichedSystemPrompt +
-            "\n\nTo jest wersja DEMO (limit 20 wiadomości).",
-        },
+        { role: "system", content: enrichedSystemPrompt },
         ...(documentContext ? [documentContext] : []),
-        ...history.map((m: any) => ({
-          role: m.role,
-          content: m.content,
-        })),
+        ...history,
       ] as any,
     });
 
     const text =
       completion.choices[0]?.message?.content?.trim() ||
-      "Chwila ciszy. Spróbuj jeszcze raz.";
+      "Jestem tu. Spróbujmy to ująć jednym zdaniem.";
 
     // =========================
     // 7️⃣ RESPONSE DO UI
@@ -174,7 +151,6 @@ export async function POST(req: Request) {
       },
       uiHints: {
         returningUser: memory.visits >= 2,
-        shouldPause: conversationMode === "PAUSE",
         conversationMode,
       },
     });
