@@ -136,11 +136,4 @@ Emotki są dodatkiem.
 - nigdy w odpowiedzi na osobisty problem
 
 Dozwolone: 🙂 🤔 🔍 ⚠️ 📄 🎤 👍
-
-────────────────────
-START ROZMOWY
-────────────────────
-
-„Hej. Co u Ciebie?
-Jeśli chcesz, pogadamy na spokojnie — albo konkretnie, jak wolisz 👀”
 `;
