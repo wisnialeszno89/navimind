@@ -10,11 +10,41 @@ type Msg = {
   content: string;
 };
 
+// 🔁 PROSTA HEURYSTYKA PĘTLI
+function detectRepetition(messages: Msg[]): boolean {
+  const userMessages = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content.toLowerCase());
+
+  if (userMessages.length < 2) return false;
+
+  const last = userMessages[userMessages.length - 1];
+  const prev = userMessages[userMessages.length - 2];
+
+  const normalize = (s: string) =>
+    s
+      .replace(/[^\p{L}\p{N}\s]/gu, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+
+  const a = normalize(last);
+  const b = normalize(prev);
+
+  if (a.length === 0 || b.length === 0) return false;
+
+  const overlap = a.filter((w) => b.includes(w)).length;
+  const ratio = overlap / Math.min(a.length, b.length);
+
+  return ratio > 0.6; // 🔑 kluczowy próg
+}
+
 export async function analyzeUserState(
   history: Msg[]
 ): Promise<UserAnalysis> {
   // analizujemy tylko świeży kontekst
   const recent = history.slice(-6);
+
+  const repetition = detectRepetition(recent);
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
@@ -62,7 +92,7 @@ Zasady:
 
   const raw = completion.choices[0]?.message?.content;
 
-  // 🔒 BEZPIECZNY FALLBACK (NIC SIĘ NIE WYWALA)
+  // 🔒 BEZPIECZNY FALLBACK
   if (!raw) {
     return {
       emotionalTone: "calm",
@@ -76,13 +106,13 @@ Zasady:
       anchor: undefined,
 
       recommendedStyle: "probing",
+      repetition,
     };
   }
 
   try {
     const parsed = JSON.parse(raw);
 
-    // 🧠 SANITY CHECK – NIE UFAMY ŚLEPO MODELLOWI
     return {
       emotionalTone: parsed.emotionalTone ?? "calm",
       emotionalCharge: parsed.emotionalCharge ?? "medium",
@@ -95,9 +125,9 @@ Zasady:
       anchor: parsed.anchor,
 
       recommendedStyle: parsed.recommendedStyle ?? "probing",
+      repetition,
     };
   } catch {
-    // fallback awaryjny – lepiej uprościć niż zgadywać
     return {
       emotionalTone: "overwhelmed",
       emotionalCharge: "high",
@@ -105,11 +135,12 @@ Zasady:
       avoidance: true,
 
       coreTheme: "dezorientacja",
-      tension: "brak struktury",
-      avoidanceReason: "konfrontacja z sednem",
+      tension: "krążenie wokół jednego punktu",
+      avoidanceReason: "wejście w sedno",
       anchor: undefined,
 
       recommendedStyle: "grounding",
+      repetition,
     };
   }
 }
