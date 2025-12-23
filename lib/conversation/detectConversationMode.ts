@@ -6,42 +6,47 @@ export function detectConversationMode(
 ): ConversationMode {
   const text = input.toLowerCase();
 
-  // 1️⃣ PĘTLA EMOCJONALNA – NAJWAŻNIEJSZE
+  // 1️⃣ NAJPIERW PĘTLA – POWTARZANIE TEGO SAMEGO
   if (
-    analysis?.emotionalCharge === "high" &&
-    analysis?.clarity === "low" &&
-    analysis?.repetition === true
+    analysis?.avoidance === true &&
+    analysis?.clarity === "low"
   ) {
     return "LOOP";
   }
 
-  // 2️⃣ PRZECIĄŻENIE
-  if (analysis?.overload) {
-    return "OVERLOADED";
-  }
-
-  // 3️⃣ SILNE EMOCJE (ALE JESZCZE NIE PĘTLA)
+  // 2️⃣ SILNE EMOCJE
   if (analysis?.emotionalCharge === "high") {
     return "EMOTIONAL";
   }
 
-  // 4️⃣ KONKRETNE PYTANIE
-  if (text.includes("?") && text.split(" ").length < 20) {
-    return "CONCRETE";
+  // 3️⃣ PRZECIĄŻENIE
+  if (analysis?.overload === true) {
+    return "OVERLOADED";
   }
 
-  // 5️⃣ REFLEKSJA
+  // 4️⃣ REFLEKSJA
   if (
-    text.includes("zastanawiam się") ||
-    text.includes("czy to ma sens")
+    text.includes("zastanawiam") ||
+    text.includes("nie mogę przestać") ||
+    text.includes("ciągle wracam")
   ) {
     return "REFLECTION";
   }
 
-  // 6️⃣ PAUZA – JASNOŚĆ BEZ UNIKANIA
-  if (analysis?.clarity === "high" && analysis?.avoidance === false) {
+  // 5️⃣ KONKRETNE PYTANIE (DOPIERO TERAZ)
+  if (text.includes("?") && text.split(" ").length < 20) {
+    return "CONCRETE";
+  }
+
+  // 6️⃣ PAUZA TYLKO GDY NAPRAWDĘ JEST SPOKÓJ
+  if (
+    analysis?.clarity === "high" &&
+    analysis?.avoidance === false &&
+    analysis?.emotionalCharge !== "high"
+  ) {
     return "PAUSE";
   }
 
+  // 7️⃣ DOMYŚLNE
   return "CASUAL";
 }
