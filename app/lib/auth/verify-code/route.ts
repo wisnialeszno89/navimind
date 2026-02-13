@@ -1,0 +1,53 @@
+import { NextResponse } from "next/server";
+import { verifyCode } from "../../../lib/auth/codes";
+import { createHash } from "crypto";
+
+export const runtime = "nodejs";
+
+const SESSION_COOKIE = "navimind_session";
+const SESSION_TTL_DAYS = 30;
+
+function sign(email: string) {
+  const secret = process.env.SESSION_SECRET || "navimind_session_secret";
+  return createHash("sha256").update(email + "|" + secret).digest("hex");
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => null);
+
+    const email = String(body?.email || "")
+      .trim()
+      .toLowerCase();
+
+    const code = String(body?.code || "").trim();
+
+    if (!email || !email.includes("@") || code.length < 4) {
+      return NextResponse.json({ error: "INVALID_DATA" }, { status: 400 });
+    }
+
+    const ok = await verifyCode(email, code);
+
+    if (!ok) {
+      return NextResponse.json({ error: "INVALID_CODE" }, { status: 401 });
+    }
+
+    // ✅ tutaj ustawiamy cookie NA ODPOWIEDZI (to działa na 100%)
+    const res = NextResponse.json({ ok: true });
+
+    const value = `${email}::${sign(email)}`;
+
+    res.cookies.set(SESSION_COOKIE, value, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * SESSION_TTL_DAYS,
+    });
+
+    return res;
+  } catch (e) {
+    console.error("VERIFY CODE ERROR:", e);
+    return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 });
+  }
+}

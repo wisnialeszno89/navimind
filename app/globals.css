@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================
+   NAVIMIND FINAL COLOR SYSTEM
+   Calm night + warm safety
+   ========================= */
+
+:root {
+  --nm-bg-main: #0f172a;
+  --nm-bg-soft: #111827;
+  --nm-bg-card: #131c31;
+  --nm-bg-input: #0f1a2e;
+
+  --nm-bg-gradient:
+    radial-gradient(
+      circle at 50% 120%,
+      rgba(255, 214, 120, 0.10),
+      rgba(126, 224, 181, 0.06),
+      transparent 60%
+    );
+
+  --nm-text-main: #e8eefc;
+  --nm-text-soft: #a5b4dc;
+  --nm-text-muted: #6b7396;
+
+  --nm-accent: #7aa2ff;
+  --nm-accent-strong: #5f8cff;
+  --nm-accent-warm: #ffd678;
+
+  --nm-border-soft: rgba(255, 255, 255, 0.06);
+  --nm-border-input: rgba(255, 255, 255, 0.08);
+
+  --nm-user-gradient: linear-gradient(135deg, #5f8cff 0%, #7aa2ff 100%);
+  --nm-assistant-bg: #131c31;
+
+  --nm-focus-ring: rgba(122, 162, 255, 0.35);
+
+  --nm-pro-gold: #ffd678;
+  --nm-pro-gold-soft: rgba(255, 214, 120, 0.18);
+}
+
+/* delikatne „oddychanie” tła */
+@keyframes nm-breath {
+  0%   { opacity: 0.35; transform: scale(1); }
+  50%  { opacity: 0.55; transform: scale(1.03); }
+  100% { opacity: 0.35; transform: scale(1); }
+}
+
+.nm-breath-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: var(--nm-bg-gradient);
+  animation: nm-breath 12s ease-in-out infinite;
+  z-index: 0;
+}
