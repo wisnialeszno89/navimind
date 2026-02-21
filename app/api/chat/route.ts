@@ -49,6 +49,23 @@ function isRole(r: any): r is ChatRole {
   return r === "user" || r === "assistant";
 }
 
+/* 🔎 proste wykrycie rozmowy relacyjnej */
+function isRelationalTopic(text: string) {
+  const relationalKeywords = [
+    "partner",
+    "ex",
+    "żona",
+    "mąż",
+    "dzieci",
+    "rodzina",
+    "związek",
+  ];
+
+  return relationalKeywords.some((k) =>
+    text.toLowerCase().includes(k)
+  );
+}
+
 export async function POST(req: Request) {
   const userId = getUidFromUrl(req) ?? getUserId();
   if (!userId)
@@ -117,26 +134,57 @@ export async function POST(req: Request) {
   const crisisAddon = getCrisisAddon(crisisLevel, "pl");
 
   const firstPromptAddon =
-    history.length === 0 ? getFirstPrompt(detectFirstState(userText), lang) : "";
+    history.length === 0
+      ? getFirstPrompt(detectFirstState(userText), lang)
+      : "";
 
   /* ========= SYSTEM PROMPT ========= */
 
   const basePrompt = buildSystemPrompt();
+
+  const relationalContext = isRelationalTopic(userText)
+    ? `
+Rozmowa dotyczy relacji.
+
+Pierwsza odpowiedź NIE MA zawierać opcji A/B.
+
+Ma:
+- nazwać dynamikę sytuacji
+- oddzielić warstwy problemu
+- pokazać co naprawdę się ściera
+
+Opcje mogą pojawić się dopiero,
+jeśli użytkownik wyraźnie prosi o decyzję.
+`
+    : "";
+
   const planLayer =
-    plan === "pro_plus" ? proPlusPrompt() : plan === "pro" ? proPrompt() : "";
+    plan === "pro_plus"
+      ? proPlusPrompt()
+      : plan === "pro"
+      ? proPrompt()
+      : "";
 
   const systemPrompt = `
 ${basePrompt}
+
+${relationalContext}
+
 ${planLayer}
+
 ${emotionalLayer(userState)}
+
 ${firstPromptAddon}
+
 ${crisisAddon}
 `;
 
-  /* ========= OPENAI (runtime only) ========= */
+  /* ========= OPENAI ========= */
 
   const { default: OpenAI } = await import("openai");
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
 
   /* ========= STREAM ========= */
 
@@ -150,6 +198,8 @@ ${crisisAddon}
       try {
         const response = await openai.chat.completions.create({
           model: "gpt-4.1-mini",
+          temperature: 0.7,
+          top_p: 0.9,
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
@@ -165,8 +215,6 @@ ${crisisAddon}
           fullText += delta;
           controller.enqueue(encoder.encode(sse({ type: "delta", delta })));
         }
-
-        /* ========= SAVE ========= */
 
         if (fullText.trim()) {
           const finalText = shapeResponse({
