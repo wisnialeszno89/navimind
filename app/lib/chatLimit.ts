@@ -1,4 +1,5 @@
 import { kv } from "@vercel/kv";
+import { hasUsedEmailBonus } from "./emailBonus";
 
 type DemoState = {
   used: number;
@@ -12,8 +13,8 @@ export type DemoLimitResult = {
   resetAt: number;
 };
 
-export const FREE_HARD_LIMIT = 20; // ✅ 15 normal + 5 soft
-export const FREE_SOFT_FROM = 15;  // ✅ po 15 zaczyna skracać
+export const FREE_HARD_LIMIT = 20; // 15 normal + 5 soft
+export const FREE_SOFT_FROM = 15;
 
 // YYYY-MM-DD (UTC)
 function getDayStampUTC(now = new Date()) {
@@ -26,48 +27,44 @@ function getDayStampUTC(now = new Date()) {
 function nextUtcMidnightMs() {
   const now = new Date();
   const next = new Date(
-    Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate() + 1,
-      0,
-      0,
-      0
-    )
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
   );
   return next.getTime();
 }
 
 /**
- * ✅ FREE DEMO limit resetowany o północy UTC
+ * Aktualny stan limitu FREE
  */
 export async function getCurrentLimit(
   userId: string,
-  limit = FREE_HARD_LIMIT
+  baseLimit = FREE_HARD_LIMIT
 ): Promise<DemoLimitResult> {
   const day = getDayStampUTC();
   const key = `free_limit:${userId}:${day}`;
-
   const resetAt = nextUtcMidnightMs();
 
   const state = await kv.get<DemoState>(key);
   const used = state?.used ?? 0;
 
+  // 🎁 bonus +10 po podaniu maila
+  const hasBonus = await hasUsedEmailBonus(userId);
+  const finalLimit = hasBonus ? baseLimit + 10 : baseLimit;
+
   return {
-    allowed: used < limit,
+    allowed: used < finalLimit,
     used,
-    remaining: Math.max(0, limit - used),
-    limit,
+    remaining: Math.max(0, finalLimit - used),
+    limit: finalLimit,
     resetAt,
   };
 }
 
 /**
- * ✅ inkrementacja FREE (wołaj w /api/chat dla FREE)
+ * Inkrementacja FREE
  */
 export async function checkAndIncrementLimit(
   userId: string,
-  limit = FREE_HARD_LIMIT
+  baseLimit = FREE_HARD_LIMIT
 ): Promise<DemoLimitResult> {
   const day = getDayStampUTC();
   const key = `free_limit:${userId}:${day}`;
@@ -79,12 +76,16 @@ export async function checkAndIncrementLimit(
   const state = await kv.get<DemoState>(key);
   const usedNow = state?.used ?? 0;
 
-  if (usedNow >= limit) {
+  // 🎁 sprawdzamy bonus
+  const hasBonus = await hasUsedEmailBonus(userId);
+  const finalLimit = hasBonus ? baseLimit + 10 : baseLimit;
+
+  if (usedNow >= finalLimit) {
     return {
       allowed: false,
       used: usedNow,
       remaining: 0,
-      limit,
+      limit: finalLimit,
       resetAt,
     };
   }
@@ -96,8 +97,8 @@ export async function checkAndIncrementLimit(
   return {
     allowed: true,
     used,
-    remaining: Math.max(0, limit - used),
-    limit,
+    remaining: Math.max(0, finalLimit - used),
+    limit: finalLimit,
     resetAt,
   };
 }
