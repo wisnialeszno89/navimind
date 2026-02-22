@@ -17,6 +17,7 @@ import { getFirstPrompt } from "../../lib/firstResponsePrompts";
 import { detectCrisis } from "../../lib/crisisDetector";
 import { getCrisisAddon } from "../../lib/crisisPrompt";
 import { shapeResponse } from "../../lib/responseShaper";
+import { buildRelationalCore } from "../../lib/relationalCore";
 import {
   checkAndIncrementLimit,
   FREE_HARD_LIMIT,
@@ -165,17 +166,13 @@ jeśli użytkownik wyraźnie prosi o decyzję.
       ? proPrompt()
       : "";
 
-  const systemPrompt = `
-${basePrompt}
+  const relationalCore = buildRelationalCore({
+  state: userState,
+  messageIndex: history.length,
+});
 
-${relationalContext}
-
-${planLayer}
-
-${emotionalLayer(userState)}
-
-${firstPromptAddon}
-
+const systemPrompt = `
+${relationalCore}
 ${crisisAddon}
 `;
 
