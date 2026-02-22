@@ -1,4 +1,5 @@
 export type ConversationMode =
+  | "crisis"
   | "stabilize"
   | "clarify"
   | "confront"
@@ -10,6 +11,15 @@ export function analyzeConversation(
   history: { role: string; content: string }[]
 ): ConversationMode {
   const text = userText.toLowerCase();
+
+  /* ===== 0. TRYB KRYZYSOWY (NAJWYŻSZY PRIORYTET) ===== */
+
+  const crisisSignal =
+    /(nie chce mi się żyć|nie chce mi sie zyc|chce zniknac|mam dosc zycia|nie widze sensu zyc|zabic sie)/i.test(
+      text
+    );
+
+  if (crisisSignal) return "crisis";
 
   /* ===== 1. SILNE EMOCJE ===== */
 
@@ -33,7 +43,7 @@ export function analyzeConversation(
   const institutionalEscalation =
     /(niebiesk|sąd|policja|sprawa|kurator|adwokat|prokurator)/i.test(text);
 
-  /* ===== 5. UPADek TOŻSAMOŚCI (rola męża/ojca) ===== */
+  /* ===== 5. UDERZENIE W TOŻSAMOŚĆ ===== */
 
   const identityHit =
     /(zdrada|oszukała|zniszczyła mi życie|wszystko straciłem|nie mam już nic)/i.test(
@@ -51,26 +61,14 @@ export function analyzeConversation(
     msg.slice(0, 60) === text.slice(0, 60)
   );
 
-  /* ===== PRIORYTETY DECYZJI ===== */
+  /* ===== PRIORYTETY ===== */
 
-  // 1️⃣ Sprawy dzieci + konflikt odpowiedzialności
   if (childrenContext && blameLanguage) return "mentor";
-
-  // 2️⃣ Instytucje + konflikt rodzinny
   if (institutionalEscalation && childrenContext) return "mentor";
-
-  // 3️⃣ Uderzenie w tożsamość (zdrada, utrata roli)
   if (identityHit && childrenContext) return "mentor";
-
-  // 4️⃣ Bardzo wysokie napięcie emocjonalne
   if (highEmotion) return "stabilize";
-
-  // 5️⃣ Krążenie wokół tego samego tematu
   if (repeatedTopic) return "clarify";
-
-  // 6️⃣ Dominujące obwinianie innych
   if (blameLanguage) return "confront";
 
-  // 7️⃣ Domyślnie realizm
   return "realism";
 }
