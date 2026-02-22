@@ -167,7 +167,7 @@ jeśli użytkownik wyraźnie prosi o decyzję.
       : "";
 
   const relationalCore = buildRelationalCore({
-  state: userState,
+  state: String(userState),
   messageIndex: history.length,
 });
 
