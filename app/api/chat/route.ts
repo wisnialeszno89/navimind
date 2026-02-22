@@ -4,25 +4,18 @@ import { getSessionEmail } from "../../lib/auth/session";
 import { getUserPlan } from "../../lib/userPlan";
 import { getDemoMemory, pushDemoMemory } from "../../lib/demoMemory";
 import { detectUserState } from "../../lib/detectUserState";
-import { emotionalLayer } from "../../lib/emotionalLayer";
 import {
   appendChatMessageByEmail,
   getChatMessagesByEmail,
 } from "../../lib/chatHistory";
-import { buildSystemPrompt } from "../../lib/buildSystemPrompt";
-import { proPrompt } from "../../lib/proPrompt";
-import { proPlusPrompt } from "../../lib/proPlusPrompt";
-import { detectFirstState } from "../../lib/detectFirstState";
-import { getFirstPrompt } from "../../lib/firstResponsePrompts";
-import { detectCrisis } from "../../lib/crisisDetector";
-import { getCrisisAddon } from "../../lib/crisisPrompt";
-import { shapeResponse } from "../../lib/responseShaper";
 import { buildRelationalCore } from "../../lib/relationalCore";
+import { analyzeConversation } from "../../lib/conversationAnalyzer";
 import {
   checkAndIncrementLimit,
   FREE_HARD_LIMIT,
   FREE_SOFT_FROM,
 } from "../../lib/chatLimit";
+import { shapeResponse } from "../../lib/responseShaper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,23 +43,6 @@ function isRole(r: any): r is ChatRole {
   return r === "user" || r === "assistant";
 }
 
-/* 🔎 proste wykrycie rozmowy relacyjnej */
-function isRelationalTopic(text: string) {
-  const relationalKeywords = [
-    "partner",
-    "ex",
-    "żona",
-    "mąż",
-    "dzieci",
-    "rodzina",
-    "związek",
-  ];
-
-  return relationalKeywords.some((k) =>
-    text.toLowerCase().includes(k)
-  );
-}
-
 export async function POST(req: Request) {
   const userId = getUidFromUrl(req) ?? getUserId();
   if (!userId)
@@ -80,7 +56,6 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const userText: string | undefined = body?.message?.trim();
   const chatId: string | undefined = body?.chatId;
-  const lang: "pl" | "en" = body?.lang === "en" ? "en" : "pl";
 
   if (!userText)
     return new Response(JSON.stringify({ error: "NO_MESSAGE" }), {
@@ -89,7 +64,7 @@ export async function POST(req: Request) {
 
   let softLimit = false;
 
-  /* ========= FREE LIMIT ========= */
+  /* ========= LIMIT ========= */
 
   if (plan === "free") {
     const limit = await checkAndIncrementLimit(userId, FREE_HARD_LIMIT);
@@ -128,52 +103,19 @@ export async function POST(req: Request) {
         .slice(-PRO_HISTORY_MAX) ?? [];
   }
 
-  /* ========= EMOTIONS ========= */
+  /* ========= STATE & MODE ========= */
 
   const userState = detectUserState(userText);
-  const crisisLevel = detectCrisis(userText);
-  const crisisAddon = getCrisisAddon(crisisLevel, "pl");
-
-  const firstPromptAddon =
-    history.length === 0
-      ? getFirstPrompt(detectFirstState(userText), lang)
-      : "";
-
-  /* ========= SYSTEM PROMPT ========= */
-
-  const basePrompt = buildSystemPrompt();
-
-  const relationalContext = isRelationalTopic(userText)
-    ? `
-Rozmowa dotyczy relacji.
-
-Pierwsza odpowiedź NIE MA zawierać opcji A/B.
-
-Ma:
-- nazwać dynamikę sytuacji
-- oddzielić warstwy problemu
-- pokazać co naprawdę się ściera
-
-Opcje mogą pojawić się dopiero,
-jeśli użytkownik wyraźnie prosi o decyzję.
-`
-    : "";
-
-  const planLayer =
-    plan === "pro_plus"
-      ? proPlusPrompt()
-      : plan === "pro"
-      ? proPrompt()
-      : "";
+  const mode = analyzeConversation(userText, history);
 
   const relationalCore = buildRelationalCore({
-  state: String(userState),
-  messageIndex: history.length,
-});
+    state: String(userState),
+    messageIndex: history.length,
+    mode,
+  });
 
-const systemPrompt = `
+  const systemPrompt = `
 ${relationalCore}
-${crisisAddon}
 `;
 
   /* ========= OPENAI ========= */
@@ -182,8 +124,6 @@ ${crisisAddon}
   const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
-
-  /* ========= STREAM ========= */
 
   const stream = new ReadableStream({
     async start(controller) {
