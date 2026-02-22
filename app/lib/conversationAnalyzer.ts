@@ -11,10 +11,10 @@ export function analyzeConversation(
 ): ConversationMode {
   const text = userText.toLowerCase();
 
-  /* ===== 1. WYSOKIE NAPIĘCIE ===== */
+  /* ===== 1. SILNE EMOCJE ===== */
 
   const highEmotion =
-    /(boję|nienawidzę|mam dość|nie wytrzymam|to boli|bez sensu|załamany|rozbity|wkurw|pojeb)/i.test(
+    /(boję|nienawidzę|mam dość|nie wytrzymam|to boli|bez sensu|załamany|rozbity|wkurw|pojeb|zdradziła|zdrada)/i.test(
       text
     );
 
@@ -23,12 +23,24 @@ export function analyzeConversation(
   const blameLanguage =
     /(ona|on|oni|zawsze|nigdy|wszyscy|to przez|winna|wina)/i.test(text);
 
-  /* ===== 3. KONTEKST DZIECI / ODPOWIEDZIALNOŚCI ===== */
+  /* ===== 3. KONTEKST DZIECI ===== */
 
   const childrenContext =
     /(dzieci|córka|syn|alimenty|opieka|ojciec|matka|rodzic)/i.test(text);
 
-  /* ===== 4. POWTARZALNOŚĆ TEMATU ===== */
+  /* ===== 4. INSTYTUCJONALNA ESKALACJA ===== */
+
+  const institutionalEscalation =
+    /(niebiesk|sąd|policja|sprawa|kurator|adwokat|prokurator)/i.test(text);
+
+  /* ===== 5. UPADek TOŻSAMOŚCI (rola męża/ojca) ===== */
+
+  const identityHit =
+    /(zdrada|oszukała|zniszczyła mi życie|wszystko straciłem|nie mam już nic)/i.test(
+      text
+    );
+
+  /* ===== 6. POWTARZALNOŚĆ TEMATU ===== */
 
   const lastUserMessages = history
     .filter((m) => m.role === "user")
@@ -36,23 +48,29 @@ export function analyzeConversation(
     .map((m) => m.content.toLowerCase());
 
   const repeatedTopic = lastUserMessages.some((msg) =>
-    msg.slice(0, 50) === text.slice(0, 50)
+    msg.slice(0, 60) === text.slice(0, 60)
   );
 
   /* ===== PRIORYTETY DECYZJI ===== */
 
-  // 1️⃣ Najpierw regulujemy silne emocje
-  if (highEmotion) return "stabilize";
-
-  // 2️⃣ Jeśli temat dotyczy dzieci i jest język obwiniania
+  // 1️⃣ Sprawy dzieci + konflikt odpowiedzialności
   if (childrenContext && blameLanguage) return "mentor";
 
-  // 3️⃣ Jeśli użytkownik krąży wokół tego samego
+  // 2️⃣ Instytucje + konflikt rodzinny
+  if (institutionalEscalation && childrenContext) return "mentor";
+
+  // 3️⃣ Uderzenie w tożsamość (zdrada, utrata roli)
+  if (identityHit && childrenContext) return "mentor";
+
+  // 4️⃣ Bardzo wysokie napięcie emocjonalne
+  if (highEmotion) return "stabilize";
+
+  // 5️⃣ Krążenie wokół tego samego tematu
   if (repeatedTopic) return "clarify";
 
-  // 4️⃣ Jeśli głównie obwinia innych
+  // 6️⃣ Dominujące obwinianie innych
   if (blameLanguage) return "confront";
 
-  // 5️⃣ W innych przypadkach realizm
+  // 7️⃣ Domyślnie realizm
   return "realism";
 }
