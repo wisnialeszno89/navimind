@@ -10,6 +10,7 @@ import {
 } from "../../lib/chatHistory";
 import { buildRelationalCore } from "../../lib/relationalCore";
 import { analyzeConversation } from "../../lib/conversationAnalyzer";
+import { detectCrisis } from "../../lib/crisisDetector";
 import {
   checkAndIncrementLimit,
   FREE_HARD_LIMIT,
@@ -105,16 +106,18 @@ export async function POST(req: Request) {
 
   /* ========= STATE & MODE ========= */
 
-  const userState = detectUserState(userText);
-  const mode = analyzeConversation(userText, history);
+ const userState = detectUserState(userText);
+const crisisLevel = detectCrisis(userText);
+const mode = analyzeConversation(userText, history);
 
-  const relationalCore = buildRelationalCore({
-    state: String(userState),
-    messageIndex: history.length,
-    mode,
-  });
+const relationalCore = buildRelationalCore({
+  state: String(userState),
+  messageIndex: history.length,
+  mode,
+  crisisLevel,
+});
 
-  const systemPrompt = `
+const systemPrompt = `
 ${relationalCore}
 `;
 

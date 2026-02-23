@@ -1,28 +1,23 @@
-export type CrisisLevel = "none" | "low" | "medium" | "high";
-
-/* =========================
-   KEYWORDS
-   ========================= */
-
-const HIGH_PATTERNS =
-  /(chc[eę]\s*(si[eę])?\s*zabi[cć]|zabij[eę]\s*si[eę]|nie\s*chc[eę]\s*ży[cć]|koniec\s*ze\s*mna|suicide|kill\s*myself)/i;
-
-const MEDIUM_PATTERNS =
-  /(nie\s*ma\s*sensu|mam\s*dość\s*życia|chc[eę]\s*znikn[aąć]|jest\s*beznadziejnie|everything\s*is\s*pointless)/i;
-
-const LOW_PATTERNS =
-  /(jest\s*mi\s*smutno|czuj[eę]\s*si[eę]\s*źle|jestem\s*sam|mam\s*dość|jest\s*ci[eę]żko)/i;
-
-/* =========================
-   DETECTOR
-   ========================= */
+export type CrisisLevel = "none" | "soft" | "hard";
 
 export function detectCrisis(text: string): CrisisLevel {
-  if (!text) return "none";
+  const lower = text.toLowerCase();
 
-  if (HIGH_PATTERNS.test(text)) return "high";
-  if (MEDIUM_PATTERNS.test(text)) return "medium";
-  if (LOW_PATTERNS.test(text)) return "low";
+  // 🔴 HARD – bezpośrednie zagrożenie
+  const hard =
+    /(zabij(e|ę) się|chc(e|ę) się zabić|zaraz coś sobie zrobię|mam plan|kończę ze sobą)/i.test(
+      lower
+    );
+
+  if (hard) return "hard";
+
+  // 🟡 SOFT – utrata sensu / rezygnacja
+  const soft =
+    /(nie chce mi się żyć|nie chce mi sie zyc|nie widze sensu|mam dosc zycia|chce zniknac)/i.test(
+      lower
+    );
+
+  if (soft) return "soft";
 
   return "none";
 }
