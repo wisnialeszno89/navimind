@@ -1,6 +1,7 @@
 type ShapeInput = {
   text: string;
   softLimit?: boolean;
+  mode?: string;
 };
 
 function splitParagraphs(text: string) {
@@ -38,12 +39,38 @@ function compressMeaning(text: string) {
   return sentences.slice(0, 3).join(" ");
 }
 
-export function shapeResponse({ text, softLimit }: ShapeInput) {
+export function shapeResponse({ text, softLimit, mode }: ShapeInput) {
   if (!text) return "";
 
   let cleaned = text.trim();
   cleaned = removeAiFluff(cleaned);
 
+  // 🔴 CRISIS – nie skracamy agresywnie
+  if (mode === "crisis") {
+    let crisisText = ensureSingleQuestion(cleaned);
+
+    if (softLimit && crisisText.length > 600) {
+      crisisText = crisisText.slice(0, 550) + "...";
+    }
+
+    return crisisText;
+  }
+
+  // 🟢 MENTOR – większa głębia
+  if (mode === "mentor") {
+    const paragraphs = splitParagraphs(cleaned);
+    const limited = paragraphs.slice(0, 3).join("\n\n");
+
+    let mentorText = ensureSingleQuestion(limited);
+
+    if (softLimit && mentorText.length > 500) {
+      mentorText = mentorText.slice(0, 450) + "...";
+    }
+
+    return mentorText;
+  }
+
+  // 🟡 RESZTA – standardowe skracanie
   const paragraphs = splitParagraphs(cleaned);
   const limited = paragraphs.slice(0, 2).join("\n\n");
 

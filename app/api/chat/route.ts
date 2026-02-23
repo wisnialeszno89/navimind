@@ -155,9 +155,10 @@ ${relationalCore}
 
         if (fullText.trim()) {
           const finalText = shapeResponse({
-            text: fullText.trim(),
-            softLimit,
-          });
+          text: fullText.trim(),
+          softLimit,
+          mode,
+        });
 
           if (plan === "free") {
             await pushDemoMemory(userId, { role: "user", content: userText });
