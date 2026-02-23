@@ -106,15 +106,18 @@ export async function POST(req: Request) {
 
   /* ========= STATE & MODE ========= */
 
- const userState = detectUserState(userText);
+const userState = detectUserState(userText);
 const crisisLevel = detectCrisis(userText);
-const mode = analyzeConversation(userText, history);
+const analysis = analyzeConversation(userText, history);
+const mode = analysis.mode;
+const simplified = analysis.simplified;
 
 const relationalCore = buildRelationalCore({
   state: String(userState),
   messageIndex: history.length,
   mode,
   crisisLevel,
+  simplified, // 👈 TO BRAKOWAŁO
 });
 
 const systemPrompt = `

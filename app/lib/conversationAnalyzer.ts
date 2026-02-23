@@ -6,51 +6,51 @@ export type ConversationMode =
   | "realism"
   | "mentor";
 
+export type ConversationAnalysis = {
+  mode: ConversationMode;
+  simplified: boolean;
+};
+
 export function analyzeConversation(
   userText: string,
   history: { role: string; content: string }[]
-): ConversationMode {
+): ConversationAnalysis {
   const text = userText.toLowerCase();
 
-  /* ===== 0. TRYB KRYZYSOWY (NAJWYŻSZY PRIORYTET) ===== */
+  /* ===== KRYZYS ===== */
 
   const crisisSignal =
-    /(nie chce mi się żyć|nie chce mi sie zyc|chce zniknac|mam dosc zycia|nie widze sensu zyc|zabic sie)/i.test(
+    /(nie chce mi się żyć|nie chce mi sie zyc|nie widze sensu zyc|mam dosc zycia|chce zniknac|zabij(e|ę) się|chce sie zabic)/i.test(
       text
     );
 
-  if (crisisSignal) return "crisis";
+  if (crisisSignal) return { mode: "crisis", simplified: false };
 
-  /* ===== 1. SILNE EMOCJE ===== */
+  /* ===== EMOCJE ===== */
 
   const highEmotion =
-    /(boję|nienawidzę|mam dość|nie wytrzymam|to boli|bez sensu|załamany|rozbity|wkurw|pojeb|zdradziła|zdrada)/i.test(
+    /(boję|nienawidzę|mam dość|nie wytrzymam|to boli|bez sensu|załamany|rozbity|wkurw|pojeb)/i.test(
       text
     );
-
-  /* ===== 2. JĘZYK OBWINIANIA ===== */
 
   const blameLanguage =
     /(ona|on|oni|zawsze|nigdy|wszyscy|to przez|winna|wina)/i.test(text);
 
-  /* ===== 3. KONTEKST DZIECI ===== */
-
   const childrenContext =
     /(dzieci|córka|syn|alimenty|opieka|ojciec|matka|rodzic)/i.test(text);
-
-  /* ===== 4. INSTYTUCJONALNA ESKALACJA ===== */
 
   const institutionalEscalation =
     /(niebiesk|sąd|policja|sprawa|kurator|adwokat|prokurator)/i.test(text);
 
-  /* ===== 5. UDERZENIE W TOŻSAMOŚĆ ===== */
-
   const identityHit =
-    /(zdrada|oszukała|zniszczyła mi życie|wszystko straciłem|nie mam już nic)/i.test(
+    /(zdrada|oszukała|zniszczyła mi życie|wszystko straciłem|nie mam już nic|jestem nikim)/i.test(
       text
     );
 
-  /* ===== 6. POWTARZALNOŚĆ TEMATU ===== */
+  const simplificationPattern =
+    /(gdybym miał|gdybym zarabiał|wystarczy że|jak tylko|wszystko przez|potrzebuję tylko|więcej kasy|lepszy status)/i.test(
+      text
+    );
 
   const lastUserMessages = history
     .filter((m) => m.role === "user")
@@ -63,12 +63,23 @@ export function analyzeConversation(
 
   /* ===== PRIORYTETY ===== */
 
-  if (childrenContext && blameLanguage) return "mentor";
-  if (institutionalEscalation && childrenContext) return "mentor";
-  if (identityHit && childrenContext) return "mentor";
-  if (highEmotion) return "stabilize";
-  if (repeatedTopic) return "clarify";
-  if (blameLanguage) return "confront";
+  if (childrenContext && blameLanguage)
+    return { mode: "mentor", simplified: false };
 
-  return "realism";
+  if (institutionalEscalation && childrenContext)
+    return { mode: "mentor", simplified: false };
+
+  if (identityHit && childrenContext)
+    return { mode: "mentor", simplified: false };
+
+  if (highEmotion)
+    return { mode: "stabilize", simplified: false };
+
+  if (repeatedTopic)
+    return { mode: "clarify", simplified: false };
+
+  if (blameLanguage)
+    return { mode: "confront", simplified: false };
+
+  return { mode: "realism", simplified: simplificationPattern };
 }
