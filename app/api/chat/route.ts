@@ -109,6 +109,7 @@ export async function POST(req: Request) {
 const userState = detectUserState(userText);
 const crisisLevel = detectCrisis(userText);
 const analysis = analyzeConversation(userText, history);
+
 const mode = analysis.mode;
 const simplified = analysis.simplified;
 
@@ -117,7 +118,7 @@ const relationalCore = buildRelationalCore({
   messageIndex: history.length,
   mode,
   crisisLevel,
-  simplified, // 👈 TO BRAKOWAŁO
+  simplified,
 });
 
 const systemPrompt = `
@@ -160,29 +161,29 @@ ${relationalCore}
         }
 
         if (fullText.trim()) {
-          const finalText = shapeResponse({
-          text: fullText.trim(),
-          softLimit,
-          mode,
-        });
+  const finalText = shapeResponse({
+    text: fullText.trim(),
+    softLimit,
+    mode,
+  });
 
-          if (plan === "free") {
-            await pushDemoMemory(userId, { role: "user", content: userText });
-            await pushDemoMemory(userId, {
-              role: "assistant",
-              content: finalText,
-            });
-          }
+  if (plan === "free") {
+    await pushDemoMemory(userId, { role: "user", content: userText });
+    await pushDemoMemory(userId, {
+      role: "assistant",
+      content: finalText,
+    });
+  }
 
-          if (plan !== "free" && email && chatId) {
-            await appendChatMessageByEmail(email, chatId, {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: finalText,
-              createdAt: Date.now(),
-            });
-          }
-        }
+  if (plan !== "free" && email && chatId) {
+    await appendChatMessageByEmail(email, chatId, {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: finalText,
+      createdAt: Date.now(),
+    });
+  }
+}
 
         controller.enqueue(encoder.encode(sse({ type: "done" })));
         controller.close();

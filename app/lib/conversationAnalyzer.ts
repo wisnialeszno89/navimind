@@ -81,5 +81,5 @@ export function analyzeConversation(
   if (blameLanguage)
     return { mode: "confront", simplified: false };
 
-  return { mode: "realism", simplified: simplificationPattern };
+  return { mode: "realism", simplified: simplificationPattern === true };
 }

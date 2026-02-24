@@ -5,7 +5,9 @@ import { useChatStore } from "../lib/chatStore";
 import { useLanguage } from "../lib/useLanguage";
 import MicrophoneButton from "./MicrophoneButton";
 import ProNotice from "./ProNotice";
-import { Paperclip, Image as ImageIcon } from "lucide-react";
+import UploadButton from "./UploadButton";
+import ImageUploadButton from "./ImageUploadButton";
+import { Plus } from "lucide-react";
 
 type Level = "none" | "low" | "medium" | "high";
 
@@ -24,6 +26,7 @@ export default function SendForm({
   const [locked, setLocked] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showPro, setShowPro] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -122,31 +125,35 @@ export default function SendForm({
         }}
         className="flex items-end gap-2 px-3 pt-3"
       >
-        {/* FILE */}
-        <button
-          type="button"
-          onClick={() => !isPro && setShowPro(true)}
-          className={`p-3 rounded-xl transition ${
-            isPro
-              ? "bg-white/10 hover:bg-white/20 text-white"
-              : "bg-white/5 text-white/30"
-          }`}
-        >
-          <Paperclip size={18} />
-        </button>
+        {/* PLUS BUTTON */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowAttachments((v) => !v)}
+            className="p-3 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
+          >
+            <Plus size={18} />
+          </button>
 
-        {/* IMAGE */}
-        <button
-          type="button"
-          onClick={() => !isPro && setShowPro(true)}
-          className={`p-3 rounded-xl transition ${
-            isPro
-              ? "bg-white/10 hover:bg-white/20 text-white"
-              : "bg-white/5 text-white/30"
-          }`}
-        >
-          <ImageIcon size={18} />
-        </button>
+          {showAttachments && (
+            <div className="absolute bottom-14 left-0 flex flex-col gap-2 bg-[var(--nm-bg-soft)] border border-[var(--nm-border-soft)] rounded-xl p-3 shadow-xl">
+              {isPro ? (
+                <>
+                  <UploadButton onUpload={() => {}} />
+                  <ImageUploadButton onUpload={() => {}} />
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowPro(true)}
+                  className="text-sm text-white/60"
+                >
+                  Dostępne w PRO
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* MICROPHONE */}
         <MicrophoneButton onResult={(t) => setText(t)} />
@@ -185,15 +192,16 @@ export default function SendForm({
       </form>
 
       {showPro && <ProNotice onClose={() => setShowPro(false)} />}
-{/* MICRO TRUST TEXT */}
-<div
-  className="px-4 pt-2 text-[11px] text-center"
-  style={{ color: "var(--nm-text-muted)" }}
->
-  {lang === "pl"
-    ? "To miejsce jest prywatne. Możesz napisać to, co chcesz."
-    : "This space is private. You can write whatever you want."}
-</div>
+
+      <div
+        className="px-4 pt-2 text-[11px] text-center"
+        style={{ color: "var(--nm-text-muted)" }}
+      >
+        {lang === "pl"
+          ? "To miejsce jest prywatne. Możesz napisać to, co chcesz."
+          : "This space is private. You can write whatever you want."}
+      </div>
+
       <div className="pb-[calc(env(safe-area-inset-bottom)+10px)]" />
     </div>
   );

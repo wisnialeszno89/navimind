@@ -4,24 +4,6 @@ type ShapeInput = {
   mode?: string;
 };
 
-function splitParagraphs(text: string) {
-  return text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-}
-
-function ensureSingleQuestion(text: string) {
-  const parts = text.split("?");
-  if (parts.length <= 2) return text;
-  return parts[0].trim() + "?";
-}
-
-function trimLength(text: string, max = 420) {
-  if (text.length <= max) return text;
-  return text.slice(0, max).trim() + "…";
-}
-
 function removeAiFluff(text: string) {
   return text.replace(
     /^(Rozumiem|Widzę|To brzmi|Dziękuję za podzielenie się|Masz rację|Czuję, że)[^.\n]*[.\n]+/i,
@@ -29,14 +11,35 @@ function removeAiFluff(text: string) {
   );
 }
 
-function compressMeaning(text: string) {
-  const sentences = text
-    .replace(/\n+/g, " ")
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+function limitBold(text: string, max = 3) {
+  const matches = text.match(/\*\*.*?\*\*/g);
+  if (!matches || matches.length <= max) return text;
 
-  return sentences.slice(0, 3).join(" ");
+  let count = 0;
+  return text.replace(/\*\*(.*?)\*\*/g, (_, content) => {
+    count++;
+    return count <= max ? `**${content}**` : content;
+  });
+}
+
+function limitDashes(text: string, max = 4) {
+  const lines = text.split("\n");
+  let dashCount = 0;
+
+  return lines
+    .map((line) => {
+      if (line.trim().startsWith("-") || line.trim().startsWith("–")) {
+        dashCount++;
+        if (dashCount > max) return line.replace(/^[-–]\s*/, "");
+      }
+      return line;
+    })
+    .join("\n");
+}
+
+function trimLength(text: string, max = 650) {
+  if (text.length <= max) return text;
+  return text.slice(0, max).trim() + "…";
 }
 
 export function shapeResponse({ text, softLimit, mode }: ShapeInput) {
@@ -45,43 +48,19 @@ export function shapeResponse({ text, softLimit, mode }: ShapeInput) {
   let cleaned = text.trim();
   cleaned = removeAiFluff(cleaned);
 
-  // 🔴 CRISIS – nie skracamy agresywnie
+  cleaned = limitBold(cleaned);
+  cleaned = limitDashes(cleaned);
+
   if (mode === "crisis") {
-    let crisisText = ensureSingleQuestion(cleaned);
-
-    if (softLimit && crisisText.length > 600) {
-      crisisText = crisisText.slice(0, 550) + "...";
+    if (softLimit && cleaned.length > 900) {
+      return cleaned.slice(0, 850) + "...";
     }
-
-    return crisisText;
+    return cleaned;
   }
 
-  // 🟢 MENTOR – większa głębia
-  if (mode === "mentor") {
-    const paragraphs = splitParagraphs(cleaned);
-    const limited = paragraphs.slice(0, 3).join("\n\n");
-
-    let mentorText = ensureSingleQuestion(limited);
-
-    if (softLimit && mentorText.length > 500) {
-      mentorText = mentorText.slice(0, 450) + "...";
-    }
-
-    return mentorText;
+  if (softLimit) {
+    return trimLength(cleaned, 500);
   }
 
-  // 🟡 RESZTA – standardowe skracanie
-  const paragraphs = splitParagraphs(cleaned);
-  const limited = paragraphs.slice(0, 2).join("\n\n");
-
-  const compressed = compressMeaning(limited);
-  const oneQuestion = ensureSingleQuestion(compressed);
-
-  let finalText = trimLength(oneQuestion);
-
-  if (softLimit && finalText.length > 300) {
-    finalText = finalText.slice(0, 280) + "...";
-  }
-
-  return finalText;
+  return trimLength(cleaned, 750);
 }
