@@ -160,13 +160,22 @@ export default function SendForm({
 
         {/* TEXTAREA */}
         <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={locked || isSending}
-          placeholder={placeholder}
-          rows={1}
-          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none"
+  ref={textareaRef}
+  value={text}
+  onChange={(e) => {
+    setText(e.target.value);
+
+    // auto-grow
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }}
+  disabled={locked || isSending}
+  placeholder={placeholder}
+  rows={3}
+  className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px] max-h-[200px] overflow-y-auto"
           style={{
             background: "var(--nm-bg-input)",
             border: "1px solid var(--nm-border-input)",
