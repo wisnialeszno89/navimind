@@ -11,12 +11,12 @@ export function getUserId() {
     userId = randomUUID();
 
     cookieStore.set(UID_COOKIE, userId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365, // 1 rok
-    });
+  httpOnly: true,
+  sameSite: "none",      // 🔥 KLUCZOWE
+  secure: true,          // wymagane przy "none"
+  path: "/",
+  maxAge: 60 * 60 * 24 * 365,
+});
   }
 
   return userId;
