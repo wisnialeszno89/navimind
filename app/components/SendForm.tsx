@@ -247,6 +247,15 @@ export default function SendForm({
         className="px-4 pt-2 text-[11px] text-center"
         style={{ color: "var(--nm-text-muted)" }}
       >
+        <div className="text-[10px] text-center text-white/30 mt-1">
+        <a href="/regulamin" className="hover:text-white/60">
+        regulamin
+        </a>
+        <span className="mx-1">•</span>
+        <a href="/prywatnosc" className="hover:text-white/60">
+         prywatność
+        </a>
+      </div>
         {lang === "pl"
           ? "To miejsce jest prywatne. Możesz napisać to, co chcesz."
           : "This space is private. You can write whatever you want."}
