@@ -28,6 +28,15 @@ export default function HeaderClient() {
 
         {/* PRAWA STRONA */}
         <div className="flex items-center gap-3">
+          
+          {/* legal link */}
+          <Link
+            href="/regulamin"
+            className="text-[11px] text-white/40 hover:text-white/70 transition"
+          >
+            regulamin
+          </Link>
+
           {/* FREE label */}
           {isFree && (
             <div
