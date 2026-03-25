@@ -12,7 +12,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {/* subtle legal links */}
-      <div className="fixed bottom-3 right-4 text-[10px] text-white/30 select-none">
+      <div className="fixed bottom-3 right-4 z-50 text-[10px] text-white/30 select-none">
         <Link
           href="/regulamin"
           className="hover:text-white/60 transition"
