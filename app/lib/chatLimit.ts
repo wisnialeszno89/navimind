@@ -13,8 +13,8 @@ export type DemoLimitResult = {
   resetAt: number;
 };
 
-export const FREE_HARD_LIMIT = 20; // 15 normal + 5 soft
-export const FREE_SOFT_FROM = 15;
+export const FREE_HARD_LIMIT = 15;
+export const FREE_SOFT_FROM = 12; 
 
 // YYYY-MM-DD (UTC)
 function getDayStampUTC(now = new Date()) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Link from "next/link";
@@ -17,7 +17,15 @@ import CrisisHelp from "./CrisisHelp";
 
 type Level = "none" | "low" | "medium" | "high";
 
-export default function ChatWindow() {
+type Props = {
+  initialContext?: {
+    tryb?: string;
+    sciezka?: string;
+    from?: string;
+  };
+};
+
+export default function ChatWindow({ initialContext }: Props) {
   const { lang } = useLanguage();
   const [showWelcome, setShowWelcome] = useState(false);
 
@@ -31,7 +39,8 @@ export default function ChatWindow() {
 
   const endRef = useRef<HTMLDivElement | null>(null);
 
-  const planLabel = plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "PRO+";
+  const planLabel =
+    plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "PRO+";
 
   /* LOAD PLAN */
   useEffect(() => {
@@ -46,15 +55,36 @@ export default function ChatWindow() {
     })();
   }, [setPlan]);
 
+  /* KONTEKST Z MENMIND — TYLKO JAKO STARTOWA WIADOMOŚĆ */
+  const contextMessage = useMemo(() => {
+    if (!initialContext) return null;
+    if (initialContext.from !== "menmind") return null;
+    if (messages.length > 0) return null;
+
+    if (initialContext.sciezka === "rozstanie") {
+      return lang === "pl"
+        ? "Widzę, że jesteś na ścieżce rozstania. Ułóżmy plan 7 dni stabilizacji: sen, brak kontaktu, ruch, brak alkoholu."
+        : "I see you're on the breakup path. Let's build a 7-day stabilization plan.";
+    }
+
+    if (initialContext.tryb === "kryzys") {
+      return lang === "pl"
+        ? "Jesteś w trybie kryzysu. Skupimy się na stabilizacji i małych krokach."
+        : "You're in crisis mode. We'll focus on stabilization and small steps.";
+    }
+
+    return null;
+  }, [initialContext, messages.length, lang]);
+
+  /* ENTRY SILENCE */
+  useEffect(() => {
+    if (messages.length > 0 || contextMessage) return;
+
+    const t = setTimeout(() => setShowWelcome(true), 600);
+    return () => clearTimeout(t);
+  }, [messages.length, contextMessage]);
+
   /* AUTO SCROLL */
-  /* ENTRY SILENCE — 600 ms */
-useEffect(() => {
-  if (messages.length > 0) return;
-
-  const t = setTimeout(() => setShowWelcome(true), 600);
-  return () => clearTimeout(t);
-}, [messages.length]);
-
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
@@ -90,10 +120,24 @@ useEffect(() => {
 
       {/* MESSAGES */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
-        {/* ⭐ WELCOME MESSAGE — tylko gdy brak rozmowy */}
-        {messages.length === 0 && showWelcome && (
+        {/* KONTEKSTOWA WIADOMOŚĆ */}
+        {contextMessage && (
           <div
-            className="max-w-[85%] rounded-2xl px-4 py-3 text-[15px] leading-7 shadow-sm"
+            className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
+            style={{
+              background: "var(--nm-assistant-bg)",
+              border: "1px solid var(--nm-border-soft)",
+              color: "var(--nm-text-main)",
+            }}
+          >
+            {contextMessage}
+          </div>
+        )}
+
+        {/* ZWYKŁY WELCOME */}
+        {messages.length === 0 && showWelcome && !contextMessage && (
+          <div
+            className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
             style={{
               background: "var(--nm-assistant-bg)",
               border: "1px solid var(--nm-border-soft)",
@@ -104,11 +148,11 @@ useEffect(() => {
           </div>
         )}
 
-        {/* 💬 NORMAL MESSAGES */}
+        {/* NORMALNE WIADOMOŚCI */}
         {messages.map((m, i) => (
           <div
             key={i}
-            className="max-w-[85%] rounded-2xl px-4 py-3 text-[15px] leading-7 shadow-sm nm-fade-in"
+            className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm nm-fade-in"
             style={
               m.role === "user"
                 ? {
@@ -133,10 +177,8 @@ useEffect(() => {
         <div ref={endRef} />
       </div>
 
-      {/* CRISIS */}
       {crisisLevel === "high" && <CrisisHelp lang={lang} />}
 
-      {/* INPUT */}
       <SendForm
         setIsTyping={setIsTyping}
         setCrisisLevel={setCrisisLevel}

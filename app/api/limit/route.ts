@@ -1,57 +1,37 @@
+import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { getCurrentLimit } from "../../lib/chatLimit";
 import { getUserId } from "../../lib/userId";
-import { getUserPlan } from "../../lib/userPlan";
-import { PLAN_LIMITS } from "../../lib/plans";
-import { getCurrentDailyLimit } from "../../lib/dailyLimit";
-import { getCurrentLimit, FREE_HARD_LIMIT } from "../../lib/chatLimit";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-function getUidFromUrl(req: Request) {
+export async function GET() {
   try {
-    const url = new URL(req.url);
-    const uid = url.searchParams.get("uid");
-    return uid && uid.trim().length > 0 ? uid.trim() : null;
-  } catch {
-    return null;
-  }
-}
+    const headerStore = headers();
+    const headerUid = headerStore.get("x-navimind-uid");
 
-export async function GET(req: Request) {
-  try {
-    const uidFromUrl = getUidFromUrl(req);
-    const cookieUserId = getUserId();
+    const userId =
+      headerUid && headerUid.length > 10
+        ? headerUid
+        : getUserId();
 
-    const userId = uidFromUrl ?? cookieUserId;
+    const limitData = await getCurrentLimit(userId);
 
-    if (!userId) {
-      return Response.json({
-        plan: "free",
-        allowed: true,
-        used: 0,
-        remaining: FREE_HARD_LIMIT,
-        limit: FREE_HARD_LIMIT,
-        resetAt: Date.now(),
-      });
-    }
-
-    const plan = await getUserPlan();
-
-    // ✅ FREE = demo limit
-    if (plan === "free") {
-      const limit = await getCurrentLimit(userId, FREE_HARD_LIMIT);
-      return Response.json({ plan, ...limit });
-    }
-
-    // ✅ PRO/PRO+ = daily limit
-    const dailyLimit = PLAN_LIMITS[plan].dailyMessages;
-    const limit = await getCurrentDailyLimit(userId, dailyLimit);
-
-    return Response.json({ plan, ...limit });
-  } catch (err) {
-    console.error("LIMIT API ERROR:", err);
-    return new Response(JSON.stringify({ error: "SERVER_ERROR" }), {
-      status: 500,
+    return NextResponse.json(limitData, {
+      headers: {
+        "Cache-Control": "no-store",
+      },
     });
+  } catch (error) {
+    console.error("Limit API error:", error);
+
+    return NextResponse.json(
+      {
+        allowed: false,
+        used: 0,
+        remaining: 0,
+        limit: 0,
+        resetAt: Date.now(),
+      },
+      { status: 500 }
+    );
   }
 }

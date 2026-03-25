@@ -4,9 +4,9 @@ export type UserPlan = "free" | "pro" | "pro_plus";
 
 export const PLAN_LIMITS = {
   free: {
-    dailyMessages: 10,
-    monthlyPdf: 0,
-    monthlyImages: 0,
+  dailyMessages: 15,
+  monthlyPdf: 0,
+  monthlyImages: 0,
   },
   pro: {
     dailyMessages: 100,

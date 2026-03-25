@@ -21,7 +21,7 @@ import { shapeResponse } from "../../lib/responseShaper";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const PRO_HISTORY_MAX = 20;
+const PRO_HISTORY_MAX = 12;
 const MSG_CHAR_LIMIT = 1800;
 
 type ChatRole = "user" | "assistant";
@@ -176,13 +176,20 @@ ${relationalCore}
   }
 
   if (plan !== "free" && email && chatId) {
-    await appendChatMessageByEmail(email, chatId, {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: finalText,
-      createdAt: Date.now(),
-    });
-  }
+  await appendChatMessageByEmail(email, chatId, {
+    id: crypto.randomUUID(),
+    role: "user",
+    content: userText,
+    createdAt: Date.now(),
+  });
+
+  await appendChatMessageByEmail(email, chatId, {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content: finalText,
+    createdAt: Date.now(),
+  });
+}
 }
 
         controller.enqueue(encoder.encode(sse({ type: "done" })));

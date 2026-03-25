@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useChatStore } from "../lib/chatStore";
 import { useLanguage } from "../lib/useLanguage";
 import MicrophoneButton from "./MicrophoneButton";
@@ -10,6 +10,23 @@ import ImageUploadButton from "./ImageUploadButton";
 import { Plus } from "lucide-react";
 
 type Level = "none" | "low" | "medium" | "high";
+
+/* ===============================
+   🔥 GLOBAL UID (WSPÓLNY LIMIT)
+================================ */
+
+function getOrCreateLocalUid() {
+  if (typeof window === "undefined") return "";
+
+  let uid = localStorage.getItem("nm_uid");
+
+  if (!uid) {
+    uid = crypto.randomUUID();
+    localStorage.setItem("nm_uid", uid);
+  }
+
+  return uid;
+}
 
 export default function SendForm({
   setIsTyping,
@@ -36,8 +53,12 @@ export default function SendForm({
   const isPro = plan !== "free";
 
   const placeholder = useMemo(() => {
-    if (locked) return lang === "pl" ? "Limit demo osiągnięty…" : "Demo limit reached…";
-    if (isSending) return lang === "pl" ? "Wysyłam…" : "Sending…";
+    if (locked)
+      return lang === "pl"
+        ? "Limit demo osiągnięty…"
+        : "Demo limit reached…";
+    if (isSending)
+      return lang === "pl" ? "Wysyłam…" : "Sending…";
     return lang === "pl" ? "Napisz wiadomość…" : "Type a message…";
   }, [locked, isSending, lang]);
 
@@ -51,6 +72,8 @@ export default function SendForm({
     const raw = (custom ?? text).trim();
     if (!raw) return;
 
+    const uid = getOrCreateLocalUid();
+
     setText("");
     setIsSending(true);
     setIsTyping(true);
@@ -61,12 +84,17 @@ export default function SendForm({
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          "x-navimind-uid": uid, // 🔥 KLUCZOWE
+        },
         body: JSON.stringify({ chatId, message: raw, lang }),
       });
 
       if (res.status === 429) {
         setLocked(true);
+        window.dispatchEvent(new Event("navimind:limit-refresh"));
         return;
       }
 
@@ -77,7 +105,8 @@ export default function SendForm({
 
       let buffer = "";
       let fullText = "";
-      const assistantIndex = useChatStore.getState().messages.length - 1;
+      const assistantIndex =
+        useChatStore.getState().messages.length - 1;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -90,24 +119,36 @@ export default function SendForm({
         for (const chunk of parts) {
           if (!chunk.startsWith("data:")) continue;
 
-          const payload = JSON.parse(chunk.replace(/^data:\s*/, ""));
+          const payload = JSON.parse(
+            chunk.replace(/^data:\s*/, "")
+          );
 
           if (payload?.type === "delta") {
             fullText += payload.delta || "";
 
             const state = useChatStore.getState();
             const next = [...state.messages];
-            next[assistantIndex] = { role: "assistant", content: fullText };
+            next[assistantIndex] = {
+              role: "assistant",
+              content: fullText,
+            };
             state.setMessages(next);
           }
         }
       }
+
+      // 🔥 odświeżamy limit po każdej wiadomości
+      window.dispatchEvent(new Event("navimind:limit-refresh"));
+
     } catch {
       const state = useChatStore.getState();
       const next = [...state.messages];
       next[next.length - 1] = {
         role: "assistant",
-        content: lang === "pl" ? "Błąd połączenia." : "Connection error.",
+        content:
+          lang === "pl"
+            ? "Błąd połączenia."
+            : "Connection error.",
       };
       state.setMessages(next);
     } finally {
@@ -125,11 +166,13 @@ export default function SendForm({
         }}
         className="flex items-end gap-2 px-3 pt-3"
       >
-        {/* PLUS BUTTON */}
+        {/* PLUS */}
         <div className="relative">
           <button
             type="button"
-            onClick={() => setShowAttachments((v) => !v)}
+            onClick={() =>
+              setShowAttachments((v) => !v)
+            }
             className="p-3 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
           >
             <Plus size={18} />
@@ -155,27 +198,24 @@ export default function SendForm({
           )}
         </div>
 
-        {/* MICROPHONE */}
         <MicrophoneButton onResult={(t) => setText(t)} />
 
-        {/* TEXTAREA */}
         <textarea
-  ref={textareaRef}
-  value={text}
-  onChange={(e) => {
-    setText(e.target.value);
-
-    // auto-grow
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = "auto";
-      el.style.height = el.scrollHeight + "px";
-    }
-  }}
-  disabled={locked || isSending}
-  placeholder={placeholder}
-  rows={3}
-  className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px] max-h-[200px] overflow-y-auto"
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            const el = textareaRef.current;
+            if (el) {
+              el.style.height = "auto";
+              el.style.height =
+                el.scrollHeight + "px";
+            }
+          }}
+          disabled={locked || isSending}
+          placeholder={placeholder}
+          rows={3}
+          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px] max-h-[200px] overflow-y-auto"
           style={{
             background: "var(--nm-bg-input)",
             border: "1px solid var(--nm-border-input)",
@@ -189,7 +229,6 @@ export default function SendForm({
           }}
         />
 
-        {/* SEND */}
         <button
           type="submit"
           disabled={locked || isSending}
@@ -200,7 +239,9 @@ export default function SendForm({
         </button>
       </form>
 
-      {showPro && <ProNotice onClose={() => setShowPro(false)} />}
+      {showPro && (
+        <ProNotice onClose={() => setShowPro(false)} />
+      )}
 
       <div
         className="px-4 pt-2 text-[11px] text-center"
