@@ -178,7 +178,17 @@ export default function ChatWindow({ initialContext }: Props) {
       </div>
 
       {crisisLevel === "high" && <CrisisHelp lang={lang} />}
-
+       
+       <div className="text-[10px] text-center text-white/30 py-1">
+      <a href="/regulamin" className="hover:text-white/60">
+      regulamin
+      </a>
+      <span className="mx-1">•</span>
+      <a href="/prywatnosc" className="hover:text-white/60">
+      prywatność
+      </a>
+    </div>
+      
       <SendForm
         setIsTyping={setIsTyping}
         setCrisisLevel={setCrisisLevel}
