@@ -31,11 +31,11 @@ export default function HeaderClient() {
           
           {/* legal link */}
           <Link
-            href="/regulamin"
-            className="text-[11px] text-white/40 hover:text-white/70 transition"
-          >
-            regulamin
-          </Link>
+        href="/regulamin"
+        className="text-[11px] uppercase tracking-wide text-white/40 hover:text-white/70 transition"
+        >
+        REGULAMIN
+        </Link>
 
           {/* FREE label */}
           {isFree && (
