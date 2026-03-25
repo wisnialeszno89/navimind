@@ -158,14 +158,25 @@ export default function SendForm({
   }
 
   return (
-    <div className="sticky bottom-0 z-20 border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-        className="flex items-end gap-2 px-3 pt-3"
-      >
+  <div className="sticky bottom-0 z-50 border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)] relative">
+
+    <div className="absolute -top-5 left-0 right-0 text-center text-[10px] text-white/30 pointer-events-auto">
+      <a href="/regulamin" className="hover:text-white/60">
+        regulamin
+      </a>
+      <span className="mx-1">•</span>
+      <a href="/prywatnosc" className="hover:text-white/60">
+        prywatność
+      </a>
+    </div>
+
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        send();
+      }}
+      className="flex items-end gap-2 px-3 pt-3"
+    >
         {/* PLUS */}
         <div className="relative">
           <button
