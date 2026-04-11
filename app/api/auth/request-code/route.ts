@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
+import { saveCode } from "../../../lib/auth/codes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    console.log("KV URL:", process.env.KV_REST_API_URL);
+    console.log("KV TOKEN:", process.env.KV_REST_API_TOKEN);
+
     const body = await req.json().catch(() => null);
     const email = body?.email as string | undefined;
 
@@ -18,16 +21,10 @@ export async function POST(req: Request) {
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    try {
-  await kv.set(`login_code:${email}`, code, {
-    ex: 60 * 10,
-  });
-  } catch {
-  console.log("KV unavailable (local dev)");
-  }
+    await saveCode(email, code);
 
     await resend.emails.send({
-      from: "NaviMind <login@navimind.app>",
+      from: "NaviMind <hello@navimind.app>",
       to: email,
       subject: "Twój kod logowania",
       html: `

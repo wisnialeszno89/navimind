@@ -1,29 +1,49 @@
+console.log("VERIFY ENV KV URL:", process.env.KV_REST_API_URL);
 import { kv } from "@vercel/kv";
 
-const TTL_MIN = Number(process.env.AUTH_CODE_TTL_MINUTES || "10");
+  const memoryStore = new Map<string, string>();
 
-function normalizeEmail(email: string) {
+  function normalize(email: string) {
   return email.trim().toLowerCase();
-}
+ }
 
-export function generateCode() {
-  // 6 cyfr
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
+  export async function saveCode(email: string, code: string) {
+  const key = normalize(email);
 
-export async function saveCode(email: string, code: string) {
-  const key = `auth_code:${normalizeEmail(email)}`;
-  await kv.set(key, { code }, { ex: TTL_MIN * 60 });
-}
+  console.log("KV SAVE:", key, code);
+
+  try {
+    await kv.set(`login_code:${key}`, code, {
+      ex: 60 * 10,
+    });
+  } catch {
+    console.warn("KV unavailable (local dev)");
+    memoryStore.set(key, code);
+  }
+ }
+
 
 export async function verifyCode(email: string, code: string) {
-  const key = `auth_code:${normalizeEmail(email)}`;
-  const data = await kv.get<{ code: string }>(key);
+  const key = normalize(email);
 
-  if (!data?.code) return false;
-  if (data.code !== code) return false;
+  try {
+    const stored = await kv.get<string>(`login_code:${key}`);
 
-  // jednokrotnego użytku
-  await kv.del(key);
+    if (stored) {
+      if (stored !== code) return false;
+      await kv.del(`login_code:${key}`);
+      return true;
+    }
+  } catch {
+    console.warn("KV unavailable (verify)");
+  }
+
+  // fallback LOCAL
+  const local = memoryStore.get(key);
+
+  if (!local) return false;
+  if (local !== code) return false;
+
+ // usuń await kv.del(...)
   return true;
 }

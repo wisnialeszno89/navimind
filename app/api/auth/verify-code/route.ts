@@ -25,7 +25,9 @@ export async function POST(req: Request) {
     if (!email || !email.includes("@") || code.length < 4) {
       return NextResponse.json({ error: "INVALID_DATA" }, { status: 400 });
     }
-
+    
+    console.log("VERIFY EMAIL:", email);
+    console.log("VERIFY CODE:", code);
     const ok = await verifyCode(email, code);
 
     if (!ok) {
