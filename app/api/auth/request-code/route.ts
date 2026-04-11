@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,15 +13,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "NO_EMAIL" }, { status: 400 });
     }
 
-    /* 🔥 runtime-only Resend (naprawia build) */
     const { Resend } = await import("resend");
-
     const resend = new Resend(process.env.RESEND_API_KEY);
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // tutaj pewnie masz zapis kodu do KV / DB — zostawiam bez zmian
-    // await saveCode(email, code);
+    // 🔑 zapis kodu do KV (ważny 10 minut)
+    await kv.set(`login_code:${email}`, code, {
+      ex: 60 * 10,
+    });
 
     await resend.emails.send({
       from: "NaviMind <no-reply@navimind.app>",
