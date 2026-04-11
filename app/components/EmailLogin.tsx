@@ -7,9 +7,11 @@ export default function EmailLogin() {
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function sendCode() {
     setLoading(true);
+    setError("");
 
     await fetch("/api/auth/request-code", {
       method: "POST",
@@ -25,8 +27,9 @@ export default function EmailLogin() {
 
   async function verify() {
     setLoading(true);
+    setError("");
 
-    await fetch("/api/auth/verify-code", {
+    const res = await fetch("/api/auth/verify-code", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -34,7 +37,16 @@ export default function EmailLogin() {
       body: JSON.stringify({ email, code })
     });
 
-    window.location.reload();
+    const data = await res.json();
+
+    setLoading(false);
+
+    if (data.ok) {
+      // 🚀 kluczowa zmiana
+      window.location.href = "/chat";
+    } else {
+      setError("Nieprawidłowy kod");
+    }
   }
 
   return (
@@ -61,7 +73,7 @@ export default function EmailLogin() {
             disabled={loading}
             className="mt-3 w-full bg-white text-black rounded-lg py-2 font-medium"
           >
-            Wyślij kod
+            {loading ? "Wysyłanie..." : "Wyślij kod"}
           </button>
         </>
       )}
@@ -80,8 +92,14 @@ export default function EmailLogin() {
             disabled={loading}
             className="mt-3 w-full bg-white text-black rounded-lg py-2 font-medium"
           >
-            Zaloguj
+            {loading ? "Logowanie..." : "Zaloguj"}
           </button>
+
+          {error && (
+            <div className="text-red-400 text-sm mt-3">
+              {error}
+            </div>
+          )}
         </>
       )}
     </div>
