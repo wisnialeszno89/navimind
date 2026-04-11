@@ -18,13 +18,12 @@ export async function POST(req: Request) {
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 🔑 zapis kodu do KV (ważny 10 minut)
     await kv.set(`login_code:${email}`, code, {
       ex: 60 * 10,
     });
 
     await resend.emails.send({
-      from: "NaviMind <login@menmind.app>",
+      from: "NaviMind <login@navimind.app>",
       to: email,
       subject: "Twój kod logowania",
       html: `
