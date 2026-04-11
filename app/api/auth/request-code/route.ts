@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     });
 
     await resend.emails.send({
-      from: "NaviMind <no-reply@navimind.app>",
+      from: "NaviMind <login@menmind.app>",
       to: email,
       subject: "Twój kod logowania",
       html: `
