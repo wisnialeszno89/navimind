@@ -9,6 +9,7 @@ export default function RootLayout({
   return (
     <html lang="pl">
       <body
+        className="nm-breath-bg"
         style={{
           background: "var(--nm-bg-main)",
           color: "var(--nm-text-main)",

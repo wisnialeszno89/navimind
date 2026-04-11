@@ -10,12 +10,22 @@ export type ConversationAnalysis = {
   mode: ConversationMode;
   simplified: boolean;
 };
-
 export function analyzeConversation(
   userText: string,
   history: { role: string; content: string }[]
 ): ConversationAnalysis {
   const text = userText.toLowerCase();
+
+  /* ===== KONTEKST TECHNICZNY / PRAWNY — NIE NAZYWAJ EMOCJI ===== */
+
+  const technicalContext =
+    /(straż|policja|mandat|auto|samochód|parking|przegląd|dowód rejestracyjny|holowanie|kara|przepis|prawo|sąd|urzęd|wniosek|podatek|umowa|faktura|vercel|kod|deploy|api|repo|git)/i.test(
+      text
+    );
+
+  if (technicalContext) {
+    return { mode: "realism", simplified: false };
+  }
 
   /* ===== KRYZYS ===== */
 
@@ -27,14 +37,18 @@ export function analyzeConversation(
   if (crisisSignal) return { mode: "crisis", simplified: false };
 
   /* ===== EMOCJE ===== */
+  const frustration =
+  /(kurde|wkurza|bez sensu|co za|masakra|pojeba|idiotyczne)/i.test(text);
 
+  if (frustration)
+  return { mode: "realism", simplified: false };
   const highEmotion =
     /(boję|nienawidzę|mam dość|nie wytrzymam|to boli|bez sensu|załamany|rozbity|wkurw|pojeb)/i.test(
       text
     );
 
   const blameLanguage =
-    /(ona|on|oni|zawsze|nigdy|wszyscy|to przez|winna|wina)/i.test(text);
+    /(to przez|jej wina|jego wina|wszyscy są|ona zawsze|on zawsze)/i.test(text);
 
   const childrenContext =
     /(dzieci|córka|syn|alimenty|opieka|ojciec|matka|rodzic)/i.test(text);
@@ -61,10 +75,8 @@ export function analyzeConversation(
     msg.slice(0, 60) === text.slice(0, 60)
   );
 
-  /* ===== PRIORYTETY ===== */
-
   if (childrenContext && blameLanguage)
-    return { mode: "mentor", simplified: false };
+    return { mode: "realism", simplified: false };
 
   if (institutionalEscalation && childrenContext)
     return { mode: "mentor", simplified: false };
@@ -72,7 +84,7 @@ export function analyzeConversation(
   if (identityHit && childrenContext)
     return { mode: "mentor", simplified: false };
 
-  if (highEmotion)
+  if (highEmotion && !technicalContext)
     return { mode: "stabilize", simplified: false };
 
   if (repeatedTopic)

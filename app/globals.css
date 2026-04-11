@@ -4,7 +4,7 @@
 
 /* =========================
    NAVIMIND FINAL COLOR SYSTEM
-   Calm night + warm safety
+   Calm night + warm premium
    ========================= */
 
 :root {
@@ -16,8 +16,8 @@
   --nm-bg-gradient:
     radial-gradient(
       circle at 50% 120%,
-      rgba(255, 214, 120, 0.10),
-      rgba(126, 224, 181, 0.06),
+      rgba(198, 163, 107, 0.10),
+      rgba(126, 224, 181, 0.05),
       transparent 60%
     );
 
@@ -27,7 +27,9 @@
 
   --nm-accent: #7aa2ff;
   --nm-accent-strong: #5f8cff;
-  --nm-accent-warm: #ffd678;
+
+  /* cieplejszy premium akcent */
+  --nm-accent-warm: #c6a36b;
 
   --nm-border-soft: rgba(255, 255, 255, 0.06);
   --nm-border-input: rgba(255, 255, 255, 0.08);
@@ -37,11 +39,12 @@
 
   --nm-focus-ring: rgba(122, 162, 255, 0.35);
 
-  --nm-pro-gold: #ffd678;
-  --nm-pro-gold-soft: rgba(255, 214, 120, 0.18);
+  /* PRO GOLD */
+  --nm-pro-gold: #c6a36b;
+  --nm-pro-gold-soft: rgba(198, 163, 107, 0.18);
 }
 
-/* delikatne „oddychanie” tła */
+/* subtelne oddychanie tła */
 @keyframes nm-breath {
   0%   { opacity: 0.35; transform: scale(1); }
   50%  { opacity: 0.55; transform: scale(1.03); }
@@ -56,4 +59,40 @@
   background: var(--nm-bg-gradient);
   animation: nm-breath 12s ease-in-out infinite;
   z-index: 0;
+}
+
+/* PREMIUM TŁO — subtelne */
+body {
+  background:
+    radial-gradient(
+      circle at 20% 20%,
+      rgba(198,163,107,0.06),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 80% 80%,
+      rgba(120,90,60,0.06),
+      transparent 40%
+    ),
+    var(--nm-bg-main);
+}
+
+/* premium glass */
+.nm-glass {
+  backdrop-filter: blur(12px);
+  background: rgba(19, 28, 49, 0.65);
+}
+
+/* PRO subtle glow */
+.nm-pro-glow {
+  box-shadow:
+    0 0 0 1px rgba(198,163,107,0.15),
+    0 0 20px rgba(198,163,107,0.08);
+}
+
+/* PRO+ stronger glow */
+.nm-proplus-glow {
+  box-shadow:
+    0 0 0 1px rgba(198,163,107,0.25),
+    0 0 30px rgba(198,163,107,0.12);
 }

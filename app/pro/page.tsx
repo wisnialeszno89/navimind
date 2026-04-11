@@ -94,7 +94,7 @@ export default async function ProPage() {
           </div>
 
           {/* PRO */}
-          <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-6 relative overflow-hidden">
+          <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-6 relative overflow-hidden nm-pro-glow">
 
             <div className="absolute top-4 right-4 text-xs px-2 py-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 text-yellow-100">
               Najczęściej wybierane
@@ -146,7 +146,7 @@ export default async function ProPage() {
           </div>
 
           {/* PRO+ */}
-          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/15 p-6 relative overflow-hidden">
+          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/15 p-6 relative overflow-hidden nm-proplus-glow">
 
             <div className="absolute top-4 right-4 text-xs px-2 py-1 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-100">
               Największy spokój
