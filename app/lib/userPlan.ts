@@ -27,8 +27,16 @@ export async function setPlanByEmail(email: string, plan: Plan) {
 // ✅ legacy: aktualny user plan (po sesji)
 export async function getUserPlan(): Promise<Plan> {
   const email = getSessionEmail();
+
+  console.log("SESSION EMAIL:", email);
+
   if (!email) return "free";
-  return getPlanByEmail(email);
+
+  const plan = await getPlanByEmail(email);
+
+  console.log("PLAN FROM KV:", plan);
+
+  return plan;
 }
 
 export async function setUserPlan(plan: Plan): Promise<void> {

@@ -16,12 +16,17 @@ function verifyLemonSignature(rawBody: string, signature: string | null) {
 }
 
 export async function POST(req: Request) {
+  console.log("🔥 WEBHOOK HIT");
+
   const raw = await req.text();
+  console.log("RAW:", raw);
+
   const signature = req.headers.get("X-Signature");
 
-  // 🔐 twarda weryfikacja webhooka
+  // 🔐 weryfikacja webhooka
   const verified = verifyLemonSignature(raw, signature);
   if (!verified) {
+    console.log("❌ INVALID SIGNATURE");
     return NextResponse.json({ error: "INVALID_SIGNATURE" }, { status: 401 });
   }
 
@@ -29,52 +34,60 @@ export async function POST(req: Request) {
   try {
     payload = JSON.parse(raw);
   } catch {
+    console.log("❌ JSON PARSE ERROR");
     return NextResponse.json({ error: "INVALID_JSON" }, { status: 400 });
   }
+
+  console.log("PARSED:", payload);
 
   const eventName = payload?.meta?.event_name as string | undefined;
   const data = payload?.data;
 
-  // 📧 email klienta (różne pola w Lemon)
+  console.log("EVENT:", eventName);
+
+  // 📧 email klienta
   const email: string | undefined =
     data?.attributes?.user_email ||
     data?.attributes?.customer_email ||
     data?.attributes?.email;
 
+  console.log("EMAIL:", email);
+
   // 🆔 variant produktu
   const variantId = Number(data?.attributes?.variant_id);
+  console.log("VARIANT:", variantId);
 
   const proVariant = Number(process.env.LEMON_VARIANT_PRO_PLN);
   const proPlusVariant = Number(process.env.LEMON_VARIANT_PROPLUS_PLN);
 
+  console.log("EXPECTED PRO:", proVariant);
+  console.log("EXPECTED PRO+:", proPlusVariant);
+
   if (!email || !variantId) {
-    // webhook poprawny, ale nie dotyczy planów
+    console.log("⚠️ Missing email or variant");
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  // 📌 eventy aktywujące dostęp
-  const shouldActivate =
-    eventName === "subscription_created" ||
-    eventName === "subscription_updated" ||
-    eventName === "subscription_payment_success" ||
-    eventName === "order_created";
-
-  // 📌 eventy wyłączające dostęp
-  const shouldDisable =
-    eventName === "subscription_cancelled" ||
-    eventName === "subscription_expired";
-
   try {
-    if (shouldActivate) {
+    // 🔥 HARD TEST (na 100% ustawia plan)
+    await setPlanByEmail("adam.wisniewski89@wp.pl", "pro_plus");
+    console.log("🔥 FORCED PLAN SET");
+
+    // normalna logika (na później)
+    if (eventName === "order_created") {
       if (variantId === proVariant) {
         await setPlanByEmail(email, "pro");
-      } else if (variantId === proPlusVariant) {
+      }
+
+      if (variantId === proPlusVariant) {
         await setPlanByEmail(email, "pro_plus");
       }
     }
 
-    if (shouldDisable) {
-      // w przyszłości można dodać "active_until"
+    if (
+      eventName === "subscription_cancelled" ||
+      eventName === "subscription_expired"
+    ) {
       await setPlanByEmail(email, "free");
     }
   } catch (err) {
