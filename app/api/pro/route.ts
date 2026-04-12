@@ -1,9 +1,26 @@
+import { NextResponse } from "next/server";
 import { getUserPlan } from "../../lib/userPlan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const plan = await getUserPlan();
-  return Response.json({ plan });
+  try {
+    const plan = await getUserPlan();
+
+    return NextResponse.json({
+      ok: true,
+      plan,
+    });
+  } catch (e) {
+    console.error("PRO API ERROR:", e);
+
+    return NextResponse.json(
+      {
+        ok: false,
+        plan: "free",
+      },
+      { status: 200 } // 🔥 KLUCZOWE
+    );
+  }
 }
