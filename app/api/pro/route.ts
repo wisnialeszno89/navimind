@@ -9,18 +9,13 @@ export async function GET() {
     const plan = await getUserPlan();
 
     return NextResponse.json({
-      ok: true,
-      plan,
+      plan: plan || "free",
     });
   } catch (e) {
     console.error("PRO API ERROR:", e);
 
-    return NextResponse.json(
-      {
-        ok: false,
-        plan: "free",
-      },
-      { status: 200 } // 🔥 KLUCZOWE
-    );
+    return NextResponse.json({
+      plan: "free",
+    });
   }
 }
