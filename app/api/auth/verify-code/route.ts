@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyCode } from "../../../lib/auth/codes";
 import { createHash } from "crypto";
+import { setSession } from "../../../lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -32,19 +33,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "INVALID_CODE" }, { status: 401 });
     }
 
-    const res = NextResponse.json({ ok: true });
+    setSession(email);
 
-    const value = `${email}::${sign(email)}`;
-
-    res.cookies.set(SESSION_COOKIE, value, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * SESSION_TTL_DAYS,
-    });
-
-    return res;
+return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("VERIFY CODE ERROR:", e);
     return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 });
