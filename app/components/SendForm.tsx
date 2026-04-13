@@ -5,16 +5,10 @@ import { useChatStore } from "../lib/chatStore";
 import { useLanguage } from "../lib/useLanguage";
 import MicrophoneButton from "./MicrophoneButton";
 import ProNotice from "./ProNotice";
-import UploadButton from "./UploadButton";
 import ImageUploadButton from "./ImageUploadButton";
 import { Plus } from "lucide-react";
-import { imageToBase64 } from "../lib/imageToBase64";
 
 type Level = "none" | "low" | "medium" | "high";
-
-/* ===============================
-   🔥 GLOBAL UID (WSPÓLNY LIMIT)
-================================ */
 
 function getOrCreateLocalUid() {
   if (typeof window === "undefined") return "";
@@ -37,8 +31,7 @@ export default function SendForm({
   setIsTyping: (v: boolean) => void;
   setCrisisLevel: (v: Level) => void;
   chatId?: string | null;
-}) 
-{
+}) {
   const { lang } = useLanguage();
 
   const [text, setText] = useState("");
@@ -68,253 +61,90 @@ export default function SendForm({
     if (isPro) setLocked(false);
   }, [isPro]);
 
-  async function handleImageUpload(file: File) {
-  console.log("🔥 IMAGE CLICK");
+  async function send() {
+    if (locked || isSending) return;
 
-  try {
+    const raw = text.trim();
+    if (!raw) return;
+
+    const uid = getOrCreateLocalUid();
+
+    setText("");
+    setIsSending(true);
     setIsTyping(true);
 
-    const base64 = await imageToBase64(file);
+    add({ role: "user", content: raw });
+    add({ role: "assistant", content: "" });
 
-    const res = await fetch("/api/vision", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        image: base64,
-      }),
-    });
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "x-navimind-uid": uid,
+        },
+        credentials: "include",
+        body: JSON.stringify({ chatId, message: raw, lang }),
+      });
 
-    console.log("STATUS:", res.status);
+      if (!res.ok) throw new Error("Request failed");
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      console.log("ERROR:", err);
+      const data = await res.json();
 
-      if (err?.error === "PRO_REQUIRED") {
-        alert("Zdjęcia są dostępne w PRO.");
-        return;
-      }
+      const state = useChatStore.getState();
+      const next = [...state.messages];
 
-      if (err?.error === "IMAGE_LIMIT") {
-        alert("Limit zdjęć został osiągnięty.");
-        return;
-      }
+      next[next.length - 1] = {
+        role: "assistant",
+        content: data?.message || "Brak odpowiedzi",
+      };
 
-      throw new Error("Upload failed");
+      state.setMessages(next);
+
+    } catch (e) {
+      const state = useChatStore.getState();
+      const next = [...state.messages];
+
+      next[next.length - 1] = {
+        role: "assistant",
+        content:
+          lang === "pl"
+            ? "Błąd połączenia."
+            : "Connection error.",
+      };
+
+      state.setMessages(next);
+    } finally {
+      setIsTyping(false);
+      setIsSending(false);
     }
-
-    const data = await res.json();
-
-    console.log("VISION RESULT:", data);
-
-    add({
-      role: "assistant",
-      content: data.message,
-    });
-
-  } catch (e) {
-    console.error("UPLOAD ERROR:", e);
-
-    add({
-      role: "assistant",
-      content: "Błąd analizy zdjęcia.",
-    });
-  } finally {
-    setIsTyping(false);
   }
-}
-
-  async function send(custom?: string) {
-  if (locked || isSending) return;
-
-  const raw = (custom ?? text).trim();
-  if (!raw) return;
-
-  const uid = getOrCreateLocalUid();
-
-  setText("");
-  setIsSending(true);
-  setIsTyping(true);
-
-  add({ role: "user", content: raw });
-  add({ role: "assistant", content: "" });
-
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "x-navimind-uid": uid,
-      },
-      credentials: "include",
-      body: JSON.stringify({ chatId, message: raw, lang }),
-    });
-
-    console.log("CHAT STATUS:", res.status);
-
-    if (res.status === 429) {
-      setLocked(true);
-      window.dispatchEvent(new Event("navimind:limit-refresh"));
-      return;
-    }
-
-    if (!res.ok) throw new Error("Request failed");
-
-    const data = await res.json();
-
-    const state = useChatStore.getState();
-    const next = [...state.messages];
-
-    next[next.length - 1] = {
-      role: "assistant",
-      content: data?.message || "Brak odpowiedzi",
-    };
-
-    state.setMessages(next);
-
-    window.dispatchEvent(new Event("navimind:limit-refresh"));
-
-  } catch (e) {
-    console.error("CHAT ERROR:", e);
-
-    const state = useChatStore.getState();
-    const next = [...state.messages];
-
-    next[next.length - 1] = {
-      role: "assistant",
-      content:
-        lang === "pl"
-          ? "Błąd połączenia."
-          : "Connection error.",
-    };
-
-    state.setMessages(next);
-
-  } finally {
-    setIsTyping(false);
-    setIsSending(false);
-  }
-}
 
   return (
-  <div className="sticky bottom-0 z-50 border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)] relative">
-
-    <div className="absolute -top-5 left-0 right-0 text-center text-[10px] text-white/30 pointer-events-auto">
-      <a href="/regulamin" className="hover:text-white/60">
-        regulamin
-      </a>
-      <span className="mx-1">•</span>
-      <a href="/prywatnosc" className="hover:text-white/60">
-        prywatność
-      </a>
-    </div>
-
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        send();
-      }}
-      className="flex items-end gap-2 px-3 pt-3"
-    >
-        {/* PLUS */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() =>
-              setShowAttachments((v) => !v)
-            }
-            className="p-3 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
-          >
-            <Plus size={18} />
-          </button>
-
-          {showAttachments && (
-            <div className="absolute bottom-14 left-0 flex flex-col gap-2 bg-[var(--nm-bg-soft)] border border-[var(--nm-border-soft)] rounded-xl p-3 shadow-xl">
-              {isPro ? (
-                <>
-                  <ImageUploadButton onUpload={() => {}} />
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowPro(true)}
-                  className="text-sm text-white/60"
-                >
-                  Dostępne w PRO
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        <MicrophoneButton onResult={(t) => setText(t)} />
-
+    <div className="p-3 border-t bg-black">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+        className="flex gap-2"
+      >
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            const el = textareaRef.current;
-            if (el) {
-              el.style.height = "auto";
-              el.style.height =
-                el.scrollHeight + "px";
-            }
-          }}
-          disabled={locked || isSending}
+          onChange={(e) => setText(e.target.value)}
           placeholder={placeholder}
-          rows={3}
-          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px] max-h-[200px] overflow-y-auto"
-          style={{
-            background: "var(--nm-bg-input)",
-            border: "1px solid var(--nm-border-input)",
-            color: "var(--nm-text-main)",
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
+          className="flex-1 p-2 rounded bg-gray-800 text-white"
         />
 
         <button
           type="submit"
-          disabled={locked || isSending}
-          className="px-5 py-3 rounded-2xl text-white nm-btn"
-          style={{ background: "var(--nm-accent)" }}
+          className="px-4 py-2 bg-blue-500 rounded text-white"
         >
           ➤
         </button>
       </form>
-
-      {showPro && (
-        <ProNotice onClose={() => setShowPro(false)} />
-      )}
-
-      <div
-        className="px-4 pt-2 text-[11px] text-center"
-        style={{ color: "var(--nm-text-muted)" }}
-      >
-        <div className="text-[10px] text-center text-white/30 mt-1">
-        <a href="/regulamin" className="hover:text-white/60">
-        regulamin
-        </a>
-        <span className="mx-1">•</span>
-        <a href="/prywatnosc" className="hover:text-white/60">
-         prywatność
-        </a>
-      </div>
-        {lang === "pl"
-          ? "To miejsce jest prywatne. Możesz napisać to, co chcesz."
-          : "This space is private. You can write whatever you want."}
-      </div>
-
-      <div className="pb-[calc(env(safe-area-inset-bottom)+10px)]" />
     </div>
   );
 }
