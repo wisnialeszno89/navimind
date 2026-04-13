@@ -61,23 +61,10 @@ export async function POST(req: Request) {
     });
 
     /* 📤 Upload do blob przez /api/upload */
-    const upload = new FormData();
-    upload.append("file", file);
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
 
-    const uploadRes = await fetch(new URL("/api/upload", req.url), {
-    method: "POST",
-    body: upload,
-    headers: {
-    cookie: req.headers.get("cookie") || "", // 🔥 KLUCZ
-  },
-});
-    console.log("UPLOAD STATUS:", uploadRes.status);
-
-    const uploadData = await uploadRes.json().catch(() => null);
-
-    if (!uploadRes.ok || !uploadData?.url) {
-      return NextResponse.json({ error: "UPLOAD_FAILED" }, { status: 500 });
-    }
+    const imageUrl = `data:${file.type};base64,${base64}`;
 
     /* 👁️ VISION */
     const completion = await openai.chat.completions.create({
@@ -91,7 +78,7 @@ export async function POST(req: Request) {
             { type: "text", text: "Opisz obraz." },
             {
               type: "image_url",
-              image_url: { url: uploadData.url },
+              image_url: { url: imageUrl },
             },
           ] as any,
         },
