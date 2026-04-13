@@ -241,18 +241,14 @@ export default function SendForm({
         />
 
         <button
-        type="button"
-        onClick={() => {
-        console.log("🔥 BUTTON CLICK");
-        send();
-      }}
+        type="submit"
         disabled={locked || isSending}
         className="px-5 py-3 rounded-2xl text-white nm-btn"
         style={{ background: "var(--nm-accent)" }}
-      >
-        ➤
-      </button>
-      </form>
+        >
+           ➤
+        </button>
+        </form>
 
       {showPro && (
         <ProNotice onClose={() => setShowPro(false)} />
