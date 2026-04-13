@@ -1,5 +1,4 @@
 import EmailLogin from "../components/EmailLogin";
-import PlanGate from "../components/PlanGate";
 
 export default function ProPage() {
   return (
@@ -35,7 +34,6 @@ export default function ProPage() {
       </div>
 
       {/* KARTY */}
-        <PlanGate>
         <div className="grid md:grid-cols-3 gap-6">
           
         {/* FREE */}
@@ -136,8 +134,7 @@ export default function ProPage() {
           </p>
         </a>
       </div>
-      </PlanGate>
-      
+            
       
       {/* STOPKA */}
       <div className="max-w-2xl text-white/60 text-sm space-y-3">
