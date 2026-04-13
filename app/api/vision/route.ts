@@ -65,9 +65,13 @@ export async function POST(req: Request) {
     upload.append("file", file);
 
     const uploadRes = await fetch(new URL("/api/upload", req.url), {
-      method: "POST",
-      body: upload,
-    });
+    method: "POST",
+    body: upload,
+    headers: {
+    cookie: req.headers.get("cookie") || "", // 🔥 KLUCZ
+  },
+});
+    console.log("UPLOAD STATUS:", uploadRes.status);
 
     const uploadData = await uploadRes.json().catch(() => null);
 
