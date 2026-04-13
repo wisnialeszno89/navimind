@@ -23,18 +23,14 @@ export async function POST(req: Request) {
 
     await saveCode(email, code);
 
-    await resend.emails.send({
-      from: "NaviMind <hello@navimind.app>",
-      to: email,
-      subject: "Twój kod logowania",
-      html: `
-        <div style="font-family:sans-serif">
-          <h2>Twój kod:</h2>
-          <p style="font-size:24px;letter-spacing:4px"><b>${code}</b></p>
-          <p>Kod jest ważny przez kilka minut.</p>
-        </div>
-      `,
-    });
+    const result = await resend.emails.send({
+    from: "NaviMind <hello@navimind.app>",
+    to: email,
+    subject: "Twój kod logowania",
+    html: `<b>${code}</b>`,
+  });
+
+console.log("RESEND RESULT:", result);
 
     return NextResponse.json({ ok: true });
   } catch (err) {
