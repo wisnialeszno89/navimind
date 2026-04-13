@@ -43,17 +43,17 @@ export default function ChatWindow({ initialContext }: Props) {
     plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "PRO+";
 
   /* LOAD PLAN */
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/pro", { cache: "no-store" });
-        const data = await res.json();
-        setPlan(data?.plan ?? "free");
-      } catch {
-        setPlan("free");
-      }
-    })();
-  }, [setPlan]);
+// useEffect(() => {
+//   (async () => {
+//     try {
+//       const res = await fetch("/api/pro", { cache: "no-store" });
+//       const data = await res.json();
+//       setPlan(data?.plan ?? "free");
+//     } catch {
+//       setPlan("free");
+//     }
+//   })();
+// }, [setPlan]);
 
   /* KONTEKST Z MENMIND — TYLKO JAKO STARTOWA WIADOMOŚĆ */
   const contextMessage = useMemo(() => {
