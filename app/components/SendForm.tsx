@@ -241,13 +241,17 @@ export default function SendForm({
         />
 
         <button
-          type="submit"
-          disabled={locked || isSending}
-          className="px-5 py-3 rounded-2xl text-white nm-btn"
-          style={{ background: "var(--nm-accent)" }}
-        >
-          ➤
-        </button>
+        type="button"
+        onClick={() => {
+        console.log("🔥 BUTTON CLICK");
+        send();
+      }}
+        disabled={locked || isSending}
+        className="px-5 py-3 rounded-2xl text-white nm-btn"
+        style={{ background: "var(--nm-accent)" }}
+      >
+        ➤
+      </button>
       </form>
 
       {showPro && (
