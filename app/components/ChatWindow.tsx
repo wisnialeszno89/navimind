@@ -27,13 +27,12 @@ type Props = {
 
 export default function ChatWindow({ initialContext }: Props) {
   const { lang } = useLanguage();
-  const [showWelcome, setShowWelcome] = useState(false);
 
   const messages = useChatStore((s) => s.messages);
-  const setPlan = useChatStore((s) => s.setPlan);
-  const plan = useChatStore((s) => s.plan);
   const activeChatId = useChatStore((s) => s.activeChatId);
 
+  const [plan, setPlan] = useState<"free" | "pro" | "pro_plus">("free");
+  const [showWelcome, setShowWelcome] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [crisisLevel, setCrisisLevel] = useState<Level>("none");
 
@@ -42,20 +41,22 @@ export default function ChatWindow({ initialContext }: Props) {
   const planLabel =
     plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "PRO+";
 
-  /* LOAD PLAN */
-// useEffect(() => {
-//   (async () => {
-//     try {
-//       const res = await fetch("/api/pro", { cache: "no-store" });
-//       const data = await res.json();
-//       setPlan(data?.plan ?? "free");
-//     } catch {
-//       setPlan("free");
-//     }
-//   })();
-// }, [setPlan]);
+  /* ✅ PROSTY FETCH PLANU (bez loopów) */
+  useEffect(() => {
+    fetch("/api/pro", {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.plan) {
+          setPlan(data.plan);
+        }
+      })
+      .catch(() => setPlan("free"));
+  }, []);
 
-  /* KONTEKST Z MENMIND — TYLKO JAKO STARTOWA WIADOMOŚĆ */
+  /* KONTEKST STARTOWY */
   const contextMessage = useMemo(() => {
     if (!initialContext) return null;
     if (initialContext.from !== "menmind") return null;
@@ -120,35 +121,29 @@ export default function ChatWindow({ initialContext }: Props) {
 
       {/* MESSAGES */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
-        {/* KONTEKSTOWA WIADOMOŚĆ */}
+
         {contextMessage && (
-          <div
-            className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
+          <div className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
             style={{
               background: "var(--nm-assistant-bg)",
               border: "1px solid var(--nm-border-soft)",
               color: "var(--nm-text-main)",
-            }}
-          >
+            }}>
             {contextMessage}
           </div>
         )}
 
-        {/* ZWYKŁY WELCOME */}
         {messages.length === 0 && showWelcome && !contextMessage && (
-          <div
-            className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
+          <div className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
             style={{
               background: "var(--nm-assistant-bg)",
               border: "1px solid var(--nm-border-soft)",
               color: "var(--nm-text-main)",
-            }}
-          >
+            }}>
             {getWelcomeMessage(lang)}
           </div>
         )}
 
-        {/* NORMALNE WIADOMOŚCI */}
         {messages.map((m, i) => (
           <div
             key={i}
@@ -178,17 +173,13 @@ export default function ChatWindow({ initialContext }: Props) {
       </div>
 
       {crisisLevel === "high" && <CrisisHelp lang={lang} />}
-       
-       <div className="text-[10px] text-center text-white/30 py-1">
-      <a href="/regulamin" className="hover:text-white/60">
-      regulamin
-      </a>
-      <span className="mx-1">•</span>
-      <a href="/prywatnosc" className="hover:text-white/60">
-      prywatność
-      </a>
-    </div>
-      
+
+      <div className="text-[10px] text-center text-white/30 py-1">
+        <a href="/regulamin" className="hover:text-white/60">regulamin</a>
+        <span className="mx-1">•</span>
+        <a href="/prywatnosc" className="hover:text-white/60">prywatność</a>
+      </div>
+
       <SendForm
         setIsTyping={setIsTyping}
         setCrisisLevel={setCrisisLevel}
