@@ -14,7 +14,6 @@ export default function ChatPage({ searchParams }: Props) {
   return (
     <AppShell>
 
-      {/* 🔥 AUTO AKTYWACJA PLANU */}
       <PlanWatcher />
 
       <ChatWindow
