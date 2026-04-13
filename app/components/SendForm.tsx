@@ -128,112 +128,77 @@ export default function SendForm({
 }
 
   async function send(custom?: string) {
-    if (locked || isSending) return;
+  if (locked || isSending) return;
 
-    const raw = (custom ?? text).trim();
-    if (!raw) return;
+  const raw = (custom ?? text).trim();
+  if (!raw) return;
 
-    const uid = getOrCreateLocalUid();
+  const uid = getOrCreateLocalUid();
 
-    setText("");
-    setIsSending(true);
-    setIsTyping(true);
+  setText("");
+  setIsSending(true);
+  setIsTyping(true);
 
-    add({ role: "user", content: raw });
-    add({ role: "assistant", content: "" });
+  add({ role: "user", content: raw });
+  add({ role: "assistant", content: "" });
 
-    try {
-      const res = await fetch("/api/chat", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream",
-    "x-navimind-uid": uid,
-  },
-  credentials: "include",
-  body: JSON.stringify({ chatId, message: raw, lang }),
-});
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "x-navimind-uid": uid,
+      },
+      credentials: "include",
+      body: JSON.stringify({ chatId, message: raw, lang }),
+    });
 
-console.log("CHAT STATUS:", res.status);
-console.log("HAS BODY:", !!res.body);
+    console.log("CHAT STATUS:", res.status);
 
-      if (res.status === 429) {
-        setLocked(true);
-        window.dispatchEvent(new Event("navimind:limit-refresh"));
-        return;
-      }
-
-      if (!res.body) {
-  const data = await res.json().catch(() => null);
-
-  const state = useChatStore.getState();
-  const next = [...state.messages];
-
-  next[next.length - 1] = {
-    role: "assistant",
-    content: data?.message || "Brak odpowiedzi",
-  };
-
-  state.setMessages(next);
-  return;
-}
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      let buffer = "";
-      let fullText = "";
-      const assistantIndex =
-        useChatStore.getState().messages.length - 1;
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const chunk of parts) {
-          if (!chunk.startsWith("data:")) continue;
-
-          const payload = JSON.parse(
-            chunk.replace(/^data:\s*/, "")
-          );
-
-          if (payload?.type === "delta") {
-            fullText += payload.delta || "";
-
-            const state = useChatStore.getState();
-            const next = [...state.messages];
-            next[assistantIndex] = {
-              role: "assistant",
-              content: fullText,
-            };
-            state.setMessages(next);
-          }
-        }
-      }
-      
-      // 🔥 odświeżamy limit po każdej wiadomości
+    if (res.status === 429) {
+      setLocked(true);
       window.dispatchEvent(new Event("navimind:limit-refresh"));
-
-    } catch {
-      const state = useChatStore.getState();
-      const next = [...state.messages];
-      next[next.length - 1] = {
-        role: "assistant",
-        content:
-          lang === "pl"
-            ? "Błąd połączenia."
-            : "Connection error.",
-      };
-      state.setMessages(next);
-    } finally {
-      setIsTyping(false);
-      setIsSending(false);
+      return;
     }
+
+    if (!res.ok) throw new Error("Request failed");
+
+    const data = await res.json();
+
+    const state = useChatStore.getState();
+    const next = [...state.messages];
+
+    next[next.length - 1] = {
+      role: "assistant",
+      content: data?.message || "Brak odpowiedzi",
+    };
+
+    state.setMessages(next);
+
+    window.dispatchEvent(new Event("navimind:limit-refresh"));
+
+  } catch (e) {
+    console.error("CHAT ERROR:", e);
+
+    const state = useChatStore.getState();
+    const next = [...state.messages];
+
+    next[next.length - 1] = {
+      role: "assistant",
+      content:
+        lang === "pl"
+          ? "Błąd połączenia."
+          : "Connection error.",
+    };
+
+    state.setMessages(next);
+
+  } finally {
+    setIsTyping(false);
+    setIsSending(false);
   }
+}
 
   return (
   <div className="sticky bottom-0 z-50 border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)] relative">
