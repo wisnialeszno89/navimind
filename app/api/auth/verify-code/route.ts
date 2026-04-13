@@ -35,7 +35,15 @@ export async function POST(req: Request) {
 
     setSession(email);
 
-return NextResponse.json({ ok: true });
+const res = NextResponse.json({ ok: true });
+
+res.cookies.set("nm_email", email, {
+  httpOnly: true,
+  path: "/",
+  maxAge: 60 * 60 * 24 * 30, // 30 dni
+});
+
+return res;
   } catch (e) {
     console.error("VERIFY CODE ERROR:", e);
     return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 });
