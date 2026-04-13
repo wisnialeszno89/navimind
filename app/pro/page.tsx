@@ -1,4 +1,5 @@
 import EmailLogin from "../components/EmailLogin";
+import PlanGate from "../components/PlanGate";
 
 export default function ProPage() {
   return (
@@ -34,8 +35,9 @@ export default function ProPage() {
       </div>
 
       {/* KARTY */}
-      <div className="grid md:grid-cols-3 gap-6">
-
+        <PlanGate>
+        <div className="grid md:grid-cols-3 gap-6">
+          
         {/* FREE */}
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="text-white/50 text-sm mb-2">Plan</div>
@@ -133,9 +135,10 @@ export default function ProPage() {
             Najlepsza opcja, jeśli NaviMind staje się częścią Twojej codzienności.
           </p>
         </a>
-
       </div>
-
+      </PlanGate>
+      
+      
       {/* STOPKA */}
       <div className="max-w-2xl text-white/60 text-sm space-y-3">
         <h3 className="text-white font-medium">
@@ -152,7 +155,7 @@ export default function ProPage() {
           Limity istnieją tylko po to, aby utrzymać stabilne działanie usługi dla wszystkich użytkowników.
         </p>
       </div>
-
+      
     </div>
   );
 }
