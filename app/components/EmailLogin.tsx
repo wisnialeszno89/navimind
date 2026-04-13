@@ -46,7 +46,7 @@ export default function EmailLogin() {
       const data = await res.json();
 
       if (data.ok) {
-        window.location.href = "/chat";
+        // window.location.href = "/chat";
       } else {
         setError("Nieprawidłowy kod");
       }

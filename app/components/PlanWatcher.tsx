@@ -11,7 +11,7 @@ export default function PlanWatcher() {
 
         if (data.plan && data.plan !== "free") {
           console.log("🔥 PLAN AKTYWOWANY:", data.plan);
-          window.location.reload();
+          // window.location.reload();
         }
       } catch (e) {
         console.log("PLAN CHECK ERROR");
