@@ -13,13 +13,14 @@ export default function PdfDownloadButton({
     if (!content) return;
 
     const res = await fetch("/api/export-pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        content,
-      }),
-    });
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include", // 🔥 KLUCZ
+    body: JSON.stringify({
+    title,
+    content,
+  }),
+});
 
     if (!res.ok) {
       alert("Nie udało się wygenerować PDF");

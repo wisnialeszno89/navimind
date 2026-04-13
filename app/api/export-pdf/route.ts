@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { Buffer } from "buffer";
+import { getUserPlan } from "../../lib/userPlan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,14 @@ type ExportPdfBody = {
 
 export async function POST(req: Request) {
   try {
+    const plan = await getUserPlan();
+
+    if (plan === "free") {
+    return new Response(
+    JSON.stringify({ error: "PRO_REQUIRED" }),
+    { status: 403 }
+  );
+}
     const body: ExportPdfBody = await req.json().catch(() => ({}));
     const title = body?.title;
     const content = body?.content;
