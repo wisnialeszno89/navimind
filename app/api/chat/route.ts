@@ -45,6 +45,7 @@ function isRole(r: any): r is ChatRole {
 }
 
 export async function POST(req: Request) {
+    console.log("🔥 CHAT HIT");
   const userId = getUidFromUrl(req) ?? getUserId();
   if (!userId)
     return new Response(JSON.stringify({ error: "UNAUTHORIZED" }), {
