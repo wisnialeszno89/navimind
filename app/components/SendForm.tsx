@@ -144,14 +144,18 @@ export default function SendForm({
 
     try {
       const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          "x-navimind-uid": uid, // 🔥 KLUCZOWE
-        },
-        body: JSON.stringify({ chatId, message: raw, lang }),
-      });
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+    "x-navimind-uid": uid,
+  },
+  credentials: "include",
+  body: JSON.stringify({ chatId, message: raw, lang }),
+});
+
+console.log("CHAT STATUS:", res.status);
+console.log("HAS BODY:", !!res.body);
 
       if (res.status === 429) {
         setLocked(true);
@@ -159,7 +163,20 @@ export default function SendForm({
         return;
       }
 
-      if (!res.body) throw new Error("No stream");
+      if (!res.body) {
+  const data = await res.json().catch(() => null);
+
+  const state = useChatStore.getState();
+  const next = [...state.messages];
+
+  next[next.length - 1] = {
+    role: "assistant",
+    content: data?.message || "Brak odpowiedzi",
+  };
+
+  state.setMessages(next);
+  return;
+}
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -254,8 +271,7 @@ export default function SendForm({
             <div className="absolute bottom-14 left-0 flex flex-col gap-2 bg-[var(--nm-bg-soft)] border border-[var(--nm-border-soft)] rounded-xl p-3 shadow-xl">
               {isPro ? (
                 <>
-                  <UploadButton onUpload={() => {}} />
-                  <ImageUploadButton onUpload={handleImageUpload} />
+                  <ImageUploadButton onUpload={() => {}} />
                 </>
               ) : (
                 <button
