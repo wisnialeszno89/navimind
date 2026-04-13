@@ -8,6 +8,7 @@ import ProNotice from "./ProNotice";
 import UploadButton from "./UploadButton";
 import ImageUploadButton from "./ImageUploadButton";
 import { Plus } from "lucide-react";
+import { imageToBase64 } from "../lib/imageToBase64";
 
 type Level = "none" | "low" | "medium" | "high";
 
@@ -36,7 +37,8 @@ export default function SendForm({
   setIsTyping: (v: boolean) => void;
   setCrisisLevel: (v: Level) => void;
   chatId?: string | null;
-}) {
+}) 
+{
   const { lang } = useLanguage();
 
   const [text, setText] = useState("");
@@ -65,6 +67,65 @@ export default function SendForm({
   useEffect(() => {
     if (isPro) setLocked(false);
   }, [isPro]);
+
+  async function handleImageUpload(file: File) {
+  console.log("🔥 IMAGE CLICK");
+
+  try {
+    setIsTyping(true);
+
+    const base64 = await imageToBase64(file);
+
+    const res = await fetch("/api/vision", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        image: base64,
+      }),
+    });
+
+    console.log("STATUS:", res.status);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      console.log("ERROR:", err);
+
+      if (err?.error === "PRO_REQUIRED") {
+        alert("Zdjęcia są dostępne w PRO.");
+        return;
+      }
+
+      if (err?.error === "IMAGE_LIMIT") {
+        alert("Limit zdjęć został osiągnięty.");
+        return;
+      }
+
+      throw new Error("Upload failed");
+    }
+
+    const data = await res.json();
+
+    console.log("VISION RESULT:", data);
+
+    add({
+      role: "assistant",
+      content: data.message,
+    });
+
+  } catch (e) {
+    console.error("UPLOAD ERROR:", e);
+
+    add({
+      role: "assistant",
+      content: "Błąd analizy zdjęcia.",
+    });
+  } finally {
+    setIsTyping(false);
+  }
+}
 
   async function send(custom?: string) {
     if (locked || isSending) return;
@@ -136,7 +197,7 @@ export default function SendForm({
           }
         }
       }
-
+      
       // 🔥 odświeżamy limit po każdej wiadomości
       window.dispatchEvent(new Event("navimind:limit-refresh"));
 
@@ -194,7 +255,7 @@ export default function SendForm({
               {isPro ? (
                 <>
                   <UploadButton onUpload={() => {}} />
-                  <ImageUploadButton onUpload={() => {}} />
+                  <ImageUploadButton onUpload={handleImageUpload} />
                 </>
               ) : (
                 <button
