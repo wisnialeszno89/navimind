@@ -5,15 +5,9 @@ import { useChatStore } from "../lib/chatStore";
 import { useLanguage } from "../lib/useLanguage";
 import MicrophoneButton from "./MicrophoneButton";
 import ProNotice from "./ProNotice";
-import UploadButton from "./UploadButton";
-import ImageUploadButton from "./ImageUploadButton";
-import { Plus } from "lucide-react";
+import { Plus, ImageIcon, FileText } from "lucide-react";
 
 type Level = "none" | "low" | "medium" | "high";
-
-/* ===============================
-   🔥 GLOBAL UID (WSPÓLNY LIMIT)
-================================ */
 
 function getOrCreateLocalUid() {
   if (typeof window === "undefined") return "";
@@ -45,6 +39,11 @@ export default function SendForm({
   const [showPro, setShowPro] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
 
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const add = useChatStore((s) => s.add);
@@ -53,12 +52,8 @@ export default function SendForm({
   const isPro = plan !== "free";
 
   const placeholder = useMemo(() => {
-    if (locked)
-      return lang === "pl"
-        ? "Limit demo osiągnięty…"
-        : "Demo limit reached…";
-    if (isSending)
-      return lang === "pl" ? "Wysyłam…" : "Sending…";
+    if (locked) return lang === "pl" ? "Limit demo osiągnięty…" : "Demo limit reached…";
+    if (isSending) return lang === "pl" ? "Wysyłam…" : "Sending…";
     return lang === "pl" ? "Napisz wiadomość…" : "Type a message…";
   }, [locked, isSending, lang]);
 
@@ -67,6 +62,9 @@ export default function SendForm({
   }, [isPro]);
 
   async function send(custom?: string) {
+    if (pdfFile) return sendPdf();
+    if (imageFile) return sendImage();
+
     if (locked || isSending) return;
 
     const raw = (custom ?? text).trim();
@@ -87,16 +85,10 @@ export default function SendForm({
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
-          "x-navimind-uid": uid, // 🔥 KLUCZOWE
+          "x-navimind-uid": uid,
         },
         body: JSON.stringify({ chatId, message: raw, lang }),
       });
-
-      if (res.status === 429) {
-        setLocked(true);
-        window.dispatchEvent(new Event("navimind:limit-refresh"));
-        return;
-      }
 
       if (!res.body) throw new Error("No stream");
 
@@ -105,8 +97,7 @@ export default function SendForm({
 
       let buffer = "";
       let fullText = "";
-      const assistantIndex =
-        useChatStore.getState().messages.length - 1;
+      const assistantIndex = useChatStore.getState().messages.length - 1;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -119,9 +110,7 @@ export default function SendForm({
         for (const chunk of parts) {
           if (!chunk.startsWith("data:")) continue;
 
-          const payload = JSON.parse(
-            chunk.replace(/^data:\s*/, "")
-          );
+          const payload = JSON.parse(chunk.replace(/^data:\s*/, ""));
 
           if (payload?.type === "delta") {
             fullText += payload.delta || "";
@@ -136,143 +125,175 @@ export default function SendForm({
           }
         }
       }
-
-      // 🔥 odświeżamy limit po każdej wiadomości
-      window.dispatchEvent(new Event("navimind:limit-refresh"));
-
     } catch {
-      const state = useChatStore.getState();
-      const next = [...state.messages];
-      next[next.length - 1] = {
+      add({
         role: "assistant",
-        content:
-          lang === "pl"
-            ? "Błąd połączenia."
-            : "Connection error.",
-      };
-      state.setMessages(next);
+        content: lang === "pl" ? "Błąd połączenia." : "Connection error.",
+      });
     } finally {
       setIsTyping(false);
       setIsSending(false);
+      setLocked(false);
+    }
+  }
+
+  async function sendPdf(file?: File) {
+    const f = file ?? pdfFile;
+    if (!f) return;
+
+    setIsSending(true);
+    setIsTyping(true);
+
+    const formData = new FormData();
+    formData.append("file", f);
+    formData.append("mode", "summary");
+
+    try {
+      const res = await fetch("/api/pdf-v2", { method: "POST", body: formData });
+      const data = await res.json();
+
+      add({ role: "user", content: "📄 PDF" });
+      add({ role: "assistant", content: data.result || "Brak odpowiedzi" });
+    } catch {
+      add({ role: "assistant", content: "Błąd analizy PDF" });
+    } finally {
+      setPdfFile(null);
+      setIsSending(false);
+      setIsTyping(false);
+    }
+  }
+
+  async function sendImage(file?: File) {
+    const f = file ?? imageFile;
+    if (!f) return;
+
+    setIsSending(true);
+    setIsTyping(true);
+
+    const formData = new FormData();
+    formData.append("image", f);
+
+    try {
+      const res = await fetch("/api/vision-v2", { method: "POST", body: formData });
+      const data = await res.json();
+
+      add({ role: "user", content: "📷 Zdjęcie" });
+      add({ role: "assistant", content: data.message || "Brak opisu" });
+    } catch {
+      add({ role: "assistant", content: "Błąd analizy obrazu" });
+    } finally {
+      setImageFile(null);
+      setIsSending(false);
+      setIsTyping(false);
     }
   }
 
   return (
-  <div className="sticky bottom-0 z-50 border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)] relative">
-
-    <div className="absolute -top-5 left-0 right-0 text-center text-[10px] text-white/30 pointer-events-auto">
-      <a href="/regulamin" className="hover:text-white/60">
-        regulamin
-      </a>
-      <span className="mx-1">•</span>
-      <a href="/prywatnosc" className="hover:text-white/60">
-        prywatność
-      </a>
-    </div>
-
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        send();
-      }}
-      className="flex items-end gap-2 px-3 pt-3"
-    >
-        {/* PLUS */}
+    <div className="sticky bottom-0 z-[9999] border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+        className="flex items-end gap-2 px-3 pt-3 relative"
+      >
+        {/* PLUS + MENU */}
         <div className="relative">
           <button
             type="button"
-            onClick={() =>
-              setShowAttachments((v) => !v)
-            }
-            className="p-3 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
+            onClick={() => setShowAttachments((v) => !v)}
+            className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 transition backdrop-blur-md border border-white/10"
           >
             <Plus size={18} />
           </button>
 
           {showAttachments && (
-            <div className="absolute bottom-14 left-0 flex flex-col gap-2 bg-[var(--nm-bg-soft)] border border-[var(--nm-border-soft)] rounded-xl p-3 shadow-xl">
-              {isPro ? (
-                <>
-                  <UploadButton onUpload={() => {}} />
-                  <ImageUploadButton onUpload={() => {}} />
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowPro(true)}
-                  className="text-sm text-white/60"
-                >
-                  Dostępne w PRO
-                </button>
-              )}
+            <div className="absolute bottom-16 left-0 z-[9999] flex flex-col gap-2 backdrop-blur-md bg-black/70 p-3 rounded-2xl shadow-xl border border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  imageInputRef.current?.click();
+                  setShowAttachments(false);
+                }}
+                className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+              >
+                <ImageIcon size={18} />
+                <span className="text-sm">Zdjęcie</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  pdfInputRef.current?.click();
+                  setShowAttachments(false);
+                }}
+                className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+              >
+                <FileText size={18} />
+                <span className="text-sm">PDF</span>
+              </button>
             </div>
           )}
         </div>
 
+        {/* 🎤 MIKROFON */}
         <MicrophoneButton onResult={(t) => setText(t)} />
 
+        {/* INPUTY */}
+        <input
+          ref={pdfInputRef}
+          type="file"
+          accept="application/pdf"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) sendPdf(file);
+          }}
+        />
+
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) sendImage(file);
+          }}
+        />
+
+        {/* TEXTAREA */}
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            const el = textareaRef.current;
-            if (el) {
-              el.style.height = "auto";
-              el.style.height =
-                el.scrollHeight + "px";
-            }
-          }}
-          disabled={locked || isSending}
-          placeholder={placeholder}
-          rows={3}
-          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px] max-h-[200px] overflow-y-auto"
-          style={{
-            background: "var(--nm-bg-input)",
-            border: "1px solid var(--nm-border-input)",
-            color: "var(--nm-text-main)",
-          }}
+          onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               send();
             }
           }}
+          placeholder={placeholder}
+          rows={3}
+          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px]"
+          style={{
+            background: "var(--nm-bg-input)",
+            border: "1px solid var(--nm-border-input)",
+            color: "var(--nm-text-main)",
+          }}
         />
 
+        {/* SEND */}
         <button
-        type="submit"
-        disabled={locked || isSending}
-        className="px-5 py-3 rounded-2xl text-white nm-btn"
-        style={{ background: "var(--nm-accent)" }}
+          type="submit"
+          className="px-5 py-3 rounded-2xl text-white"
+          style={{ background: "var(--nm-accent)" }}
         >
-           ➤
+          ➤
         </button>
-        </form>
+      </form>
 
-      {showPro && (
-        <ProNotice onClose={() => setShowPro(false)} />
-      )}
-
-      <div
-        className="px-4 pt-2 text-[11px] text-center"
-        style={{ color: "var(--nm-text-muted)" }}
-      >
-        <div className="text-[10px] text-center text-white/30 mt-1">
-        <a href="/regulamin" className="hover:text-white/60">
-        regulamin
-        </a>
-        <span className="mx-1">•</span>
-        <a href="/prywatnosc" className="hover:text-white/60">
-         prywatność
-        </a>
-      </div>
-        {lang === "pl"
-          ? "To miejsce jest prywatne. Możesz napisać to, co chcesz."
-          : "This space is private. You can write whatever you want."}
-      </div>
-
-      <div className="pb-[calc(env(safe-area-inset-bottom)+10px)]" />
+      {showPro && <ProNotice onClose={() => setShowPro(false)} />}
     </div>
   );
 }

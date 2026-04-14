@@ -40,8 +40,10 @@ const res = NextResponse.json({ ok: true });
 res.cookies.set("nm_email", email, {
   httpOnly: true,
   path: "/",
-  maxAge: 60 * 60 * 24 * 30, // 30 dni
+  maxAge: 60 * 60 * 24 * 30,
 });
+
+return res;
 
 return res;
   } catch (e) {

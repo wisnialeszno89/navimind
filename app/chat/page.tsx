@@ -1,6 +1,5 @@
 import ChatWindow from "../components/ChatWindow";
 import AppShell from "../components/AppShell";
-import PlanWatcher from "../components/PlanWatcher";
 
 type Props = {
   searchParams: {
@@ -14,9 +13,7 @@ export default function ChatPage({ searchParams }: Props) {
   return (
     <AppShell>
 
-      <PlanWatcher />
-
-      <ChatWindow
+         <ChatWindow
         initialContext={{
           tryb: searchParams.tryb,
           sciezka: searchParams.sciezka,
