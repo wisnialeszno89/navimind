@@ -10,7 +10,12 @@
 
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
+    
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./app/*"]
+    },
 
     "resolveJsonModule": true,
     "isolatedModules": true,

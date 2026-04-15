@@ -42,6 +42,9 @@ export default function SendForm({
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
 
+  const [pdfMode, setPdfMode] = useState<"analyze" | "edit">("analyze");
+  const [instruction, setInstruction] = useState("");
+
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -138,162 +141,292 @@ export default function SendForm({
   }
 
   async function sendPdf(file?: File) {
-    const f = file ?? pdfFile;
-    if (!f) return;
+  const f = file ?? pdfFile;
+  if (!f) return;
 
-    setIsSending(true);
-    setIsTyping(true);
+  setIsSending(true);
+  setIsTyping(true);
 
-    const formData = new FormData();
-    formData.append("file", f);
+  const formData = new FormData();
+  formData.append("file", f);
+  
+  
+
+  if (pdfMode === "edit") {
+    formData.append("instruction", instruction || "Popraw i uprość tekst.");
+  } else {
     formData.append("mode", "summary");
-
-    try {
-      const res = await fetch("/api/pdf-v2", { method: "POST", body: formData });
-      const data = await res.json();
-
-      add({ role: "user", content: "📄 PDF" });
-      add({ role: "assistant", content: data.result || "Brak odpowiedzi" });
-    } catch {
-      add({ role: "assistant", content: "Błąd analizy PDF" });
-    } finally {
-      setPdfFile(null);
-      setIsSending(false);
-      setIsTyping(false);
-    }
   }
 
-  async function sendImage(file?: File) {
-    const f = file ?? imageFile;
-    if (!f) return;
+  try {
+    const endpoint =
+      pdfMode === "edit" ? "/api/pdf-edit" : "/api/pdf-v2";
 
-    setIsSending(true);
-    setIsTyping(true);
+    const res = await fetch(endpoint, {
+      method: "POST",
+      body: formData,
+    });
+    if (res.status === 403) {
+  add({
+    role: "assistant",
+    content: "🚫 Limit PDF na ten miesiąc wykorzystany.",
+  });
+  return;
+}
 
-    const formData = new FormData();
-    formData.append("image", f);
+if (res.status === 400) {
+  add({
+    role: "assistant",
+    content: "📄 PDF za duży (max 20 stron / 5MB).",
+  });
+  return;
+}
 
-    try {
-      const res = await fetch("/api/vision-v2", { method: "POST", body: formData });
-      const data = await res.json();
+ if (pdfMode === "edit") {
 
-      add({ role: "user", content: "📷 Zdjęcie" });
-      add({ role: "assistant", content: data.message || "Brak opisu" });
-    } catch {
-      add({ role: "assistant", content: "Błąd analizy obrazu" });
-    } finally {
-      setImageFile(null);
-      setIsSending(false);
-      setIsTyping(false);
-    }
+  // 🔥 PREVIEW FIRST
+  const previewForm = new FormData();
+  previewForm.append("file", f);
+  previewForm.append("instruction", instruction || "");
+
+  try {
+    const previewRes = await fetch("/api/pdf-preview", {
+      method: "POST",
+      body: previewForm,
+    });
+
+    const previewData = await previewRes.json();
+
+    if (previewData?.original && previewData?.edited) {
+    add({
+    role: "assistant",
+    content:
+      "👀 Podgląd zmian:\n\n" +
+      "🔴 PRZED:\n" +
+      previewData.original +
+      "\n\n🟢 PO:\n" +
+      previewData.edited,
+  });
+}
+  } catch {}
+
+  // 🔥 DOWNLOAD PDF
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+
+  const filename = pdfFile?.name
+    ? pdfFile.name.replace(".pdf", "") + "-edited.pdf"
+    : "edited.pdf";
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(url);
+
+  add({
+    role: "assistant",
+    content: `✅ PDF "${filename}" gotowy.`,
+  });
+
+  return;
+}
+
+// 🔥 ANALIZA (normalny tryb)
+const data = await res.json();
+
+add({ role: "user", content: "📄 PDF" });
+
+add({
+  role: "assistant",
+  content: data.result || "Brak odpowiedzi",
+});
+} catch {
+  add({
+    role: "assistant",
+    content: "❌ Błąd przetwarzania PDF.",
+  });
+} finally {
+  setPdfFile(null);
+  setIsSending(false);
+  setIsTyping(false);
+}
+}
+async function sendImage(file?: File) {
+  const f = file ?? imageFile;
+  if (!f) return;
+
+  setIsSending(true);
+  setIsTyping(true);
+
+  const formData = new FormData();
+  formData.append("image", f);
+
+  try {
+    const res = await fetch("/api/vision-v2", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+
+    add({ role: "user", content: "📷 Zdjęcie" });
+
+    add({
+      role: "assistant",
+      content: data.message || "Brak opisu",
+    });
+  } catch {
+    add({
+      role: "assistant",
+      content: "❌ Błąd analizy obrazu",
+    });
+  } finally {
+    setImageFile(null);
+    setIsSending(false);
+    setIsTyping(false);
   }
+}
+return (
+  <div className="sticky bottom-0 z-[9999] border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
 
-  return (
-    <div className="sticky bottom-0 z-[9999] border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-        className="flex items-end gap-2 px-3 pt-3 relative"
-      >
-        {/* PLUS + MENU */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowAttachments((v) => !v)}
-            className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 transition backdrop-blur-md border border-white/10"
-          >
-            <Plus size={18} />
-          </button>
+    {/* ✏️ INPUT INSTRUKCJI (POZA FORMEM) */}
+    {pdfMode === "edit" && (
+      <div className="px-3 pt-3">
+        <input
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          placeholder="Np. skróć, popraw styl, przetłumacz..."
+          className="w-full px-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 outline-none"
+        />
+      </div>
+    )}
 
-          {showAttachments && (
-            <div className="absolute bottom-16 left-0 z-[9999] flex flex-col gap-2 backdrop-blur-md bg-black/70 p-3 rounded-2xl shadow-xl border border-white/10">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        send();
+      }}
+      className="flex items-end gap-2 px-3 pt-3 relative"
+    >
+      {/* PLUS + MENU */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setShowAttachments((v) => !v)}
+          className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 transition backdrop-blur-md border border-white/10"
+        >
+          <Plus size={18} />
+        </button>
+
+        {showAttachments && (
+          <div className="absolute bottom-16 left-0 z-[9999] flex flex-col gap-2 backdrop-blur-md bg-black/70 p-3 rounded-2xl shadow-xl border border-white/10">
+
+            <button
+              type="button"
+              onClick={() => {
+                imageInputRef.current?.click();
+                setShowAttachments(false);
+              }}
+              className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+            >
+              <ImageIcon size={18} />
+              <span className="text-sm">Zdjęcie</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPdfMode("analyze");
+                pdfInputRef.current?.click();
+                setShowAttachments(false);
+              }}
+              className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+            >
+              <FileText size={18} />
+              <span className="text-sm">Analizuj PDF</span>
+            </button>
+
+            {plan === "pro_plus" && (
               <button
                 type="button"
                 onClick={() => {
-                  imageInputRef.current?.click();
-                  setShowAttachments(false);
-                }}
-                className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
-              >
-                <ImageIcon size={18} />
-                <span className="text-sm">Zdjęcie</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
+                  setPdfMode("edit");
                   pdfInputRef.current?.click();
                   setShowAttachments(false);
                 }}
                 className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
               >
-                <FileText size={18} />
-                <span className="text-sm">PDF</span>
+                ✏️ <span className="text-sm">Edytuj PDF</span>
               </button>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* 🎤 MIKROFON */}
-        <MicrophoneButton onResult={(t) => setText(t)} />
+          </div>
+        )}
+      </div>
 
-        {/* INPUTY */}
-        <input
-          ref={pdfInputRef}
-          type="file"
-          accept="application/pdf"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) sendPdf(file);
-          }}
-        />
+      {/* 🎤 */}
+      <MicrophoneButton onResult={(t) => setText(t)} />
 
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) sendImage(file);
-          }}
-        />
+      {/* INPUTY */}
+      <input
+        ref={pdfInputRef}
+        type="file"
+        accept="application/pdf"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) sendPdf(file);
+        }}
+      />
 
-        {/* TEXTAREA */}
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder={placeholder}
-          rows={3}
-          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px]"
-          style={{
-            background: "var(--nm-bg-input)",
-            border: "1px solid var(--nm-border-input)",
-            color: "var(--nm-text-main)",
-          }}
-        />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) sendImage(file);
+        }}
+      />
 
-        {/* SEND */}
-        <button
-          type="submit"
-          className="px-5 py-3 rounded-2xl text-white"
-          style={{ background: "var(--nm-accent)" }}
-        >
-          ➤
-        </button>
-      </form>
+      {/* TEXTAREA */}
+      <textarea
+        ref={textareaRef}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+        }}
+        placeholder={placeholder}
+        rows={3}
+        className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px]"
+        style={{
+          background: "var(--nm-bg-input)",
+          border: "1px solid var(--nm-border-input)",
+          color: "var(--nm-text-main)",
+        }}
+      />
 
-      {showPro && <ProNotice onClose={() => setShowPro(false)} />}
-    </div>
-  );
+      {/* SEND */}
+      <button
+        type="submit"
+        className="px-5 py-3 rounded-2xl text-white"
+        style={{ background: "var(--nm-accent)" }}
+      >
+        ➤
+      </button>
+    </form>
+
+    {showPro && <ProNotice onClose={() => setShowPro(false)} />}
+  </div>
+);
 }
