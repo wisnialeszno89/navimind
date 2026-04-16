@@ -68,8 +68,9 @@ export async function POST(req: Request) {
       content: [
         { type: "input_text", text: FINAL_PROMPT },
         {
-          type: "input_image",
-          image_url: image,
+            type: "input_image",
+            image_url: image,
+            detail: "low", // 🔥 TO JEST KLUCZ
         },
       ],
     },
