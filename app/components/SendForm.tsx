@@ -3,82 +3,134 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useChatStore } from "../lib/chatStore";
 import { useLanguage } from "../lib/useLanguage";
-import MicrophoneButton from "./MicrophoneButton";
 import ProNotice from "./ProNotice";
-import { Plus, ImageIcon, FileText } from "lucide-react";
+import { Plus } from "lucide-react";
 import { imageToBase64 } from "../lib/imageToBase64";
+import { useCallback } from "react";
 
-type Level = "none" | "low" | "medium" | "high";
-
-function getOrCreateLocalUid() {
-  if (typeof window === "undefined") return "";
-
-  let uid = localStorage.getItem("nm_uid");
-
-  if (!uid) {
-    uid = crypto.randomUUID();
-    localStorage.setItem("nm_uid", uid);
-  }
-
-  return uid;
-}
-
-export default function SendForm({
-  setIsTyping,
-  setCrisisLevel,
-  chatId,
-}: {
-  setIsTyping: (v: boolean) => void;
-  setCrisisLevel: (v: Level) => void;
-  chatId?: string | null;
-}) {
+export default function SendForm({ setIsTyping, chatId }: any) {
   const { lang } = useLanguage();
 
   const [text, setText] = useState("");
-  const [locked, setLocked] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showPro, setShowPro] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
 
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePrompt, setImagePrompt] = useState("");
-  const [imageMode, setImageMode] = useState<"analyze" | "edit">("analyze");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
-  const [pdfMode, setPdfMode] = useState<"analyze" | "edit">("analyze");
-  const [instruction, setInstruction] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const handleDrop = useCallback((e: React.DragEvent) => {
+  e.preventDefault();
+  const handlePaste = useCallback((e: ClipboardEvent) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
 
-  const pdfInputRef = useRef<HTMLInputElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (!file) return;
+
+      setPendingFile(file);
+
+      add({
+        role: "assistant",
+        content: "📋 Obraz wklejony. Opisz co chcesz zrobić.",
+      });
+    }
+  }
+}, []);
+
+  const file = e.dataTransfer.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+    add({
+      role: "assistant",
+      content: "❌ Obsługiwane tylko obrazy i PDF",
+    });
+    return;
+  }
+
+  setPendingFile(file);
+
+  add({
+    role: "assistant",
+    content: "📎 Plik dodany. Opisz co chcesz zrobić.",
+  });
+}, []);
 
   const add = useChatStore((s) => s.add);
   const plan = useChatStore((s) => s.plan);
 
-  const isPro = plan !== "free";
-
-  const placeholder = useMemo(() => {
-    if (locked) return lang === "pl" ? "Limit demo osiągnięty…" : "Demo limit reached…";
-    if (isSending) return lang === "pl" ? "Wysyłam…" : "Sending…";
-    return lang === "pl" ? "Napisz wiadomość…" : "Type a message…";
-  }, [locked, isSending, lang]);
+  /* ================= LOAD PLAN ================= */
 
   useEffect(() => {
-    if (isPro) setLocked(false);
-  }, [isPro]);
+  // 🔹 PLAN
+  fetch("/api/plan")
+    .then((res) => res.json())
+    .then((data) => {
+      useChatStore.setState({ plan: data.plan });
+    })
+    .catch(() => {});
 
-  async function send(custom?: string) {
-    if (pdfFile) return sendPdf();
-    if (imageFile) return sendImage();
+  // 🔹 PASTE (CTRL+V)
+  const handlePasteEvent = (e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
 
-    if (locked || isSending) return;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (!file) return;
 
-    const raw = (custom ?? text).trim();
+        setPendingFile(file);
+
+        add({
+          role: "assistant",
+          content: "📋 Obraz wklejony. Opisz co chcesz zrobić.",
+        });
+      }
+    }
+  };
+
+  window.addEventListener("paste", handlePasteEvent);
+
+  return () => {
+    window.removeEventListener("paste", handlePasteEvent);
+  };
+}, []);
+
+  /* ================= MAIN SEND ================= */
+
+  async function send() {
+    const raw = text.trim();
     if (!raw) return;
 
-    const uid = getOrCreateLocalUid();
+    // 🔒 FREE BLOCK
+    if (pendingFile && plan === "free") {
+      add({
+        role: "assistant",
+        content:
+          "🔓 Analiza i edycja plików dostępna w PRO. Odblokuj pełną wersję.",
+      });
+      setShowPro(true);
+      return;
+    }
 
     setText("");
+
+    // 🔥 FLOW Z PLIKIEM
+    if (pendingFile) {
+      add({ role: "user", content: `📎 ${pendingFile.name}` });
+      add({ role: "user", content: raw });
+
+      await handleFileProcess(pendingFile, raw);
+
+      setPendingFile(null);
+      return;
+    }
+
+    // 🔥 NORMAL CHAT
     setIsSending(true);
     setIsTyping(true);
 
@@ -88,38 +140,30 @@ export default function SendForm({
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          "x-navimind-uid": uid,
-        },
-        body: JSON.stringify({ chatId, message: raw, lang }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId, message: raw }),
       });
 
-      if (!res.body) throw new Error("No stream");
-
-      const reader = res.body.getReader();
+      const reader = res.body?.getReader();
       const decoder = new TextDecoder();
 
-      let buffer = "";
       let fullText = "";
       const assistantIndex = useChatStore.getState().messages.length - 1;
 
       while (true) {
-        const { value, done } = await reader.read();
+        const { value, done } = await reader!.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n\n");
 
-        for (const chunk of parts) {
-          if (!chunk.startsWith("data:")) continue;
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
 
-          const payload = JSON.parse(chunk.replace(/^data:\s*/, ""));
+          const payload = JSON.parse(line.replace("data: ", ""));
 
-          if (payload?.type === "delta") {
-            fullText += payload.delta || "";
+          if (payload?.delta) {
+            fullText += payload.delta;
 
             const state = useChatStore.getState();
             const next = [...state.messages];
@@ -132,434 +176,197 @@ export default function SendForm({
         }
       }
     } catch {
+      add({ role: "assistant", content: "Błąd połączenia." });
+    } finally {
+      setIsSending(false);
+      setIsTyping(false);
+    }
+  }
+
+  /* ================= FILE PROCESS ================= */
+
+  async function handleFileProcess(file: File, prompt: string) {
+    setIsSending(true);
+    setIsTyping(true);
+
+    try {
+      let base64 = "";
+
+      if (file.type.startsWith("image/")) {
+        base64 = await imageToBase64(file, 800, 0.8);
+      } else {
+        base64 = await fileToBase64(file);
+      }
+
+      const res = await fetch("/api/file-process", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          file: base64,
+          type: file.type,
+          prompt,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.type === "image") {
+      const url = `data:image/png;base64,${data.data}`;
+
       add({
         role: "assistant",
-        content: lang === "pl" ? "Błąd połączenia." : "Connection error.",
+      content: `
+      ![img](${url})
+
+      📥 Kliknij prawym → "Zapisz obraz jako"
+      lub pobierz tutaj:
+      <a href="${url}" download="navimind.png">⬇️ Pobierz obraz</a>
+    `,
+  });
+
+  add({
+    role: "assistant",
+    content: "✨ Gotowe. Możesz pobrać obraz lub wpisać kolejną zmianę.",
+  });
+}
+
+      if (data.type === "pdf") {
+      const url = `data:application/pdf;base64,${data.data}`;
+
+      add({
+      role: "assistant",
+      content: `
+      📄 PDF gotowy
+
+    <a href="${url}" download="navimind.pdf">⬇️ Pobierz PDF</a>
+    `,
+  });
+}
+
+      if (data.type === "text") {
+        add({
+          role: "assistant",
+          content: data.data,
+        });
+      }
+    } catch {
+      add({
+        role: "assistant",
+        content: "❌ Błąd przetwarzania pliku",
       });
     } finally {
-      setIsTyping(false);
       setIsSending(false);
-      setLocked(false);
+      setIsTyping(false);
     }
   }
 
-  async function sendPdf(file?: File) {
-  const f = file ?? pdfFile;
-  if (!f) return;
+  /* ================= HELPERS ================= */
 
-  setIsSending(true);
-  setIsTyping(true);
-
-  const formData = new FormData();
-  formData.append("file", f);
-  
-  
-
-  if (pdfMode === "edit") {
-    formData.append("instruction", instruction || "Popraw i uprość tekst.");
-  } else {
-    formData.append("mode", "summary");
+    function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
   }
 
-  try {
-    const endpoint =
-      pdfMode === "edit" ? "/api/pdf-edit" : "/api/pdf-v2";
+  /* ================= UI ================= */
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      body: formData,
-    });
-    if (res.status === 403) {
-  add({
-    role: "assistant",
-    content: "🚫 Limit PDF na ten miesiąc wykorzystany.",
-  });
-  return;
-}
+  const placeholder = useMemo(() => {
+    if (pendingFile) return "Opisz co zrobić z plikiem...";
+    if (isSending) return "Wysyłam…";
+    return "Napisz wiadomość…";
+  }, [isSending, pendingFile]);
 
-if (res.status === 400) {
-  add({
-    role: "assistant",
-    content: "📄 PDF za duży (max 20 stron / 5MB).",
-  });
-  return;
-}
+  return (
+    <div className="sticky bottom-0 z-[9999] border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
 
- if (pdfMode === "edit") {
-
-  // 🔥 PREVIEW FIRST
-  const previewForm = new FormData();
-  previewForm.append("file", f);
-  previewForm.append("instruction", instruction || "");
-
-  try {
-    const previewRes = await fetch("/api/pdf-preview", {
-      method: "POST",
-      body: previewForm,
-    });
-
-    const previewData = await previewRes.json();
-
-    if (previewData?.original && previewData?.edited) {
-    add({
-    role: "assistant",
-    content:
-      "👀 Podgląd zmian:\n\n" +
-      "🔴 PRZED:\n" +
-      previewData.original +
-      "\n\n🟢 PO:\n" +
-      previewData.edited,
-  });
-}
-  } catch {}
-
-  // 🔥 DOWNLOAD PDF
-  const blob = await res.blob();
-  const url = window.URL.createObjectURL(blob);
-
-  const filename = pdfFile?.name
-    ? pdfFile.name.replace(".pdf", "") + "-edited.pdf"
-    : "edited.pdf";
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  window.URL.revokeObjectURL(url);
-
-  add({
-    role: "assistant",
-    content: `✅ PDF "${filename}" gotowy.`,
-  });
-
-  return;
-}
-
-// 🔥 ANALIZA (normalny tryb)
-const data = await res.json();
-
-add({ role: "user", content: "📄 PDF" });
-
-add({
-  role: "assistant",
-  content: data.result || "Brak odpowiedzi",
-});
-} catch {
-  add({
-    role: "assistant",
-    content: "❌ Błąd przetwarzania PDF.",
-  });
-} finally {
-  setPdfFile(null);
-  setIsSending(false);
-  setIsTyping(false);
-}
-}
-async function sendImage(file?: File) {
-  const f = file ?? imageFile;
-  if (!f) return;
-
-  setIsSending(true);
-  setIsTyping(true);
-
-  const formData = new FormData();
-  formData.append("image", f);
-
-  try {
-    const res = await fetch("/api/vision-v2", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await res.json();
-
-    add({ role: "user", content: "📷 Zdjęcie" });
-
-    add({
-      role: "assistant",
-      content: data.message || "Brak opisu",
-    });
-  } catch {
-    add({
-      role: "assistant",
-      content: "❌ Błąd analizy obrazu",
-    });
-  } finally {
-    setImageFile(null);
-    setIsSending(false);
-    setIsTyping(false);
-  }
-}
-async function sendImageEdit(file?: File) {
-  const f = file ?? imageFile;
-  if (!f) return;
-
-  if (plan !== "pro_plus") {
-  setShowPro(true);
-
-  add({
-    role: "assistant",
-    content: "🚀 Edycja zdjęć to funkcja PRO+. Odblokuj, żeby korzystać.",
-  });
-
-  return;
-}
-
-  setIsSending(true);
-  setIsTyping(true);
-
-  try {
-    const base64 = await imageToBase64(f, 800, 0.8);
-
-    const res = await fetch("/api/image-edit", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        image: base64,
-        prompt: imagePrompt || "Popraw zdjęcie",
-      }),
-    });
-
-    const data = await res.json();
-
-    add({ role: "user", content: "📷 Edycja zdjęcia" });
-
-    if (data.image) {
-  add({
-    role: "assistant",
-    content: `![edited](data:image/png;base64,${data.image})`,
-  });
-
-  add({
-    role: "assistant",
-    content: "✨ Gotowe! Możesz spróbować innej wersji.",
-  });
-}
-    else {
-      add({
-        role: "assistant",
-        content: "❌ Błąd edycji zdjęcia",
-      });
-    }
-  } catch {
-    add({
-      role: "assistant",
-      content: "❌ Błąd edycji zdjęcia",
-    });
-  } finally {
-    setImageFile(null);
-    setIsSending(false);
-    setIsTyping(false);
-  }
-}
-return (
-  <div className="sticky bottom-0 z-[9999] border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
-
-    {/* ✏️ INPUT INSTRUKCJI (POZA FORMEM) */}
-    {pdfMode === "edit" && (
-      <div className="px-3 pt-3">
-        <input
-          value={instruction}
-          onChange={(e) => setInstruction(e.target.value)}
-          placeholder="Np. skróć, popraw styl, przetłumacz..."
-          className="w-full px-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 outline-none"
-        />
-      </div>
-    )}
-    {imageMode === "edit" && (
-    <div className="px-3 pt-3">
-    <input
-      value={imagePrompt}
-      onChange={(e) => setImagePrompt(e.target.value)}
-      placeholder="Np. usuń tło, dodaj zachód słońca..."
-      className="w-full px-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 outline-none"
+      {/* PREVIEW */}
+      {pendingFile && (
+      <div className="px-3 pt-2 flex items-center gap-2">
+      {pendingFile.type.startsWith("image/") && (
+      <img
+        src={URL.createObjectURL(pendingFile)}
+        className="w-12 h-12 object-cover rounded-lg"
       />
-      <div className="flex flex-wrap gap-2 mt-2">
-  {[
-    { label: "Usuń tło", value: "Usuń tło i zostaw osobę na neutralnym tle" },
-    { label: "LinkedIn PRO", value: "Profesjonalne zdjęcie biznesowe, garnitur, neutralne tło, dobre światło" },
-    { label: "Avatar AI", value: "Styl avatar AI, nowoczesny, lekko futurystyczny" },
-    { label: "Popraw jakość", value: "Popraw jakość, ostrość i oświetlenie zdjęcia" },
-  ].map((p) => (
-    <button
-      key={p.label}
-      type="button"
-      onClick={() => setImagePrompt(p.value)}
-      className="text-xs px-3 py-1 rounded-full bg-white/10 hover:bg-white/20"
-    >
-      {p.label}
-    </button>
-  ))}
-</div>
+    )}
+      <div className="text-sm opacity-80">
+      📎 {pendingFile.name}
     </div>
-  )}
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        send();
-      }}
-      className="flex items-end gap-2 px-3 pt-3 relative"
+  </div>
+)}
+      <div className="px-3 text-xs opacity-50">
+    Możesz przeciągnąć plik lub wkleić obraz (CTRL+V)
+    </div>
+      <form
+    onSubmit={(e) => {
+    e.preventDefault();
+    send();
+    }}
+    onDragOver={(e) => e.preventDefault()}
+    onDrop={handleDrop}
+    className="flex items-end gap-2 px-3 pt-3"
     >
-      {/* PLUS + MENU */}
-      <div className="relative">
+        {/* PLUS */}
         <button
           type="button"
-          onClick={() => setShowAttachments((v) => !v)}
-          className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 transition backdrop-blur-md border border-white/10"
+          onClick={() => fileInputRef.current?.click()}
+          className="p-3 rounded-2xl bg-white/10 hover:bg-white/20"
         >
           <Plus size={18} />
         </button>
 
-        {showAttachments && (
-          <div className="absolute bottom-16 left-0 z-[9999] flex flex-col gap-2 backdrop-blur-md bg-black/70 p-3 rounded-2xl shadow-xl border border-white/10">
+        {/* FILE INPUT */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,application/pdf"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
 
-            <button
-  type="button"
-  onClick={() => {
-    setImageMode("analyze");
-    imageInputRef.current?.click();
-    setShowAttachments(false);
-  }}
-  className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
->
-  <ImageIcon size={18} />
-  <span className="text-sm">Analizuj zdjęcie</span>
-</button>
-{plan === "pro_plus" && (
-  <button
-    type="button"
-    onClick={() => {
-      setImageMode("edit");
-      imageInputRef.current?.click();
-      setShowAttachments(false);
-    }}
-    className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
-  >
-    ✏️ <span className="text-sm">Edytuj zdjęcie</span>
-  </button>
-)}
+            setPendingFile(file);
 
-{plan === "pro_plus" && (
-  <button
-    type="button"
-    onClick={() => {
-      setImageMode("edit");
-      imageInputRef.current?.click();
-      setShowAttachments(false);
-    }}
-    className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
-  >
-    ✏️ <span className="text-sm">Edytuj zdjęcie</span>
-  </button>
-)}
+            add({
+              role: "assistant",
+              content: "✏️ Opisz co chcesz zrobić z plikiem",
+            });
+          }}
+        />
 
-            <button
-              type="button"
-              onClick={() => {
-                setPdfMode("analyze");
-                pdfInputRef.current?.click();
-                setShowAttachments(false);
-              }}
-              className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
-            >
-              <FileText size={18} />
-              <span className="text-sm">Analizuj PDF</span>
-            </button>
+        {/* TEXT */}
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder={placeholder}
+          rows={3}
+          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none"
+          style={{
+            background: "var(--nm-bg-input)",
+            border: "1px solid var(--nm-border-input)",
+            color: "var(--nm-text-main)",
+          }}
+        />
 
-            {plan === "pro_plus" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPdfMode("edit");
-                  pdfInputRef.current?.click();
-                  setShowAttachments(false);
-                }}
-                className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
-              >
-                ✏️ <span className="text-sm">Edytuj PDF</span>
-              </button>
-            )}
+        <button
+          type="submit"
+          className="px-5 py-3 rounded-2xl text-white"
+          style={{ background: "var(--nm-accent)" }}
+        >
+          ➤
+        </button>
+      </form>
 
-          </div>
-        )}
-      </div>
-
-      {/* 🎤 */}
-      <MicrophoneButton onResult={(t) => setText(t)} />
-
-      {/* INPUTY */}
-      <input
-        ref={pdfInputRef}
-        type="file"
-        accept="application/pdf"
-        hidden
-        onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (imageMode === "edit") {
-      sendImageEdit(file);
-      } else {
-      sendImage(file);
-    }
-  }}
-      />
-
-      <input
-  ref={imageInputRef}
-  type="file"
-  accept="image/*"
-  hidden
-  onChange={(e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (imageMode === "edit") {
-      sendImageEdit(file); // 🔥 TU JEST KLUCZ
-    } else {
-      sendImage(file);
-    }
-  }}
-/>
-
-      {/* TEXTAREA */}
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            send();
-          }
-        }}
-        placeholder={placeholder}
-        rows={3}
-        className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none min-h-[70px]"
-        style={{
-          background: "var(--nm-bg-input)",
-          border: "1px solid var(--nm-border-input)",
-          color: "var(--nm-text-main)",
-        }}
-      />
-
-      {/* SEND */}
-      <button
-        type="submit"
-        className="px-5 py-3 rounded-2xl text-white"
-        style={{ background: "var(--nm-accent)" }}
-      >
-        ➤
-      </button>
-    </form>
-
-    {showPro && <ProNotice onClose={() => setShowPro(false)} />}
-  </div>
-);
+      {showPro && <ProNotice onClose={() => setShowPro(false)} />}
+    </div>
+  );
 }

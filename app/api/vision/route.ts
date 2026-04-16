@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     }
 
     /* 🔒 LIMIT MIESIĘCZNY */
-    const imageLimit = PLAN_LIMITS[plan].monthlyImages;
+    const imageLimit = PLAN_LIMITS[plan].monthlyFiles;
     const usage = await checkAndIncrementMonthlyUsage(
       userId,
       "image",

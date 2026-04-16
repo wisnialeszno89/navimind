@@ -1,6 +1,16 @@
 import { kv } from "@vercel/kv";
 
-export type UsageType = "pdf" | "image" | "upload"| "image_edit";
+/* =========================================================
+   🎯 TYPY — PROSTE I SPÓJNE
+   ========================================================= */
+
+export type UsageType =
+  | "pdf"
+  | "image"
+  | "upload"
+  | "image_edit"
+  | "file"
+  | "file_daily";
 
 export type UsageResult = {
   allowed: boolean;
@@ -9,6 +19,10 @@ export type UsageResult = {
   resetAt: number;
   limit: number;
 };
+
+/* =========================================================
+   📅 CZAS
+   ========================================================= */
 
 function monthStampUTC() {
   const now = new Date();
@@ -20,7 +34,7 @@ function monthStampUTC() {
 function monthResetAtUTC() {
   const now = new Date();
   const next = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0)
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
   );
   return next.getTime();
 }
@@ -28,17 +42,17 @@ function monthResetAtUTC() {
 function secondsToNextMonthUTC() {
   const resetAt = monthResetAtUTC();
   const diffMs = resetAt - Date.now();
-  return Math.max(60, Math.floor(diffMs / 1000)); // min 60s
+  return Math.max(60, Math.floor(diffMs / 1000));
 }
 
 function monthKey(userId: string, type: UsageType) {
-  // usage:{userId}:{type}:{YYYY-MM}
   return `usage:${userId}:${type}:${monthStampUTC()}`;
 }
 
 /* =========================================================
-   ✅ READ-ONLY: pobierz stan użycia (bez increment)
+   📊 READ ONLY
    ========================================================= */
+
 export async function getMonthlyUsageState(
   userId: string,
   type: UsageType,
@@ -57,10 +71,9 @@ export async function getMonthlyUsageState(
 }
 
 /* =========================================================
-   ✅ ATOMIC: sprawdź + nabij użycie miesięczne
-   - kv.incr jest atomiczne
-   - jeśli przekroczono limit → cofamy kv.decr
+   🚀 ATOMIC CHECK + INCREMENT
    ========================================================= */
+
 export async function checkAndIncrementMonthlyUsage(
   userId: string,
   type: UsageType,
@@ -68,14 +81,13 @@ export async function checkAndIncrementMonthlyUsage(
 ): Promise<UsageResult> {
   const key = monthKey(userId, type);
 
-  // atomic increment
   const used = await kv.incr(key);
 
-  // TTL żeby klucze same znikały co miesiąc
-  // (Vercel KV wspiera expire)
-  await kv.expire(key, secondsToNextMonthUTC());
+  // 🔥 ustaw TTL tylko jeśli nowy klucz
+  if (used === 1) {
+    await kv.expire(key, secondsToNextMonthUTC());
+  }
 
-  // jeśli limit przekroczony → cofamy
   if (used > limit) {
     await kv.decr(key);
 

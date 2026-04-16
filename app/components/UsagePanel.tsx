@@ -7,9 +7,9 @@ import { useLanguage } from "../lib/useLanguage";
 type UsagePayload = {
   plan: "free" | "pro" | "pro_plus";
   limits: {
-    dailyMessages: number;
+    dailyFiles: number;
     monthlyPdf: number;
-    monthlyImages: number;
+    monthlyFiles: number;
   };
   usage: {
     daily: {
@@ -106,7 +106,7 @@ export default function UsagePanel() {
 
   const dailyUsed = data?.usage?.daily?.used ?? 0;
   const dailyLeft = data?.usage?.daily?.left ?? 0;
-  const dailyLimit = data?.limits?.dailyMessages ?? dailyUsed + dailyLeft;
+  const dailyLimit = data?.limits?.dailyFiles ?? dailyUsed + dailyLeft;
   const dailyResetAt = data?.usage?.daily?.resetAt ?? 0;
 
   const pdfUsed = data?.usage?.monthly?.pdf?.used ?? 0;
@@ -115,7 +115,7 @@ export default function UsagePanel() {
   const pdfResetAt = data?.usage?.monthly?.pdf?.resetAt ?? 0;
 
   const imgUsed = data?.usage?.monthly?.images?.used ?? 0;
-  const imgLimit = data?.usage?.monthly?.images?.limit ?? data?.limits?.monthlyImages ?? 0;
+  const imgLimit = data?.usage?.monthly?.images?.limit ?? data?.limits?.monthlyFiles ?? 0;
   const imgRemaining = data?.usage?.monthly?.images?.remaining ?? 0;
   const imgResetAt = data?.usage?.monthly?.images?.resetAt ?? 0;
 

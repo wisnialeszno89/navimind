@@ -4,19 +4,18 @@ export type UserPlan = "free" | "pro" | "pro_plus";
 
 export const PLAN_LIMITS = {
   free: {
-  dailyMessages: 15,
-  monthlyPdf: 0,
-  monthlyImages: 0,
+    monthlyFiles: 0,
+    dailyFiles: 0,
   },
+
   pro: {
-    dailyMessages: 100,
-    monthlyPdf: 10,
-    monthlyImages: 20,
+    monthlyFiles: 20,   // 🔥 bezpieczny poziom przy 49 zł
+    dailyFiles: 5,      // 🔥 zabezpieczenie przed spaleniem budżetu
   },
+
   pro_plus: {
-    dailyMessages: 500,
-    monthlyPdf: 50,
-    monthlyImages: 100,
+    monthlyFiles: 100,  // 🔥 przy 149 zł
+    dailyFiles: 20,
   },
 } as const;
 

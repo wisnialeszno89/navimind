@@ -40,7 +40,7 @@ type Store = {
 
 export const useChatStore = create<Store>((set) => ({
   messages: [],
-  plan: "free",
+  plan: "pro_plus",
 
   activeChatId: null,
 

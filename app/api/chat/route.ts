@@ -56,6 +56,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   const userText: string | undefined = body?.message?.trim();
+  const clientMessages = body?.messages || [];
   const chatId: string | undefined = body?.chatId;
 
   if (!userText)
@@ -146,10 +147,13 @@ ${relationalCore}
           top_p: 0.9,
           stream: true,
           messages: [
-            { role: "system", content: systemPrompt },
-            ...history,
-            { role: "user", content: userText },
-          ],
+        { role: "system", content: systemPrompt },
+
+        // 🔥 NAJWAŻNIEJSZE
+        ...clientMessages.slice(-10),
+
+        { role: "user", content: userText },
+        ],
         });
 
         for await (const part of response) {

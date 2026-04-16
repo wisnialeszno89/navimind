@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     }
 
     // 🔒 LIMIT
-    const limit = PLAN_LIMITS[plan].monthlyImages;
+    const limit = PLAN_LIMITS[plan].monthlyFiles;
 
     const usage = await checkAndIncrementMonthlyUsage(
       userId,

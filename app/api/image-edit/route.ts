@@ -9,45 +9,70 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   try {
     const userId = getUserId();
-    const plan = await getUserPlan();
+    const plan = (await getUserPlan()) as keyof typeof PLAN_LIMITS;
+    if (!PLAN_LIMITS[plan]) {
+    throw new Error("Invalid plan");
+  }
 
     if (!userId) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    // 🔒 tylko PRO+
-    if (plan !== "pro_plus") {
+    // ❌ FREE blokujemy
+    if (plan === "free") {
       return NextResponse.json(
-        { error: "PRO_REQUIRED", message: "Edycja zdjęć tylko w PRO+" },
+        { error: "PRO_REQUIRED" },
         { status: 403 }
       );
     }
 
-    // 🔒 LIMIT
-    const limit = PLAN_LIMITS[plan].monthlyImages;
+    /* ================= LIMITY ================= */
 
-    const usage = await checkAndIncrementMonthlyUsage(
-      userId,
-      "image",
-      limit
-    );
+// 🔥 DAILY (najpierw!)
+const limit = PLAN_LIMITS[plan].monthlyFiles;
 
-    if (!usage.allowed) {
-      return NextResponse.json(
-        { error: "IMAGE_LIMIT", remaining: 0 },
-        { status: 429 }
-      );
-    }
+const usage = await checkAndIncrementMonthlyUsage(
+  userId,
+  "file",
+  limit
+);
 
-    // 📦 INPUT
+const dailyLimit = PLAN_LIMITS[plan].dailyFiles;
+
+const dailyUsage = await checkAndIncrementMonthlyUsage(
+  userId,
+  "file_daily",
+  dailyLimit
+);
+
+if (!dailyUsage.allowed) {
+  return NextResponse.json(
+    { error: "DAILY_LIMIT" },
+    { status: 429 }
+  );
+}
+
+
+// 🔥 MONTHLY
+const monthlyLimit = PLAN_LIMITS[plan].monthlyFiles;
+
+const monthlyUsage = await checkAndIncrementMonthlyUsage(
+  userId,
+  "file",
+  limit
+);
+
+if (!usage.allowed) {
+  return NextResponse.json(
+    { error: "MONTHLY_LIMIT", remaining: 0 },
+    { status: 429 }
+  );
+}
+
     const { image, prompt } = await req.json();
 
-    if (!image) {
-      return NextResponse.json({ error: "NO_IMAGE" }, { status: 400 });
-    }
-
-    if (!prompt) {
-      return NextResponse.json({ error: "NO_PROMPT" }, { status: 400 });
+    if (!image || !prompt) {
+      return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
     }
 
     const { default: OpenAI } = await import("openai");
@@ -56,14 +81,14 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // 🧠 1. ANALIZA OBRAZU
+    // 🧠 ANALIZA (lekka)
     const analysis = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: [
         {
           role: "user",
           content: [
-            { type: "input_text", text: "Opisz dokładnie co jest na obrazie." },
+            { type: "input_text", text: "Opisz obraz krótko." },
             {
               type: "input_image",
               image_url: image,
@@ -76,30 +101,30 @@ export async function POST(req: Request) {
 
     const description = analysis.output_text || "";
 
-    // 🎨 2. GENEROWANIE OBRAZU
+    // 🎨 FINAL PROMPT
     const finalPrompt = `
-Na podstawie tego obrazu:
+Obraz:
 ${description}
 
-Wykonaj zmianę:
+Zrób zmianę:
 ${prompt}
 
-Zachowaj tożsamość osoby, twarz i proporcje.
-Naturalne światło, realistyczne detale, wysoka jakość.
-Nie zmieniaj osoby w inną.
+Zachowaj twarz, proporcje i realizm.
+Wysoka jakość.
 `;
 
-    const generated = await openai.images.generate({
+    // 🎨 GENERACJA
+    const result = await openai.images.generate({
       model: "gpt-image-1",
       prompt: finalPrompt,
       size: "1024x1024",
     });
 
-    const imageBase64 = generated.data?.[0]?.b64_json;
+    const imageBase64 = result.data?.[0]?.b64_json;
 
     if (!imageBase64) {
       return NextResponse.json(
-        { error: "NO_IMAGE_RESULT" },
+        { error: "GENERATION_FAILED" },
         { status: 500 }
       );
     }
@@ -112,8 +137,7 @@ Nie zmieniaj osoby w inną.
       },
     });
   } catch (err) {
-    console.error("IMAGE EDIT ERROR:", err);
-
+    console.error(err);
     return NextResponse.json(
       { error: "IMAGE_EDIT_FAILED" },
       { status: 500 }

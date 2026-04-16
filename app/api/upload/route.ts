@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     const userId = getUserId();
 
     // ✅ limit miesięczny uploadów zdjęć (liczymy jako "image")
-    const imageLimit = PLAN_LIMITS[plan].monthlyImages;
+    const imageLimit = PLAN_LIMITS[plan].monthlyFiles;
     const usage = await checkAndIncrementMonthlyUsage(
       userId,
       "image",

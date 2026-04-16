@@ -1,82 +1,72 @@
 import { NextResponse } from "next/server";
-import { getSessionEmail } from "../../lib/auth/session";
 import { getUserId } from "../../lib/userId";
 import { getUserPlan } from "../../lib/userPlan";
 import { PLAN_LIMITS } from "../../lib/plans";
-import { getCurrentDailyLimit } from "../../lib/dailyLimit";
-import { getMonthlyUsageState } from "../../lib/monthlyUsage";
+import { checkAndIncrementMonthlyUsage } from "../../lib/monthlyUsage";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 export async function GET() {
-  // 🔐 wymagamy stabilnego identyfikatora użytkownika
-  const userId = getUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
+  try {
+    const userId = getUserId();
+    const plan = (await getUserPlan()) as keyof typeof PLAN_LIMITS;
 
-  // plan może być powiązany z sesją mailową
-  const email = getSessionEmail();
-  const plan = await getUserPlan();
+    if (!userId) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
 
-  // jeśli FREE → zwracamy bezpieczne puste usage zamiast 403
-  if (plan === "free") {
+    const limits = PLAN_LIMITS[plan];
+
+    /* ================= DAILY ================= */
+
+    const dailyLimit = limits.dailyFiles;
+
+    const dailyUsage = await checkAndIncrementMonthlyUsage(
+      userId,
+      "file",
+      dailyLimit
+    );
+
+    const dailyUsed = dailyUsage.used;
+    const dailyLeft = dailyUsage.remaining;
+    const dailyResetAt = dailyUsage.resetAt;
+
+    /* ================= MONTHLY ================= */
+
+    const monthlyLimit = limits.monthlyFiles;
+
+    const files = await checkAndIncrementMonthlyUsage(
+      userId,
+      "file",
+      monthlyLimit
+    );
+
+    /* ================= RESPONSE ================= */
+
     return NextResponse.json({
       plan,
-      limits: PLAN_LIMITS.free,
+      limits,
       usage: {
         daily: {
-          used: 0,
-          left: PLAN_LIMITS.free.dailyMessages,
-          resetAt: Date.now(),
+          used: dailyUsed,
+          left: dailyLeft,
+          resetAt: dailyResetAt,
         },
         monthly: {
-          pdf: {
-            allowed: false,
-            used: 0,
-            remaining: 0,
-            resetAt: Date.now(),
-            limit: 0,
-          },
-          images: {
-            allowed: false,
-            used: 0,
-            remaining: 0,
-            resetAt: Date.now(),
-            limit: 0,
-          },
+          used: files.used,
+          left: files.remaining,
+          limit: files.limit,
+          resetAt: files.resetAt,
         },
       },
     });
+
+  } catch (err) {
+    console.error("USAGE ERROR:", err);
+
+    return NextResponse.json(
+      { error: "USAGE_FAILED" },
+      { status: 500 }
+    );
   }
-
-  const limits = PLAN_LIMITS[plan];
-
-  // 📅 DAILY MESSAGES — liczone po stabilnym userId
-  const daily = await getCurrentDailyLimit(userId, limits.dailyMessages);
-
-  const dailyUsed = daily?.used ?? 0;
-  const dailyLeft = Math.max(0, limits.dailyMessages - dailyUsed);
-  const dailyResetAt = daily?.resetAt ?? Date.now();
-
-  // 📦 MONTHLY USAGE — również po userId
-  const pdf = await getMonthlyUsageState(userId, "pdf", limits.monthlyPdf);
-  const images = await getMonthlyUsageState(userId, "image", limits.monthlyImages);
-
-  return NextResponse.json({
-    plan,
-    limits,
-    usage: {
-      daily: {
-        used: dailyUsed,
-        left: dailyLeft,
-        resetAt: dailyResetAt,
-      },
-      monthly: {
-        pdf,
-        images,
-      },
-    },
-  });
 }
