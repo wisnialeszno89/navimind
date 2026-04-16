@@ -1,6 +1,6 @@
 import { kv } from "@vercel/kv";
 
-export type UsageType = "pdf" | "image" | "upload";
+export type UsageType = "pdf" | "image" | "upload"| "image_edit";
 
 export type UsageResult = {
   allowed: boolean;

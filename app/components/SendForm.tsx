@@ -6,6 +6,7 @@ import { useLanguage } from "../lib/useLanguage";
 import MicrophoneButton from "./MicrophoneButton";
 import ProNotice from "./ProNotice";
 import { Plus, ImageIcon, FileText } from "lucide-react";
+import { imageToBase64 } from "../lib/imageToBase64";
 
 type Level = "none" | "low" | "medium" | "high";
 
@@ -41,6 +42,8 @@ export default function SendForm({
 
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [imageMode, setImageMode] = useState<"analyze" | "edit">("analyze");
 
   const [pdfMode, setPdfMode] = useState<"analyze" | "edit">("analyze");
   const [instruction, setInstruction] = useState("");
@@ -291,6 +294,70 @@ async function sendImage(file?: File) {
     setIsTyping(false);
   }
 }
+async function sendImageEdit(file?: File) {
+  const f = file ?? imageFile;
+  if (!f) return;
+
+  if (plan !== "pro_plus") {
+  setShowPro(true);
+
+  add({
+    role: "assistant",
+    content: "🚀 Edycja zdjęć to funkcja PRO+. Odblokuj, żeby korzystać.",
+  });
+
+  return;
+}
+
+  setIsSending(true);
+  setIsTyping(true);
+
+  try {
+    const base64 = await imageToBase64(f, 800, 0.8);
+
+    const res = await fetch("/api/image-edit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image: base64,
+        prompt: imagePrompt || "Popraw zdjęcie",
+      }),
+    });
+
+    const data = await res.json();
+
+    add({ role: "user", content: "📷 Edycja zdjęcia" });
+
+    if (data.image) {
+  add({
+    role: "assistant",
+    content: `![edited](data:image/png;base64,${data.image})`,
+  });
+
+  add({
+    role: "assistant",
+    content: "✨ Gotowe! Możesz spróbować innej wersji.",
+  });
+}
+    else {
+      add({
+        role: "assistant",
+        content: "❌ Błąd edycji zdjęcia",
+      });
+    }
+  } catch {
+    add({
+      role: "assistant",
+      content: "❌ Błąd edycji zdjęcia",
+    });
+  } finally {
+    setImageFile(null);
+    setIsSending(false);
+    setIsTyping(false);
+  }
+}
 return (
   <div className="sticky bottom-0 z-[9999] border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
 
@@ -305,7 +372,33 @@ return (
         />
       </div>
     )}
-
+    {imageMode === "edit" && (
+    <div className="px-3 pt-3">
+    <input
+      value={imagePrompt}
+      onChange={(e) => setImagePrompt(e.target.value)}
+      placeholder="Np. usuń tło, dodaj zachód słońca..."
+      className="w-full px-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 outline-none"
+      />
+      <div className="flex flex-wrap gap-2 mt-2">
+  {[
+    { label: "Usuń tło", value: "Usuń tło i zostaw osobę na neutralnym tle" },
+    { label: "LinkedIn PRO", value: "Profesjonalne zdjęcie biznesowe, garnitur, neutralne tło, dobre światło" },
+    { label: "Avatar AI", value: "Styl avatar AI, nowoczesny, lekko futurystyczny" },
+    { label: "Popraw jakość", value: "Popraw jakość, ostrość i oświetlenie zdjęcia" },
+  ].map((p) => (
+    <button
+      key={p.label}
+      type="button"
+      onClick={() => setImagePrompt(p.value)}
+      className="text-xs px-3 py-1 rounded-full bg-white/10 hover:bg-white/20"
+    >
+      {p.label}
+    </button>
+  ))}
+</div>
+    </div>
+  )}
     <form
       onSubmit={(e) => {
         e.preventDefault();
@@ -327,16 +420,31 @@ return (
           <div className="absolute bottom-16 left-0 z-[9999] flex flex-col gap-2 backdrop-blur-md bg-black/70 p-3 rounded-2xl shadow-xl border border-white/10">
 
             <button
-              type="button"
-              onClick={() => {
-                imageInputRef.current?.click();
-                setShowAttachments(false);
-              }}
-              className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
-            >
-              <ImageIcon size={18} />
-              <span className="text-sm">Zdjęcie</span>
-            </button>
+  type="button"
+  onClick={() => {
+    setImageMode("analyze");
+    imageInputRef.current?.click();
+    setShowAttachments(false);
+  }}
+  className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+>
+  <ImageIcon size={18} />
+  <span className="text-sm">Analizuj zdjęcie</span>
+</button>
+
+{plan === "pro_plus" && (
+  <button
+    type="button"
+    onClick={() => {
+      setImageMode("edit");
+      imageInputRef.current?.click();
+      setShowAttachments(false);
+    }}
+    className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+  >
+    ✏️ <span className="text-sm">Edytuj zdjęcie</span>
+  </button>
+)}
 
             <button
               type="button"
@@ -379,9 +487,15 @@ return (
         accept="application/pdf"
         hidden
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) sendPdf(file);
-        }}
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (imageMode === "edit") {
+      sendImageEdit(file);
+      } else {
+      sendImage(file);
+    }
+  }}
       />
 
       <input
