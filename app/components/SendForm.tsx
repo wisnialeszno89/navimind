@@ -431,6 +431,19 @@ return (
   <ImageIcon size={18} />
   <span className="text-sm">Analizuj zdjęcie</span>
 </button>
+{plan === "pro_plus" && (
+  <button
+    type="button"
+    onClick={() => {
+      setImageMode("edit");
+      imageInputRef.current?.click();
+      setShowAttachments(false);
+    }}
+    className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+  >
+    ✏️ <span className="text-sm">Edytuj zdjęcie</span>
+  </button>
+)}
 
 {plan === "pro_plus" && (
   <button
@@ -499,15 +512,21 @@ return (
       />
 
       <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) sendImage(file);
-        }}
-      />
+  ref={imageInputRef}
+  type="file"
+  accept="image/*"
+  hidden
+  onChange={(e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (imageMode === "edit") {
+      sendImageEdit(file); // 🔥 TU JEST KLUCZ
+    } else {
+      sendImage(file);
+    }
+  }}
+/>
 
       {/* TEXTAREA */}
       <textarea
