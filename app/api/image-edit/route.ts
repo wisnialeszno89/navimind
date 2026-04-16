@@ -15,13 +15,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    if (plan !== "pro") {
+    // 🔒 tylko PRO+
+    if (plan !== "pro_plus") {
       return NextResponse.json(
         { error: "PRO_REQUIRED", message: "Edycja zdjęć tylko w PRO+" },
         { status: 403 }
       );
     }
 
+    // 🔒 LIMIT
     const limit = PLAN_LIMITS[plan].monthlyImages;
 
     const usage = await checkAndIncrementMonthlyUsage(
@@ -37,6 +39,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 📦 INPUT
     const { image, prompt } = await req.json();
 
     if (!image) {
@@ -53,32 +56,56 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const FINAL_PROMPT = `
-    Zachowaj tożsamość osoby, twarz i proporcje.
-    Naturalne światło, realistyczne detale, wysoka jakość.
-    Nie zmieniaj osoby w inną.
-    ${prompt}
-    `;
-
-    const result = await openai.responses.create({
-     model: "gpt-4.1-mini",
-    input: [
-    {
-      role: "user",
-      content: [
-        { type: "input_text", text: FINAL_PROMPT },
+    // 🧠 1. ANALIZA OBRAZU
+    const analysis = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
         {
-            type: "input_image",
-            image_url: image,
-            detail: "low", // 🔥 TO JEST KLUCZ
+          role: "user",
+          content: [
+            { type: "input_text", text: "Opisz dokładnie co jest na obrazie." },
+            {
+              type: "input_image",
+              image_url: image,
+              detail: "low",
+            },
+          ],
         },
       ],
-    },
-  ],
-});
+    });
+
+    const description = analysis.output_text || "";
+
+    // 🎨 2. GENEROWANIE OBRAZU
+    const finalPrompt = `
+Na podstawie tego obrazu:
+${description}
+
+Wykonaj zmianę:
+${prompt}
+
+Zachowaj tożsamość osoby, twarz i proporcje.
+Naturalne światło, realistyczne detale, wysoka jakość.
+Nie zmieniaj osoby w inną.
+`;
+
+    const generated = await openai.images.generate({
+      model: "gpt-image-1",
+      prompt: finalPrompt,
+      size: "1024x1024",
+    });
+
+    const imageBase64 = generated.data?.[0]?.b64_json;
+
+    if (!imageBase64) {
+      return NextResponse.json(
+        { error: "NO_IMAGE_RESULT" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
-      image: result.data[0].b64_json,
+      image: imageBase64,
       meta: {
         used: usage.used,
         remaining: usage.remaining,
