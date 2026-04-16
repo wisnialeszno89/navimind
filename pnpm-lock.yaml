@@ -69,6 +69,9 @@ importers:
       '@types/nodemailer':
         specifier: ^7.0.4
         version: 7.0.5
+      '@types/pdf-parse':
+        specifier: ^1.1.5
+        version: 1.1.5
       '@types/pdfkit':
         specifier: ^0.17.4
         version: 0.17.4
@@ -735,6 +738,9 @@ packages:
 
   '@types/nodemailer@7.0.5':
     resolution: {integrity: sha512-7WtR4MFJUNN2UFy0NIowBRJswj5KXjXDhlZY43Hmots5eGu5q/dTeFd/I6GgJA/qj3RqO6dDy4SvfcV3fOVeIA==}
+
+  '@types/pdf-parse@1.1.5':
+    resolution: {integrity: sha512-kBfrSXsloMnUJOKi25s3+hRmkycHfLK6A09eRGqF/N8BkQoPUmaCr+q8Cli5FnfohEz/rsv82zAiPz/LXtOGhA==}
 
   '@types/pdfkit@0.17.4':
     resolution: {integrity: sha512-odAmVuuguRxKh1X4pbMrJMp8ecwNqHRw6lweupvzK+wuyNmi6wzlUlGVZ9EqMvp3Bs2+L9Ty0sRlrvKL+gsQZg==}
@@ -2885,7 +2891,7 @@ snapshots:
 
   '@types/node-fetch@2.6.13':
     dependencies:
-      '@types/node': 18.19.130
+      '@types/node': 25.0.7
       form-data: 4.0.5
 
   '@types/node@18.19.130':
@@ -2902,6 +2908,10 @@ snapshots:
       '@types/node': 25.0.7
     transitivePeerDependencies:
       - aws-crt
+
+  '@types/pdf-parse@1.1.5':
+    dependencies:
+      '@types/node': 25.0.7
 
   '@types/pdfkit@0.17.4':
     dependencies:
