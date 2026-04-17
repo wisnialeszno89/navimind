@@ -32,7 +32,6 @@ export default function SendForm({ setIsTyping, chatId }: any) {
   >([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // 🔥 KLUCZOWE
   const [activeFile, setActiveFile] = useState<{
     base64: string;
     type: string;
@@ -80,10 +79,12 @@ export default function SendForm({ setIsTyping, chatId }: any) {
     const raw = text.trim();
     if (!raw) return;
 
+    // ENTER flow
+    setText("");
+
     if (fileHistory.length > 0 && !pendingFile) {
       add({ role: "user", content: raw });
       await handleFileProcessFromMemory(raw);
-      setText("");
       return;
     }
 
@@ -92,13 +93,13 @@ export default function SendForm({ setIsTyping, chatId }: any) {
       return;
     }
 
-    setText("");
-
     if (pendingFile) {
+      add({ role: "user", content: raw });
       await processFile(pendingFile, raw);
       return;
     }
 
+    // 🔥 NORMAL CHAT (nie psujemy tego)
     add({ role: "user", content: raw });
   }
 
@@ -205,20 +206,17 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
       setFileHistory((prev) => [...prev, newVersion]);
       setCurrentIndex((prev) => prev + 1);
-
       setActiveFile(newVersion);
 
       const url = `data:image/png;base64,${data.data}`;
 
       add({
         role: "assistant",
-        content: `
-![img](${url})
+        content: `![img](${url})
 
 ⬇️ [Pobierz obraz](${url})
 
-✨ Gotowe — możesz edytować dalej.
-`,
+✨ Gotowe — możesz edytować dalej.`,
       });
     }
 
@@ -227,16 +225,17 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
       add({
         role: "assistant",
-        content: `
-📄 Gotowy dokument
+        content: `📄 Gotowy dokument
 
-⬇️ [Pobierz PDF](${url})
-`,
+⬇️ [Pobierz PDF](${url})`,
       });
     }
 
     if (data.type === "text") {
-      add({ role: "assistant", content: data.data });
+      add({
+        role: "assistant",
+        content: data.data,
+      });
     }
   }
 
@@ -261,39 +260,24 @@ export default function SendForm({ setIsTyping, chatId }: any) {
     setCurrentIndex(0);
   }
 
-  function pinVersion(index: number) {
-    const pinned = fileHistory[index];
-    if (!pinned) return;
-
-    setFileHistory([pinned]);
-    setCurrentIndex(0);
-
-    add({
-      role: "assistant",
-      content: "📌 Ustawiono jako bazę",
-    });
-  }
-
   /* ================= UI ================= */
 
   return (
     <div className="border-t p-3 space-y-3">
 
-      {/* HISTORIA */}
+      {/* HISTORY */}
       {history.length > 0 && (
         <div className="text-xs opacity-80">
           Ostatnie:
-          <div className="flex gap-2 mt-1 overflow-x-auto">
-            {history.map((h, i) => (
-              <div key={h.id} className="flex gap-1 items-center">
-                <button
-                  onClick={() => setSelected(h)}
-                  className="px-2 py-1 bg-white/10 rounded"
-                >
-                  {h.name} v{h.version}
-                </button>
-                <button onClick={() => pinVersion(i)}>📌</button>
-              </div>
+          <div className="flex gap-2 overflow-x-auto">
+            {history.map((h) => (
+              <button
+                key={h.id}
+                onClick={() => setSelected(h)}
+                className="px-2 py-1 bg-white/10 rounded"
+              >
+                {h.name} v{h.version}
+              </button>
             ))}
           </div>
         </div>
@@ -309,21 +293,28 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
       {/* PREVIEW */}
       {previewUrl && (
-        <img src={previewUrl} className="w-full max-w-md rounded" />
+        <img
+          src={previewUrl}
+          className="w-full max-w-md rounded border border-white/10"
+        />
       )}
 
-      {/* MASK EDIT */}
+      {/* MASK */}
       {activeFile && maskMode && (
         <ImageMaskEditor
           image={`data:image/png;base64,${activeFile.base64}`}
           onMaskReady={(m) => {
             setMask(m);
             setMaskMode(false);
+            add({
+              role: "assistant",
+              content: "🎯 Obszar zaznaczony — opisz zmianę",
+            });
           }}
         />
       )}
 
-      {/* ACTION BAR */}
+      {/* ACTIONS */}
       {activeFile && !maskMode && (
         <div className="flex gap-2 text-xs">
           <button onClick={() => setMaskMode(true)}>🎯</button>
@@ -340,7 +331,10 @@ export default function SendForm({ setIsTyping, chatId }: any) {
         }}
         className="flex gap-2"
       >
-        <button onClick={() => fileInputRef.current?.click()}>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+        >
           <Plus size={18} />
         </button>
 
@@ -348,6 +342,7 @@ export default function SendForm({ setIsTyping, chatId }: any) {
           ref={fileInputRef}
           type="file"
           hidden
+          accept="image/*,application/pdf"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) handleFile(f);
@@ -357,7 +352,14 @@ export default function SendForm({ setIsTyping, chatId }: any) {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="flex-1 p-2 rounded bg-black/20"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder="Napisz wiadomość..."
+          className="flex-1 p-3 rounded bg-black/20"
         />
 
         <button type="submit">➤</button>
