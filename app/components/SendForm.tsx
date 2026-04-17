@@ -1,63 +1,47 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../lib/chatStore";
-import { useLanguage } from "../lib/useLanguage";
 import ProNotice from "./ProNotice";
 import { Plus } from "lucide-react";
 import { imageToBase64 } from "../lib/imageToBase64";
-import { useCallback } from "react";
+import BeforeAfterSlider from "./BeforeAfterSlider";
+import ImageMaskEditor from "./ImageMaskEditor";
+
+type HistoryItem = {
+  id: string;
+  name: string;
+  type: string;
+  preview?: string;
+  result?: string;
+  version: number;
+};
 
 export default function SendForm({ setIsTyping, chatId }: any) {
-  const { lang } = useLanguage();
-
   const [text, setText] = useState("");
-  const [isSending, setIsSending] = useState(false);
   const [showPro, setShowPro] = useState(false);
-  const [showAttachments, setShowAttachments] = useState(false);
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [selected, setSelected] = useState<HistoryItem | null>(null);
+
+  const [fileHistory, setFileHistory] = useState<
+    { base64: string; type: string }[]
+  >([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // 🔥 KLUCZOWE
+  const [activeFile, setActiveFile] = useState<{
+    base64: string;
+    type: string;
+  } | null>(null);
+
+  const [maskMode, setMaskMode] = useState(false);
+  const [mask, setMask] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const handleDrop = useCallback((e: React.DragEvent) => {
-  e.preventDefault();
-  const handlePaste = useCallback((e: ClipboardEvent) => {
-  const items = e.clipboardData?.items;
-  if (!items) return;
-
-  for (const item of items) {
-    if (item.type.startsWith("image/")) {
-      const file = item.getAsFile();
-      if (!file) return;
-
-      setPendingFile(file);
-
-      add({
-        role: "assistant",
-        content: "📋 Obraz wklejony. Opisz co chcesz zrobić.",
-      });
-    }
-  }
-}, []);
-
-  const file = e.dataTransfer.files?.[0];
-  if (!file) return;
-
-  if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-    add({
-      role: "assistant",
-      content: "❌ Obsługiwane tylko obrazy i PDF",
-    });
-    return;
-  }
-
-  setPendingFile(file);
-
-  add({
-    role: "assistant",
-    content: "📎 Plik dodany. Opisz co chcesz zrobić.",
-  });
-}, []);
 
   const add = useChatStore((s) => s.add);
   const plan = useChatStore((s) => s.plan);
@@ -65,305 +49,318 @@ export default function SendForm({ setIsTyping, chatId }: any) {
   /* ================= LOAD PLAN ================= */
 
   useEffect(() => {
-  // 🔹 PLAN
-  fetch("/api/plan")
-    .then((res) => res.json())
-    .then((data) => {
-      useChatStore.setState({ plan: data.plan });
-    })
-    .catch(() => {});
+    fetch("/api/plan")
+      .then((res) => res.json())
+      .then((data) => {
+        useChatStore.setState({ plan: data.plan });
+      })
+      .catch(() => {});
+  }, []);
 
-  // 🔹 PASTE (CTRL+V)
-  const handlePasteEvent = (e: ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+  /* ================= FILE SELECT ================= */
 
-    for (const item of items) {
-      if (item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (!file) return;
+  function handleFile(file: File) {
+    setPendingFile(file);
 
-        setPendingFile(file);
-
-        add({
-          role: "assistant",
-          content: "📋 Obraz wklejony. Opisz co chcesz zrobić.",
-        });
-      }
+    if (file.type.startsWith("image/")) {
+      setPreviewUrl(URL.createObjectURL(file));
+    } else {
+      setPreviewUrl(null);
     }
-  };
 
-  window.addEventListener("paste", handlePasteEvent);
+    add({
+      role: "assistant",
+      content: "✏️ Opisz co chcesz zrobić z plikiem",
+    });
+  }
 
-  return () => {
-    window.removeEventListener("paste", handlePasteEvent);
-  };
-}, []);
-
-  /* ================= MAIN SEND ================= */
+  /* ================= SEND ================= */
 
   async function send() {
     const raw = text.trim();
     if (!raw) return;
 
-    // 🔒 FREE BLOCK
+    if (fileHistory.length > 0 && !pendingFile) {
+      add({ role: "user", content: raw });
+      await handleFileProcessFromMemory(raw);
+      setText("");
+      return;
+    }
+
     if (pendingFile && plan === "free") {
-      add({
-        role: "assistant",
-        content:
-          "🔓 Analiza i edycja plików dostępna w PRO. Odblokuj pełną wersję.",
-      });
       setShowPro(true);
       return;
     }
 
     setText("");
 
-    // 🔥 FLOW Z PLIKIEM
     if (pendingFile) {
-      add({ role: "user", content: `📎 ${pendingFile.name}` });
-      add({ role: "user", content: raw });
-
-      await handleFileProcess(pendingFile, raw);
-
-      setPendingFile(null);
+      await processFile(pendingFile, raw);
       return;
     }
 
-    // 🔥 NORMAL CHAT
-    setIsSending(true);
-    setIsTyping(true);
-
     add({ role: "user", content: raw });
-    add({ role: "assistant", content: "" });
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId, message: raw }),
-      });
-
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-
-      let fullText = "";
-      const assistantIndex = useChatStore.getState().messages.length - 1;
-
-      while (true) {
-        const { value, done } = await reader!.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n\n");
-
-        for (const line of lines) {
-          if (!line.startsWith("data:")) continue;
-
-          const payload = JSON.parse(line.replace("data: ", ""));
-
-          if (payload?.delta) {
-            fullText += payload.delta;
-
-            const state = useChatStore.getState();
-            const next = [...state.messages];
-            next[assistantIndex] = {
-              role: "assistant",
-              content: fullText,
-            };
-            state.setMessages(next);
-          }
-        }
-      }
-    } catch {
-      add({ role: "assistant", content: "Błąd połączenia." });
-    } finally {
-      setIsSending(false);
-      setIsTyping(false);
-    }
   }
 
-  /* ================= FILE PROCESS ================= */
+  /* ================= PROCESS FILE ================= */
 
-  async function handleFileProcess(file: File, prompt: string) {
-    setIsSending(true);
-    setIsTyping(true);
+  async function processFile(file: File, prompt: string) {
+    add({ role: "assistant", content: "⏳ Przetwarzam..." });
 
-    try {
-      let base64 = "";
+    let base64 = "";
 
-      if (file.type.startsWith("image/")) {
-        base64 = await imageToBase64(file, 800, 0.8);
-      } else {
-        base64 = await fileToBase64(file);
-      }
+    if (file.type.startsWith("image/")) {
+      base64 = await imageToBase64(file, 800, 0.8);
+    } else {
+      base64 = await fileToBase64(file);
+    }
 
-      const res = await fetch("/api/file-process", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          file: base64,
-          type: file.type,
-          prompt,
-        }),
-      });
+    setFileHistory([{ base64, type: file.type }]);
+    setCurrentIndex(0);
 
-      const data = await res.json();
+    setActiveFile({
+      base64,
+      type: file.type,
+    });
 
-      if (data.type === "image") {
+    const res = await fetch("/api/file-process", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        file: base64,
+        type: file.type,
+        prompt,
+        mask,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+      setShowPro(true);
+      return;
+    }
+
+    handleResponse(data, file.name);
+
+    setPendingFile(null);
+    setPreviewUrl(null);
+  }
+
+  /* ================= PROCESS FROM MEMORY ================= */
+
+  async function handleFileProcessFromMemory(prompt: string) {
+    const current = fileHistory[currentIndex];
+    if (!current) return;
+
+    add({ role: "assistant", content: "⏳ Edytuję..." });
+
+    const res = await fetch("/api/file-process", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        file: current.base64,
+        type: current.type,
+        prompt,
+        mask,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+      setShowPro(true);
+      return;
+    }
+
+    handleResponse(data, "edit");
+  }
+
+  /* ================= HANDLE RESPONSE ================= */
+
+  function handleResponse(data: any, name: string) {
+    const id = crypto.randomUUID();
+
+    const newItem: HistoryItem = {
+      id,
+      name,
+      type: data.type,
+      preview: previewUrl || undefined,
+      result: data.data,
+      version: getNextVersion(name),
+    };
+
+    setHistory((prev) => [newItem, ...prev]);
+    setSelected(newItem);
+
+    if (data.type === "image") {
+      const newVersion = {
+        base64: data.data,
+        type: "image/png",
+      };
+
+      setFileHistory((prev) => [...prev, newVersion]);
+      setCurrentIndex((prev) => prev + 1);
+
+      setActiveFile(newVersion);
+
       const url = `data:image/png;base64,${data.data}`;
 
       add({
         role: "assistant",
-      content: `
-      ![img](${url})
+        content: `
+![img](${url})
 
-      📥 Kliknij prawym → "Zapisz obraz jako"
-      lub pobierz tutaj:
-      <a href="${url}" download="navimind.png">⬇️ Pobierz obraz</a>
-    `,
-  });
+⬇️ [Pobierz obraz](${url})
 
-  add({
-    role: "assistant",
-    content: "✨ Gotowe. Możesz pobrać obraz lub wpisać kolejną zmianę.",
-  });
-}
+✨ Gotowe — możesz edytować dalej.
+`,
+      });
+    }
 
-      if (data.type === "pdf") {
+    if (data.type === "pdf") {
       const url = `data:application/pdf;base64,${data.data}`;
 
       add({
-      role: "assistant",
-      content: `
-      📄 PDF gotowy
-
-    <a href="${url}" download="navimind.pdf">⬇️ Pobierz PDF</a>
-    `,
-  });
-}
-
-      if (data.type === "text") {
-        add({
-          role: "assistant",
-          content: data.data,
-        });
-      }
-    } catch {
-      add({
         role: "assistant",
-        content: "❌ Błąd przetwarzania pliku",
+        content: `
+📄 Gotowy dokument
+
+⬇️ [Pobierz PDF](${url})
+`,
       });
-    } finally {
-      setIsSending(false);
-      setIsTyping(false);
+    }
+
+    if (data.type === "text") {
+      add({ role: "assistant", content: data.data });
     }
   }
 
-  /* ================= HELPERS ================= */
+  function getNextVersion(name: string) {
+    const versions = history.filter((h) => h.name === name);
+    return versions.length + 1;
+  }
 
-    function fileToBase64(file: File): Promise<string> {
+  function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.readAsDataURL(file);
+    });
+  }
+
+  function undo() {
+    setCurrentIndex((prev) => Math.max(0, prev - 1));
+  }
+
+  function resetToOriginal() {
+    setCurrentIndex(0);
+  }
+
+  function pinVersion(index: number) {
+    const pinned = fileHistory[index];
+    if (!pinned) return;
+
+    setFileHistory([pinned]);
+    setCurrentIndex(0);
+
+    add({
+      role: "assistant",
+      content: "📌 Ustawiono jako bazę",
     });
   }
 
   /* ================= UI ================= */
 
-  const placeholder = useMemo(() => {
-    if (pendingFile) return "Opisz co zrobić z plikiem...";
-    if (isSending) return "Wysyłam…";
-    return "Napisz wiadomość…";
-  }, [isSending, pendingFile]);
-
   return (
-    <div className="sticky bottom-0 z-[9999] border-t bg-[var(--nm-bg-soft)] border-[var(--nm-border-soft)]">
+    <div className="border-t p-3 space-y-3">
+
+      {/* HISTORIA */}
+      {history.length > 0 && (
+        <div className="text-xs opacity-80">
+          Ostatnie:
+          <div className="flex gap-2 mt-1 overflow-x-auto">
+            {history.map((h, i) => (
+              <div key={h.id} className="flex gap-1 items-center">
+                <button
+                  onClick={() => setSelected(h)}
+                  className="px-2 py-1 bg-white/10 rounded"
+                >
+                  {h.name} v{h.version}
+                </button>
+                <button onClick={() => pinVersion(i)}>📌</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* COMPARE */}
+      {selected && selected.preview && selected.type === "image" && (
+        <BeforeAfterSlider
+          before={selected.preview}
+          after={`data:image/png;base64,${selected.result}`}
+        />
+      )}
 
       {/* PREVIEW */}
-      {pendingFile && (
-      <div className="px-3 pt-2 flex items-center gap-2">
-      {pendingFile.type.startsWith("image/") && (
-      <img
-        src={URL.createObjectURL(pendingFile)}
-        className="w-12 h-12 object-cover rounded-lg"
-      />
-    )}
-      <div className="text-sm opacity-80">
-      📎 {pendingFile.name}
-    </div>
-  </div>
-)}
-      <div className="px-3 text-xs opacity-50">
-    Możesz przeciągnąć plik lub wkleić obraz (CTRL+V)
-    </div>
+      {previewUrl && (
+        <img src={previewUrl} className="w-full max-w-md rounded" />
+      )}
+
+      {/* MASK EDIT */}
+      {activeFile && maskMode && (
+        <ImageMaskEditor
+          image={`data:image/png;base64,${activeFile.base64}`}
+          onMaskReady={(m) => {
+            setMask(m);
+            setMaskMode(false);
+          }}
+        />
+      )}
+
+      {/* ACTION BAR */}
+      {activeFile && !maskMode && (
+        <div className="flex gap-2 text-xs">
+          <button onClick={() => setMaskMode(true)}>🎯</button>
+          <button onClick={undo}>↩</button>
+          <button onClick={resetToOriginal}>🔄</button>
+        </div>
+      )}
+
+      {/* FORM */}
       <form
-    onSubmit={(e) => {
-    e.preventDefault();
-    send();
-    }}
-    onDragOver={(e) => e.preventDefault()}
-    onDrop={handleDrop}
-    className="flex items-end gap-2 px-3 pt-3"
-    >
-        {/* PLUS */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="p-3 rounded-2xl bg-white/10 hover:bg-white/20"
-        >
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+        className="flex gap-2"
+      >
+        <button onClick={() => fileInputRef.current?.click()}>
           <Plus size={18} />
         </button>
 
-        {/* FILE INPUT */}
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,application/pdf"
           hidden
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-
-            setPendingFile(file);
-
-            add({
-              role: "assistant",
-              content: "✏️ Opisz co chcesz zrobić z plikiem",
-            });
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
           }}
         />
 
-        {/* TEXT */}
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder={placeholder}
-          rows={3}
-          className="flex-1 resize-none rounded-2xl px-4 py-3 outline-none"
-          style={{
-            background: "var(--nm-bg-input)",
-            border: "1px solid var(--nm-border-input)",
-            color: "var(--nm-text-main)",
-          }}
+          className="flex-1 p-2 rounded bg-black/20"
         />
 
-        <button
-          type="submit"
-          className="px-5 py-3 rounded-2xl text-white"
-          style={{ background: "var(--nm-accent)" }}
-        >
-          ➤
-        </button>
+        <button type="submit">➤</button>
       </form>
 
       {showPro && <ProNotice onClose={() => setShowPro(false)} />}

@@ -25,10 +25,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
     }
 
+    const lower = prompt.toLowerCase();
+
     const isEdit =
-      prompt.toLowerCase().includes("zmień") ||
-      prompt.toLowerCase().includes("popraw") ||
-      prompt.toLowerCase().includes("przerób");
+      lower.includes("zmień") ||
+      lower.includes("popraw") ||
+      lower.includes("przerób");
+
+    const isTranslate = /tłumacz|translate/.test(lower);
+    const isSummary = /skr[oó]c|podsumuj/.test(lower);
 
     if (plan === "free") {
       return NextResponse.json({ error: "PRO_REQUIRED" }, { status: 403 });
@@ -93,13 +98,26 @@ export async function POST(req: Request) {
       const result = await openai.images.generate({
         model: "gpt-image-1",
         prompt: `
-Obraz:
-${description}
+        Edytuj obraz zgodnie z poleceniem:
+    
+      if (plan !== "pro_plus" && isEdit && type === "application/pdf") {
+      return NextResponse.json(
+    { error: "PRO_PLUS_REQUIRED" },
+    { status: 403 }
+  );
+}
 
-Zrób:
 ${prompt}
 
-Zachowaj realizm, twarz i proporcje.
+Opis obrazu:
+${description}
+
+Zachowaj:
+- strukturę
+- proporcje
+- realizm
+
+Wysoka jakość, brak deformacji.
 `,
         size: "1024x1024",
       });
@@ -144,7 +162,8 @@ ${text.slice(0, 20000)}
 
       const resultText = response.output_text || "Brak odpowiedzi";
 
-      if (isEdit) {
+      /* 🔥 JEŚLI EDYCJA → GENERUJ PDF */
+      if (isEdit || isTranslate || isSummary) {
         const PDFDocument = (await import("pdfkit")).default;
 
         const doc = new PDFDocument();
@@ -162,17 +181,19 @@ ${text.slice(0, 20000)}
           doc.end();
         });
 
-        return new Response(new Uint8Array(pdfBuffer), {
-          headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": "attachment; filename=navimind.pdf",
-          },
+        return NextResponse.json({
+          type: "pdf",
+          data: pdfBuffer.toString("base64"),
+          preview: resultText.slice(0, 300),
+          meta: usage,
         });
       }
 
+      /* 🔥 ANALIZA → ZWYKŁY TEKST */
       return NextResponse.json({
         type: "text",
         data: resultText,
+        preview: resultText.slice(0, 300),
         meta: usage,
       });
     }
