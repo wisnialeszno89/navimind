@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 
     const usage = await checkAndIncrementMonthlyUsage(
       userId,
-      "image",
+      "file",
       limit
     );
 

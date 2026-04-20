@@ -25,10 +25,10 @@ export async function POST(req: Request) {
     // ✅ limit miesięczny uploadów zdjęć (liczymy jako "image")
     const imageLimit = PLAN_LIMITS[plan].monthlyFiles;
     const usage = await checkAndIncrementMonthlyUsage(
-      userId,
-      "image",
-      imageLimit
-    );
+    userId,
+    "file",   
+    imageLimit
+  );
 
     if (!usage.allowed) {
       return NextResponse.json(

@@ -5,12 +5,7 @@ import { kv } from "@vercel/kv";
    ========================================================= */
 
 export type UsageType =
-  | "pdf"
-  | "image"
-  | "upload"
-  | "image_edit"
-  | "file"
-  | "file_daily";
+  "file" | "file_daily" | "edit"| "auto_mask";
 
 export type UsageResult = {
   allowed: boolean;

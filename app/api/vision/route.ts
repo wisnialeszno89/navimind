@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const imageLimit = PLAN_LIMITS[plan].monthlyFiles;
     const usage = await checkAndIncrementMonthlyUsage(
       userId,
-      "image",
+      "file",
       imageLimit
     );
 

@@ -6,16 +6,18 @@ export const PLAN_LIMITS = {
   free: {
     monthlyFiles: 0,
     dailyFiles: 0,
+    monthlyEdits: 0,
   },
-
   pro: {
-    monthlyFiles: 20,   // 🔥 bezpieczny poziom przy 49 zł
-    dailyFiles: 5,      // 🔥 zabezpieczenie przed spaleniem budżetu
+    monthlyFiles: 20,
+    dailyFiles: 5,
+    monthlyEdits: 0, // 👈 brak edycji AI
   },
-
   pro_plus: {
-    monthlyFiles: 100,  // 🔥 przy 149 zł
-    dailyFiles: 20,
+    monthlyFiles: 100,
+    dailyFiles: 30,
+    monthlyEdits: 10,
+    autoMask: 1,
   },
 } as const;
 
