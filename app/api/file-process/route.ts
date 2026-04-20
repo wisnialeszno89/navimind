@@ -1,3 +1,4 @@
+console.log("🔥 FILE PROCESS HIT");
 import { NextResponse } from "next/server";
 import { getUserPlan } from "../../lib/userPlan";
 import { getUserId } from "../../lib/userId";
@@ -31,13 +32,7 @@ export async function POST(req: Request) {
     prompt.toLowerCase().includes("usuń tło") ||
     prompt.toLowerCase().includes("remove background");
 
-    if (isAutoMask && plan !== "pro_plus") {
-    return NextResponse.json(
-    { error: "PRO_PLUS_REQUIRED" },
-    { status: 403 }
-  );
-}
-if (isAutoMask) {
+  if (isAutoMask) {
   if (plan !== "pro_plus") {
     return NextResponse.json(
       { error: "PRO_PLUS_REQUIRED" },
@@ -61,6 +56,12 @@ if (isAutoMask) {
   }
 }
   const lower = prompt.toLowerCase();
+  const isAnalysis =
+  lower.includes("co jest") ||
+  lower.includes("opisz") ||
+  lower.includes("co widzisz") ||
+  lower.includes("what is") ||
+  lower.includes("describe");
 
   const flags = {
     isAutoMask:
@@ -76,19 +77,50 @@ if (isAutoMask) {
 };
 
     if (type.startsWith("image/")) {
-      if (!canUse(plan, "image")) {
-        return NextResponse.json({ error: "PRO_REQUIRED" }, { status: 403 });
-      }
+  if (!canUse(plan, "image")) {
+    return NextResponse.json({ error: "PRO_REQUIRED" }, { status: 403 });
+  }
 
-      const result = await processImage({ file, prompt, mask });
+  // 🧠 ANALIZA (nie generujemy obrazu!)
+  if (isAnalysis) {
+    const { default: OpenAI } = await import("openai");
 
-      const imageBase64 = result.data?.[0]?.b64_json;
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
-      return NextResponse.json({
-        type: "image",
-        data: imageBase64,
-      });
-    }
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: prompt },
+            {
+              type: "input_image",
+              image_url: file,
+            },
+          ],
+        },
+      ],
+    });
+
+    return NextResponse.json({
+      type: "text",
+      data: response.output_text || "Brak odpowiedzi",
+    });
+  }
+
+  // 🎨 EDYCJA OBRAZU
+  const result = await processImage({ file, prompt, mask });
+
+  const imageBase64 = result.data?.[0]?.b64_json;
+
+  return NextResponse.json({
+    type: "image",
+    data: imageBase64,
+  });
+}
 
     /* ================= PDF ================= */
 
