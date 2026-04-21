@@ -36,10 +36,6 @@ function getUidFromUrl(req: Request) {
   }
 }
 
-function sse(data: any) {
-  return `data: ${JSON.stringify(data)}\n\n`;
-}
-
 function isRole(r: any): r is ChatRole {
   return r === "user" || r === "assistant";
 }
@@ -50,7 +46,7 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "UNAUTHORIZED" }), {
       status: 401,
     });
-
+    
   const email = getSessionEmail();
   const plan = await getUserPlan();
 
@@ -132,54 +128,37 @@ ${relationalCore}
   const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
+       
+      const response = await openai.chat.completions.create({
+  model: "gpt-4.1-mini",
+  temperature: 0.7,
+  messages: [
+    { role: "system", content: systemPrompt },
+    ...history,
+    { role: "user", content: userText },
+  ],
+});
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      controller.enqueue(encoder.encode(sse({ type: "start", plan, chatId })));
+const fullText =
+  response.choices?.[0]?.message?.content || "Brak odpowiedzi";
 
-      let fullText = "";
+const finalText = shapeResponse({
+  text: fullText,
+  softLimit,
+  mode,
+});
 
-      try {
-        const response = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
-          temperature: 0.7,
-          top_p: 0.9,
-          stream: true,
-          messages: [
-        { role: "system", content: systemPrompt },
+/* SAVE */
 
-        // 🔥 NAJWAŻNIEJSZE
-        ...clientMessages.slice(-10),
-
-        { role: "user", content: userText },
-        ],
-        });
-
-        for await (const part of response) {
-          const delta = part.choices?.[0]?.delta?.content ?? "";
-          if (!delta) continue;
-
-          fullText += delta;
-          controller.enqueue(encoder.encode(sse({ type: "delta", delta })));
-        }
-
-        if (fullText.trim()) {
-  const finalText = shapeResponse({
-    text: fullText.trim(),
-    softLimit,
-    mode,
+if (plan === "free") {
+  await pushDemoMemory(userId, { role: "user", content: userText });
+  await pushDemoMemory(userId, {
+    role: "assistant",
+    content: finalText,
   });
+}
 
-  if (plan === "free") {
-    await pushDemoMemory(userId, { role: "user", content: userText });
-    await pushDemoMemory(userId, {
-      role: "assistant",
-      content: finalText,
-    });
-  }
-
-  if (plan !== "free" && email && chatId) {
+if (plan !== "free" && email && chatId) {
   await appendChatMessageByEmail(email, chatId, {
     id: crypto.randomUUID(),
     role: "user",
@@ -194,23 +173,13 @@ ${relationalCore}
     createdAt: Date.now(),
   });
 }
-}
 
-        controller.enqueue(encoder.encode(sse({ type: "done" })));
-        controller.close();
-      } catch (e) {
-        console.error(e);
-        controller.enqueue(encoder.encode(sse({ type: "error" })));
-        controller.close();
-      }
-    },
-  });
+/* RESPONSE */
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+return new Response(
+  JSON.stringify({ reply: finalText }),
+  {
+    headers: { "Content-Type": "application/json" },
+  }
+);
 }

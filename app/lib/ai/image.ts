@@ -30,7 +30,7 @@ export async function processImage({
   const lower = prompt.toLowerCase();
 
   const imageFile = base64ToFile(file, "image.png");
-  const maskFile = mask ? base64ToFile(mask, "mask.png") : undefined;
+  const manualMask = mask ? base64ToFile(mask, "mask.png") : undefined;
 
   const isRemoveBg =
     lower.includes("usuń tło") ||
@@ -40,49 +40,61 @@ export async function processImage({
     lower.includes("zmień tło") ||
     lower.includes("change background");
 
-  /* ================= AUTO MASK (MVP) ================= */
+  /* ================= AUTO MASK ================= */
 
   if (isRemoveBg || isChangeBg) {
-  try {
-    const maskBase64 = await getMaskFromRemoveBg(file);
+    try {
+      const maskBase64 = await getMaskFromRemoveBg(file);
+      const autoMask = base64ToFile(maskBase64, "mask.png");
 
-    const imageFile = base64ToFile(file, "image.png");
-    const maskFile = base64ToFile(maskBase64, "mask.png");
+      return await openai.images.edit({
+        model: "gpt-image-1",
+        image: imageFile,
+        mask: autoMask,
+        prompt: `
+${prompt}
 
-    return await openai.images.edit({
-      model: "gpt-image-1",
-      image: imageFile,
-      mask: maskFile,
-      prompt: `
-      ${prompt}
+Zachowaj główny obiekt.
+Naturalne światło.
+Brak artefaktów.
+`,
+        size: "1024x1024",
+      });
+    } catch (err) {
+      console.error("AUTO MASK FAILED:", err);
 
-    Zachowaj główny obiekt.
-    Naturalne światło.
-    Brak artefaktów.
+      // 🔥 fallback = dalej EDYCJA (bez maski)
+      return await openai.images.edit({
+        model: "gpt-image-1",
+        image: imageFile,
+        prompt: `
+        ${prompt}
 
-  Dodaj bardzo subtelny znak wodny "NaviMind AI" w dolnym rogu.
-  `,
-      size: "1024x1024",
-    });
-  } catch (err) {
-    console.error("AUTO MASK FAILED:", err);
+      CRITICAL RULES:
+      - Replace the background completely
+      - Do NOT overlay or blend images
+      - Do NOT duplicate the original image
+      - Output must be a SINGLE clean image
 
-    // 🔁 fallback (to co masz teraz)
-    return await openai.images.generate({
-      model: "gpt-image-1",
-      prompt,
-      size: "1024x1024",
-    });
+      Keep:
+      - main subject
+      - proportions
+      - realism
+
+      No artifacts
+      `,
+        size: "1024x1024",
+      });
+    }
   }
-}
 
-  /* ================= MASK (manual) ================= */
+  /* ================= MANUAL MASK ================= */
 
-  if (maskFile) {
+  if (manualMask) {
     return await openai.images.edit({
       model: "gpt-image-1",
       image: imageFile,
-      mask: maskFile,
+      mask: manualMask,
       prompt,
       size: "1024x1024",
     });
@@ -90,17 +102,16 @@ export async function processImage({
 
   /* ================= STANDARD EDIT ================= */
 
-  return await openai.images.generate({
+  return await openai.images.edit({
     model: "gpt-image-1",
+    image: imageFile,
     prompt: `
-Edytuj obraz:
-
 ${prompt}
 
 Zachowaj:
-- strukturę
-- realizm
+- strukturę obrazu
 - twarz (jeśli jest)
+- realizm
 
 Brak artefaktów.
 `,

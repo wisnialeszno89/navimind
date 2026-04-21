@@ -99,6 +99,7 @@ export async function POST(req: Request) {
             {
               type: "input_image",
               image_url: file,
+              detail: "low",
             },
           ],
         },

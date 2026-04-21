@@ -13,4 +13,7 @@ export async function POST(req: Request) {
   saveShare(id, image);
 
   return NextResponse.json({ id });
+  const clean = image.includes(",") ? image.split(",")[1] : image;
+
+saveShare(id, clean);
 }

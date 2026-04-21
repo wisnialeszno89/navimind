@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useChatStore } from "../lib/chatStore";
 import ProNotice from "./ProNotice";
 import { Plus } from "lucide-react";
@@ -22,50 +22,80 @@ export default function SendForm({ setIsTyping, chatId }: any) {
   const [selected, setSelected] = useState<any>(null);
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
 
+  const [mode, setMode] = useState<"idle" | "preview" | "edit">("idle");
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const add = useChatStore((s) => s.add);
   const plan = useChatStore((s) => s.plan);
 
+  /* ================= SHARE ================= */
+
+  async function shareImage(base64: string) {
+    try {
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ image: base64 }),
+      });
+
+      const data = await res.json();
+      const url = `${window.location.origin}/share/${data.id}`;
+
+      await navigator.clipboard.writeText(url);
+      window.open(url, "_blank");
+
+      add({
+        role: "assistant",
+        content: `🔗 Link skopiowany:\n${url}`,
+      });
+    } catch {
+      add({
+        role: "assistant",
+        content: "❌ Nie udało się udostępnić",
+      });
+    }
+  }
+
   /* ================= FILE ================= */
 
   function handleFile(file: File) {
     setPendingFile(file);
+    setMode("preview");
 
     if (file.type.startsWith("image/")) {
-      setPreviewUrl(URL.createObjectURL(file));
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+
+      // miniaturka w czacie
+      add({
+        role: "user",
+        content: `![img](${url})`,
+      });
     }
 
     add({
       role: "assistant",
-      content: "🔥 Wrzuciłeś plik — opisz co chcesz zrobić",
+      content: "📸 Zdjęcie gotowe. Co chcesz z nim zrobić?",
     });
   }
 
   /* ================= PRESETS ================= */
 
   function sendPreset(preset: string) {
-    setLastPrompt(preset);
-
-    if (fileHistory.length > 0) {
-      add({ role: "user", content: preset });
-      handleFileProcessFromMemory(preset);
-      return;
-    }
-
-    add({
-      role: "assistant",
-      content: "📸 Najpierw dodaj zdjęcie",
-    });
+    setText(preset);
+    setTimeout(() => send(), 50);
   }
 
   function randomPreset() {
     const presets = [
-      "zmień tło na futurystyczne miasto",
-      "dodaj światło studyjne",
-      "zrób styl cinematic",
-      "dodaj neonowe kolory",
+      "usuń tło",
+      "zmień tło na biuro",
       "popraw jakość",
+      "dodaj światło studyjne",
+      "styl cinematic",
     ];
 
     const random =
@@ -78,156 +108,6 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
     sendPreset(random);
   }
-async function handleFileProcessFromMemory(prompt: string) {
-  const current = fileHistory[currentIndex];
-  if (!current) return;
-
-  add({ role: "assistant", content: "⏳ Edytuję..." });
-
-  try {
-    const res = await fetch("/api/file-process", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        file: current.base64,
-        type: current.type,
-        prompt,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (data.type === "image") {
-      const url = `data:image/png;base64,${data.data}`;
-
-      setSelected({
-        before: `data:image/png;base64,${current.base64}`,
-        after: url,
-      });
-
-      setFileHistory((prev) => [
-        ...prev,
-        { base64: data.data, type: "image/png" },
-      ]);
-
-      add({
-        role: "assistant",
-        content: `![img](${url})`,
-      });
-    }
-
-    if (data.type === "text") {
-      add({
-        role: "assistant",
-        content: data.data,
-      });
-    }
-
-  } catch (err) {
-    add({
-      role: "assistant",
-      content: "❌ Błąd edycji",
-    });
-  }
-}
-  /* ================= SEND ================= */
-
-  async function send() {
-    const raw = text.trim();
-    if (!raw) return;
-
-    setLastPrompt(raw);
-    setText("");
-
-    // 🔁 retry
-    if (raw.toLowerCase().includes("spróbuj ponownie")) {
-      if (lastPrompt) {
-        await handleFileProcessFromMemory(lastPrompt);
-      }
-      return;
-    }
-
-    // 🔁 edycja pliku
-    if (fileHistory.length > 0 && !pendingFile) {
-      add({ role: "user", content: raw });
-      await handleFileProcessFromMemory(raw);
-      return;
-    }
-
-    // 🔒 plan
-    if (pendingFile && plan === "free") {
-      setShowPro(true);
-      return;
-    }
-
-    // 📸 plik
-    if (pendingFile) {
-      add({ role: "user", content: raw });
-      await processFile(pendingFile, raw);
-      return;
-    }
-
-    // 💬 CHAT
-    // 💬 CHAT
-setIsTyping(true);
-
-// dodaj user message
-add({ role: "user", content: raw });
-
-// dodaj placeholder (jak w starej wersji)
-add({ role: "assistant", content: "..." });
-
-try {
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      chatId,
-      message: raw,
-    }),
-  });
-
-  const data = await res.json();
-
-  console.log("CHAT RESPONSE:", data);
-
-  const reply =
-    data.reply ||
-    data.output_text ||
-    data.text ||
-    "⚠️ Brak odpowiedzi";
-
-  // 🔥 NADPISUJEMY OSTATNIĄ WIADOMOŚĆ (jak wcześniej)
-  const state = useChatStore.getState();
-  const messages = [...state.messages];
-
-  messages[messages.length - 1] = {
-    role: "assistant",
-    content: reply,
-  };
-
-  state.setMessages(messages);
-
-} catch (err) {
-  console.error(err);
-
-  const state = useChatStore.getState();
-  const messages = [...state.messages];
-
-  messages[messages.length - 1] = {
-    role: "assistant",
-    content: "❌ Błąd czatu",
-  };
-
-  state.setMessages(messages);
-
-} finally {
-  setIsTyping(false);
-}
 
   /* ================= FILE PROCESS ================= */
 
@@ -258,10 +138,12 @@ try {
     if (data.type === "image") {
       const url = `data:image/png;base64,${data.data}`;
 
+      setPreviewUrl(null); // 🔥 usuwa overlay bug
+
       setSelected({
-        before: previewUrl,
-        after: url,
-      });
+      before: previewUrl || undefined,
+      after: url,
+    });
 
       setFileHistory((prev) => [
         ...prev,
@@ -272,6 +154,11 @@ try {
         role: "assistant",
         content: `![img](${url})`,
       });
+
+      add({
+        role: "assistant",
+        content: "⬇️ Możesz pobrać lub udostępnić obraz poniżej",
+      });
     }
 
     setPendingFile(null);
@@ -280,6 +167,8 @@ try {
   async function handleFileProcessFromMemory(prompt: string) {
     const current = fileHistory[currentIndex];
     if (!current) return;
+
+    add({ role: "assistant", content: "⏳ Edytuję..." });
 
     const res = await fetch("/api/file-process", {
       method: "POST",
@@ -307,6 +196,16 @@ try {
         ...prev,
         { base64: data.data, type: "image/png" },
       ]);
+
+      add({
+        role: "assistant",
+        content: `![img](${url})`,
+      });
+
+      add({
+        role: "assistant",
+        content: "⬇️ Możesz pobrać lub udostępnić obraz poniżej",
+      });
     }
   }
 
@@ -318,12 +217,80 @@ try {
     });
   }
 
+  /* ================= SEND ================= */
+
+  async function send() {
+    const raw = text.trim();
+    if (!raw) return;
+
+    setLastPrompt(raw);
+    setText("");
+
+    if (mode === "preview" && pendingFile) {
+      add({ role: "user", content: raw });
+      await processFile(pendingFile, raw);
+      setMode("edit");
+      return;
+    }
+
+    if (mode === "edit") {
+      add({ role: "user", content: raw });
+      await handleFileProcessFromMemory(raw);
+      return;
+    }
+
+    // chat
+    setIsTyping(true);
+
+    add({ role: "user", content: raw });
+    add({ role: "assistant", content: "..." });
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chatId,
+          message: raw,
+        }),
+      });
+
+      const data = await res.json();
+
+      const reply =
+        data.reply || "⚠️ Brak odpowiedzi";
+
+      const state = useChatStore.getState();
+      const messages = [...state.messages];
+
+      messages[messages.length - 1] = {
+        role: "assistant",
+        content: reply,
+      };
+
+      state.setMessages(messages);
+    } catch {
+      const state = useChatStore.getState();
+      const messages = [...state.messages];
+
+      messages[messages.length - 1] = {
+        role: "assistant",
+        content: "❌ Błąd czatu",
+      };
+
+      state.setMessages(messages);
+    } finally {
+      setIsTyping(false);
+    }
+  }
+
   /* ================= UI ================= */
 
   return (
     <div className="border-t p-3 space-y-3">
 
-      {/* HOOK */}
       <div className="text-center">
         <div className="text-lg font-semibold">
           Zmień zdjęcie w 5 sekund
@@ -333,7 +300,6 @@ try {
         </div>
       </div>
 
-      {/* ACTIONS */}
       <div className="flex gap-2 justify-center flex-wrap">
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -350,7 +316,6 @@ try {
         </button>
       </div>
 
-      {/* SLIDER */}
       {selected && (
         <BeforeAfterSlider
           before={selected.before}
@@ -358,7 +323,25 @@ try {
         />
       )}
 
-      {/* INPUT */}
+      {selected?.after && (
+        <div className="flex gap-2 justify-center mt-2">
+          <a
+            href={selected.after}
+            download="navimind-image.png"
+            className="px-3 py-1 text-xs bg-white/10 rounded"
+          >
+            ⬇️ Pobierz
+          </a>
+
+          <button
+            onClick={() => shareImage(selected.after)}
+            className="px-3 py-1 text-xs bg-white/10 rounded"
+          >
+            🔗 Udostępnij
+          </button>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -401,5 +384,4 @@ try {
       {showPro && <ProNotice onClose={() => setShowPro(false)} />}
     </div>
   );
-}
 }
