@@ -5,7 +5,6 @@ import { useChatStore } from "../lib/chatStore";
 import ProNotice from "./ProNotice";
 import { Plus } from "lucide-react";
 import { imageToBase64 } from "../lib/imageToBase64";
-import BeforeAfterSlider from "./BeforeAfterSlider";
 
 export default function SendForm({ setIsTyping, chatId }: any) {
   const [text, setText] = useState("");
@@ -13,48 +12,72 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  const [fileHistory, setFileHistory] = useState<
-    { base64: string; type: string }[]
-  >([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  const [selected, setSelected] = useState<any>(null);
-  const [lastPrompt, setLastPrompt] = useState<string | null>(null);
-
-  const [mode, setMode] = useState<"idle" | "preview" | "edit">("idle");
+  const [selected, setSelected] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const add = useChatStore((s) => s.add);
   const plan = useChatStore((s) => s.plan);
+  function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
+
+  /* ================= VOICE ================= */
+
+  function startVoice() {
+    const SpeechRecognition =
+      (window as any).webkitSpeechRecognition ||
+      (window as any).SpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Brak wsparcia dla mikrofonu");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "pl-PL";
+    recognition.start();
+
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript;
+      setText((prev: string) => prev + " " + transcript);
+    };
+
+    recognitionRef.current = recognition;
+  }
 
   /* ================= SHARE ================= */
 
   async function shareImage(base64: string) {
     try {
-      const res = await fetch("/api/share", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ image: base64 }),
-      });
+      const blob = await (await fetch(base64)).blob();
+      const file = new File([blob], "navimind.png", { type: blob.type });
 
-      const data = await res.json();
-      const url = `${window.location.origin}/share/${data.id}`;
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "NaviMind AI",
+        });
+        return;
+      }
 
+      const url = URL.createObjectURL(blob);
       await navigator.clipboard.writeText(url);
-      window.open(url, "_blank");
 
       add({
         role: "assistant",
-        content: `🔗 Link skopiowany:\n${url}`,
+        content: "🔗 Link skopiowany",
       });
+
     } catch {
       add({
         role: "assistant",
-        content: "❌ Nie udało się udostępnić",
+        content: "❌ Udostępnianie nie działa",
       });
     }
   }
@@ -63,159 +86,86 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
   function handleFile(file: File) {
     setPendingFile(file);
-    setMode("preview");
 
     if (file.type.startsWith("image/")) {
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-
-      // miniaturka w czacie
-      add({
-        role: "user",
-        content: `![img](${url})`,
-      });
+      setPreviewUrl(URL.createObjectURL(file));
     }
 
     add({
       role: "assistant",
-      content: "📸 Zdjęcie gotowe. Co chcesz z nim zrobić?",
+      content: "📸 Co chcesz zmienić?",
     });
   }
 
-  /* ================= PRESETS ================= */
+  /* ================= PROCESS ================= */
 
-  function sendPreset(preset: string) {
-    setText(preset);
-    setTimeout(() => send(), 50);
+ async function processFile(file: File, prompt: string) {
+  add({
+    role: "assistant",
+    content:
+      file.type === "application/pdf"
+        ? "⏳ Przetwarzam PDF..."
+        : "⏳ Generuję obraz...",
+  });
+
+  let base64: string;
+
+  if (file.type.startsWith("image/")) {
+    base64 = await imageToBase64(file, 800, 0.8);
+  } else {
+    base64 = await fileToBase64(file);
   }
 
-  function randomPreset() {
-    const presets = [
-      "usuń tło",
-      "zmień tło na biuro",
-      "popraw jakość",
-      "dodaj światło studyjne",
-      "styl cinematic",
-    ];
+  const res = await fetch("/api/file-process", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      file: base64,
+      type: file.type,
+      prompt,
+    }),
+  });
 
-    const random =
-      presets[Math.floor(Math.random() * presets.length)];
+  const data = await res.json();
 
+  // 🖼️ IMAGE
+  if (data.type === "image") {
+    const url = `data:image/png;base64,${data.data}`;
+    setPreviewUrl(null);
+    setSelected(url);
+    setPendingFile(null);
+    return;
+  }
+
+  // 📄 PDF
+  if (data.type === "pdf") {
+  const url = `data:application/pdf;base64,${data.data}`;
+
+  // 👇 ZAPIS DO STANU zamiast wrzucania w chat
+  setSelected(url);
+  setPreviewUrl(null);
+  setPendingFile(null);
+
+  add({
+    role: "assistant",
+    content: "📄 Gotowy PDF poniżej",
+  });
+
+  return;
+}
+
+  // 📝 TEXT
+  if (data.type === "text") {
     add({
       role: "assistant",
-      content: `🎲 ${random}`,
+      content: data.data,
     });
-
-    sendPreset(random);
-  }
-
-  /* ================= FILE PROCESS ================= */
-
-  async function processFile(file: File, prompt: string) {
-    add({ role: "assistant", content: "⏳ Przetwarzam..." });
-
-    const base64 = file.type.startsWith("image/")
-      ? await imageToBase64(file, 800, 0.8)
-      : await fileToBase64(file);
-
-    setFileHistory([{ base64, type: file.type }]);
-    setCurrentIndex(0);
-
-    const res = await fetch("/api/file-process", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        file: base64,
-        type: file.type,
-        prompt,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (data.type === "image") {
-      const url = `data:image/png;base64,${data.data}`;
-
-      setPreviewUrl(null); // 🔥 usuwa overlay bug
-
-      setSelected({
-      before: previewUrl || undefined,
-      after: url,
-    });
-
-      setFileHistory((prev) => [
-        ...prev,
-        { base64: data.data, type: "image/png" },
-      ]);
-
-      add({
-        role: "assistant",
-        content: `![img](${url})`,
-      });
-
-      add({
-        role: "assistant",
-        content: "⬇️ Możesz pobrać lub udostępnić obraz poniżej",
-      });
-    }
 
     setPendingFile(null);
   }
-
-  async function handleFileProcessFromMemory(prompt: string) {
-    const current = fileHistory[currentIndex];
-    if (!current) return;
-
-    add({ role: "assistant", content: "⏳ Edytuję..." });
-
-    const res = await fetch("/api/file-process", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        file: current.base64,
-        type: current.type,
-        prompt,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (data.type === "image") {
-      const url = `data:image/png;base64,${data.data}`;
-
-      setSelected({
-        before: `data:image/png;base64,${current.base64}`,
-        after: url,
-      });
-
-      setFileHistory((prev) => [
-        ...prev,
-        { base64: data.data, type: "image/png" },
-      ]);
-
-      add({
-        role: "assistant",
-        content: `![img](${url})`,
-      });
-
-      add({
-        role: "assistant",
-        content: "⬇️ Możesz pobrać lub udostępnić obraz poniżej",
-      });
-    }
-  }
-
-  function fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.readAsDataURL(file);
-    });
-  }
+}
 
   /* ================= SEND ================= */
 
@@ -223,23 +173,16 @@ export default function SendForm({ setIsTyping, chatId }: any) {
     const raw = text.trim();
     if (!raw) return;
 
-    setLastPrompt(raw);
     setText("");
 
-    if (mode === "preview" && pendingFile) {
-      add({ role: "user", content: raw });
-      await processFile(pendingFile, raw);
-      setMode("edit");
-      return;
-    }
+    if (pendingFile) {
+  add({ role: "user", content: raw });
 
-    if (mode === "edit") {
-      add({ role: "user", content: raw });
-      await handleFileProcessFromMemory(raw);
-      return;
-    }
+  await processFile(pendingFile, raw);
 
-    // chat
+  return;
+}
+
     setIsTyping(true);
 
     add({ role: "user", content: raw });
@@ -259,18 +202,16 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
       const data = await res.json();
 
-      const reply =
-        data.reply || "⚠️ Brak odpowiedzi";
-
       const state = useChatStore.getState();
       const messages = [...state.messages];
 
       messages[messages.length - 1] = {
         role: "assistant",
-        content: reply,
+        content: data.reply || "⚠️ Brak odpowiedzi",
       };
 
       state.setMessages(messages);
+
     } catch {
       const state = useChatStore.getState();
       const messages = [...state.messages];
@@ -300,60 +241,75 @@ export default function SendForm({ setIsTyping, chatId }: any) {
         </div>
       </div>
 
-      <div className="flex gap-2 justify-center flex-wrap">
+      <div className="flex justify-center">
         <button
           onClick={() => fileInputRef.current?.click()}
           className="px-3 py-2 bg-blue-600 rounded text-sm"
         >
           📸 Dodaj zdjęcie
         </button>
-
-        <button
-          onClick={randomPreset}
-          className="px-2 py-1 text-xs bg-white/10 rounded"
-        >
-          🎲 Eksperymentuj
-        </button>
       </div>
 
-      {selected && (
-        <BeforeAfterSlider
-          before={selected.before}
-          after={selected.after}
-        />
-      )}
-
-      {selected?.after && (
-        <div className="flex gap-2 justify-center mt-2">
-          <a
-            href={selected.after}
-            download="navimind-image.png"
-            className="px-3 py-1 text-xs bg-white/10 rounded"
-          >
-            ⬇️ Pobierz
-          </a>
-
-          <button
-            onClick={() => shareImage(selected.after)}
-            className="px-3 py-1 text-xs bg-white/10 rounded"
-          >
-            🔗 Udostępnij
-          </button>
+      {previewUrl && (
+        <div className="flex justify-center">
+          <img src={previewUrl} className="max-w-[200px] rounded" />
         </div>
       )}
+
+    {selected && (
+  <div className="flex flex-col items-center gap-2">
+
+    {/* 🖼️ jeśli obraz */}
+    {selected.startsWith("data:image") && (
+      <img
+        src={selected}
+        className="max-w-[320px] md:max-w-[420px] max-h-[60vh] object-contain rounded shadow"
+      />
+    )}
+
+    {/* 📄 jeśli PDF */}
+    {selected.startsWith("data:application/pdf") && (
+      <iframe
+        src={selected}
+        className="w-full max-w-[420px] h-[500px] rounded"
+      />
+    )}
+
+    <div className="flex gap-2 text-xs">
+
+      <a
+        href={selected}
+        download={selected.includes("pdf") ? "navimind.pdf" : "navimind.png"}
+        className="px-2 py-1 bg-white/10 rounded"
+      >
+        ⬇️ Pobierz
+      </a>
+
+      <button
+        onClick={() => shareImage(selected)}
+        className="px-2 py-1 bg-white/10 rounded"
+      >
+        🔗 Udostępnij
+      </button>
+
+    </div>
+
+  </div>
+)}
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
           send();
         }}
-        className="flex gap-2"
+        className="flex items-end gap-2"
       >
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-        >
+        <button type="button" onClick={() => fileInputRef.current?.click()}>
           <Plus size={18} />
+        </button>
+
+        <button type="button" onClick={startVoice}>
+          🎤
         </button>
 
         <input
@@ -368,14 +324,19 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            e.target.style.height = "auto";
+            e.target.style.height = e.target.scrollHeight + "px";
+          }}
+          rows={1}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               send();
             }
           }}
-          className="flex-1 p-3 rounded bg-black/20"
+          className="flex-1 p-3 rounded bg-black/20 resize-none overflow-hidden"
         />
 
         <button type="submit">➤</button>

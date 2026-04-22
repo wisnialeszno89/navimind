@@ -1,24 +1,20 @@
 import pdfParse from "pdf-parse";
-import { openai } from "../ai/openai";
 
-export async function processPdf(base64: string, prompt: string) {
-  const clean = base64.includes(",") ? base64.split(",")[1] : base64;
+export async function processPdf(base64: string) {
+  const clean = base64.includes(",")
+    ? base64.split(",")[1]
+    : base64;
 
   const buffer = Buffer.from(clean, "base64");
-  const parsed = await pdfParse(buffer);
 
-  const text = parsed.text;
+  const data = await pdfParse(buffer);
 
-  const response = await openai.responses.create({
-    model: "gpt-4.1-mini",
-    input: `
-Polecenie:
-${prompt}
+// 🔥 FIX ENCODING + NORMALIZACJA
+  const text = data.text
+  .normalize("NFKC")
+  .replace(/\r/g, "")
+  .replace(/\t/g, " ")
+  .replace(/\u0000/g, "");
 
-TEKST:
-${text.slice(0, 20000)}
-`,
-  });
-
-  return response.output_text || "";
+  return text;
 }

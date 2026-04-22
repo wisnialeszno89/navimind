@@ -120,6 +120,10 @@ const relationalCore = buildRelationalCore({
 
 const systemPrompt = `
 ${relationalCore}
+
+You CAN edit images when user uploads them.
+Do NOT say you cannot edit images.
+Instead ask what to change.
 `;
 
   /* ========= OPENAI ========= */

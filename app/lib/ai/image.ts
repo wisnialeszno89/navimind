@@ -70,11 +70,11 @@ Brak artefaktów.
         prompt: `
         ${prompt}
 
-      CRITICAL RULES:
-      - Replace the background completely
-      - Do NOT overlay or blend images
-      - Do NOT duplicate the original image
-      - Output must be a SINGLE clean image
+      CRITICAL:
+      - Replace the original background completely
+      - Do NOT overlay images
+      - Do NOT duplicate the image
+      - Output must be ONE clean image
 
       Keep:
       - main subject
