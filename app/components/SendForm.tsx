@@ -17,6 +17,7 @@ export default function SendForm({ setIsTyping, chatId }: any) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any>(null);
 
+  const [isSending, setIsSending] = useState(false);
   const add = useChatStore((s) => s.add);
   const plan = useChatStore((s) => s.plan);
   function fileToBase64(file: File): Promise<string> {
@@ -41,6 +42,8 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
     const recognition = new SpeechRecognition();
     recognition.lang = "pl-PL";
+    recognition.continuous = true;
+    recognition.interimResults = false;
     recognition.start();
 
     recognition.onresult = (e: any) => {
@@ -169,63 +172,79 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
   /* ================= SEND ================= */
 
-  async function send() {
-    const raw = text.trim();
-    if (!raw) return;
+async function send() {
+  const raw = text.trim();
+  if (!raw) return;
 
-    setText("");
+  if (isSending) return;
+  setIsSending(true);
 
-    if (pendingFile) {
-  add({ role: "user", content: raw });
+  setText("");
 
-  await processFile(pendingFile, raw);
-
-  return;
-}
-
-    setIsTyping(true);
-
+  // 📎 FILE FLOW
+  if (pendingFile) {
     add({ role: "user", content: raw });
-    add({ role: "assistant", content: "..." });
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          chatId,
-          message: raw,
-        }),
-      });
-
-      const data = await res.json();
-
-      const state = useChatStore.getState();
-      const messages = [...state.messages];
-
-      messages[messages.length - 1] = {
-        role: "assistant",
-        content: data.reply || "⚠️ Brak odpowiedzi",
-      };
-
-      state.setMessages(messages);
-
-    } catch {
-      const state = useChatStore.getState();
-      const messages = [...state.messages];
-
-      messages[messages.length - 1] = {
-        role: "assistant",
-        content: "❌ Błąd czatu",
-      };
-
-      state.setMessages(messages);
+      await processFile(pendingFile, raw);
     } finally {
-      setIsTyping(false);
+      setIsSending(false);
     }
+
+    return;
   }
+
+  setIsTyping(true);
+
+  add({ role: "user", content: raw });
+  add({ role: "assistant", content: "Analizuję..." });
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chatId,
+        message: raw,
+      }),
+    });
+
+    const data = await res.json();
+
+    const state = useChatStore.getState();
+    const messages = [...state.messages];
+
+    const reply =
+      data?.reply && data.reply.trim()
+        ? data.reply
+        : "Coś tu nie zagrało. Spróbuj jeszcze raz.";
+
+    messages[messages.length - 1] = {
+    role: "assistant",
+    content: reply,
+    highlight: data.highlight || null,
+  };
+
+    state.setMessages(messages);
+
+  } catch {
+    const state = useChatStore.getState();
+    const messages = [...state.messages];
+
+    messages[messages.length - 1] = {
+      role: "assistant",
+      content: "❌ Błąd czatu",
+    };
+
+    state.setMessages(messages);
+
+  } finally {
+    setIsTyping(false);
+    setIsSending(false);
+  }
+} 
 
   /* ================= UI ================= */
 
@@ -322,9 +341,10 @@ export default function SendForm({ setIsTyping, chatId }: any) {
           }}
         />
 
-        <textarea
-          value={text}
-          onChange={(e) => {
+            <textarea
+            value={text}
+            placeholder="Napisz co masz na głowie..."
+            onChange={(e) => {
             setText(e.target.value);
             e.target.style.height = "auto";
             e.target.style.height = e.target.scrollHeight + "px";

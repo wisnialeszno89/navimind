@@ -10,13 +10,26 @@ export type ConversationAnalysis = {
   mode: ConversationMode;
   simplified: boolean;
 };
+
+type ChatMessage = {
+  role: string;
+  content: string;
+};
+
 export function analyzeConversation(
   userText: string,
-  history: { role: string; content: string }[]
+  history: ChatMessage[]
 ): ConversationAnalysis {
   const text = userText.toLowerCase();
 
-  /* ===== KONTEKST TECHNICZNY / PRAWNY — NIE NAZYWAJ EMOCJI ===== */
+  // ===== PRIORYTETY =====
+  // 1. crisis
+  // 2. high emotion
+  // 3. repeated topic
+  // 4. relational conflict
+  // 5. fallback
+
+  /* ===== KONTEKST TECHNICZNY / PRAWNY ===== */
 
   const technicalContext =
     /(straż|policja|mandat|auto|samochód|parking|przegląd|dowód rejestracyjny|holowanie|kara|przepis|prawo|sąd|urzęd|wniosek|podatek|umowa|faktura|vercel|kod|deploy|api|repo|git)/i.test(
@@ -34,18 +47,18 @@ export function analyzeConversation(
       text
     );
 
-  if (crisisSignal) return { mode: "crisis", simplified: false };
+  if (crisisSignal) {
+    return { mode: "crisis", simplified: false };
+  }
 
   /* ===== EMOCJE ===== */
-  const frustration =
-  /(kurde|wkurza|bez sensu|co za|masakra|pojeba|idiotyczne)/i.test(text);
 
-  if (frustration)
-  return { mode: "realism", simplified: false };
   const highEmotion =
-    /(boję|nienawidzę|mam dość|nie wytrzymam|to boli|bez sensu|załamany|rozbity|wkurw|pojeb)/i.test(
+    /(boję|nienawidzę|mam dość|nie wytrzymam|to boli|załamany|rozbity|wkurw|pojeb)/i.test(
       text
     );
+
+  /* ===== WZORCE RELACYJNE ===== */
 
   const blameLanguage =
     /(to przez|jej wina|jego wina|wszyscy są|ona zawsze|on zawsze)/i.test(text);
@@ -66,32 +79,53 @@ export function analyzeConversation(
       text
     );
 
-  const lastUserMessages = history
-    .filter((m) => m.role === "user")
-    .slice(-3)
-    .map((m) => m.content.toLowerCase());
+  /* ===== HISTORIA ===== */
 
-  const repeatedTopic = lastUserMessages.some((msg) =>
-    msg.slice(0, 60) === text.slice(0, 60)
+  const lastUserMessages = history
+    .filter((m: ChatMessage) => m.role === "user")
+    .slice(-3)
+    .map((m: ChatMessage) => m.content.toLowerCase());
+
+  const repeatedTopic = lastUserMessages.some(
+    (msg: string) =>
+      msg.includes(text.slice(0, 40)) ||
+      text.includes(msg.slice(0, 40))
   );
 
-  if (childrenContext && blameLanguage)
+  /* ===== LOGIKA ===== */
+
+  if (childrenContext && blameLanguage) {
     return { mode: "realism", simplified: false };
+  }
 
-  if (institutionalEscalation && childrenContext)
+  if (institutionalEscalation && childrenContext) {
     return { mode: "mentor", simplified: false };
+  }
 
-  if (identityHit && childrenContext)
+  if (identityHit && childrenContext) {
     return { mode: "mentor", simplified: false };
+  }
 
-  if (highEmotion && !technicalContext)
+  if (highEmotion && !technicalContext) {
     return { mode: "stabilize", simplified: false };
+  }
 
-  if (repeatedTopic)
+  if (repeatedTopic) {
     return { mode: "clarify", simplified: false };
+  }
 
-  if (blameLanguage)
+  if (blameLanguage) {
     return { mode: "confront", simplified: false };
+  }
 
-  return { mode: "realism", simplified: simplificationPattern === true };
+  if (simplificationPattern && !highEmotion) {
+    return { mode: "mentor", simplified: true };
+  }
+
+  /* ===== FALLBACK ===== */
+
+  return {
+    mode: "realism",
+    simplified: simplificationPattern === true,
+  };
 }

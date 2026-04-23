@@ -2,16 +2,15 @@ type ShapeInput = {
   text: string;
   softLimit?: boolean;
   mode?: string;
-};
-
-function removeAiFluff(text: string) {
+  };
+  function removeAiFluff(text: string) {
   return text.replace(
     /^(Rozumiem|Widzę|To brzmi|Dziękuję za podzielenie się|Masz rację|Czuję, że)[^.\n]*[.\n]+/i,
     ""
   );
 }
 
-function limitBold(text: string, max = 3) {
+function limitBold(text: string, max = 4) {
   const matches = text.match(/\*\*.*?\*\*/g);
   if (!matches || matches.length <= max) return text;
 
@@ -22,7 +21,7 @@ function limitBold(text: string, max = 3) {
   });
 }
 
-function limitDashes(text: string, max = 4) {
+function limitDashes(text: string, max = 6) {
   const lines = text.split("\n");
   let dashCount = 0;
 
@@ -36,31 +35,69 @@ function limitDashes(text: string, max = 4) {
     })
     .join("\n");
 }
+function detectLengthMode(text: string): "short" | "medium" | "deep" {
+  const len = text.length;
 
-function trimLength(text: string, max = 650) {
-  if (text.length <= max) return text;
-  return text.slice(0, max).trim() + "…";
+  if (len < 120) return "short";
+  if (len < 400) return "medium";
+  return "deep";
 }
-
 export function shapeResponse({ text, softLimit, mode }: ShapeInput) {
   if (!text) return "";
 
   let cleaned = text.trim();
-  cleaned = removeAiFluff(cleaned);
+  const lengthMode = detectLengthMode(cleaned);
 
+  // kosmetyka
+  cleaned = removeAiFluff(cleaned);
   cleaned = limitBold(cleaned);
   cleaned = limitDashes(cleaned);
 
+  // 🔴 kryzys = nic nie ruszamy
   if (mode === "crisis") {
-    if (softLimit && cleaned.length > 900) {
-      return cleaned.slice(0, 850) + "...";
-    }
     return cleaned;
   }
+/* ===== INTELIGENTNA DŁUGOŚĆ ===== */
 
+if (lengthMode === "short") {
+  // zostaw jak jest → nie rozciągamy
+  return cleaned;
+}
+
+if (lengthMode === "medium") {
+  // lekka struktura → nic nie ucinamy
+  return cleaned;
+}
+
+if (lengthMode === "deep") {
+  // delikatne skrócenie jeśli za długie
+  if (cleaned.length > 900) {
+    return cleaned.slice(0, 850).trim() + "…";
+  }
+}
+  // 🟡 soft limit → jeden spójny wariant
   if (softLimit) {
-    return trimLength(cleaned, 500);
+    return (
+      cleaned +
+      "\n\n— Możemy to rozwinąć głębiej, jeśli chcesz."
+    );
   }
 
-  return trimLength(cleaned, 750);
+  /* ===== MOMENT CISZY ===== */
+
+  const endsWithQuestion = cleaned.trim().endsWith("?");
+
+  // tryby gdzie NIE chcemy ciszy
+  const forceQuestionModes = ["clarify"];
+
+  const shouldSilence =
+    !endsWithQuestion &&
+    !forceQuestionModes.includes(mode || "") &&
+    Math.random() > 0.65;
+
+  if (shouldSilence) {
+    return cleaned; // zostawiamy bez pytania → cisza
+  }
+
+  return cleaned;
 }

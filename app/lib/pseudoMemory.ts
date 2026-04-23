@@ -6,5 +6,12 @@ export type PseudoMemory = {
   tensions: Record<string, number>;
   avoidances: Record<string, number>;
 
-  anchors: string[]; 
+  anchors: string[];
+
+  style: {
+    short: number;
+    long: number;
+    chaotic: number;
+    direct: number;
+  };
 };

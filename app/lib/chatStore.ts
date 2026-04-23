@@ -1,8 +1,9 @@
 import { create } from "zustand";
 
-export type Msg = {
+type Msg = {
   role: "user" | "assistant";
   content: string;
+  highlight?: string | null;
 };
 
 export type Plan = "free" | "pro" | "pro_plus";

@@ -4,6 +4,8 @@ import { PseudoMemory } from "./pseudoMemory";
 
 const TTL_30_DAYS = 60 * 60 * 24 * 30;
 
+/* ===== HELPERS ===== */
+
 function increment(
   obj: Record<string, number> | undefined,
   key?: string
@@ -17,14 +19,21 @@ function increment(
   };
 }
 
+/* ===== MAIN FUNCTION ===== */
+
 export async function updatePseudoMemory(
   userId: string,
-  analysis: UserAnalysis
+  analysis: UserAnalysis,
+  styleUpdate?: {
+    short?: number;
+    long?: number;
+    chaotic?: number;
+    direct?: number;
+  }
 ) {
   const key = `memory:${userId}`;
   const now = Date.now();
 
-  // 🔒 BEZPIECZNE WCIĄGNIĘCIE STARYCH DANYCH (v1 → v2)
   const raw = await kv.get<PseudoMemory>(key);
 
   const existing: PseudoMemory = {
@@ -35,6 +44,13 @@ export async function updatePseudoMemory(
     tensions: raw?.tensions ?? {},
     avoidances: raw?.avoidances ?? {},
     anchors: raw?.anchors ?? [],
+
+    style: raw?.style ?? {
+      short: 0,
+      long: 0,
+      chaotic: 0,
+      direct: 0,
+    },
   };
 
   const updated: PseudoMemory = {
@@ -63,8 +79,16 @@ export async function updatePseudoMemory(
       !existing.anchors.includes(analysis.anchor)
         ? [...existing.anchors.slice(-4), analysis.anchor]
         : existing.anchors,
+
+    style: {
+      short: existing.style.short + (styleUpdate?.short || 0),
+      long: existing.style.long + (styleUpdate?.long || 0),
+      chaotic: existing.style.chaotic + (styleUpdate?.chaotic || 0),
+      direct: existing.style.direct + (styleUpdate?.direct || 0),
+    },
   };
 
   await kv.set(key, updated, { ex: TTL_30_DAYS });
+
   return updated;
 }

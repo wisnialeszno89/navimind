@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyCode } from "../../../lib/auth/codes";
 import { createHash } from "crypto";
 import { setSession } from "../../../lib/auth/session";
+import { getUserPlan } from "../../../lib/userPlan";
 
 export const runtime = "nodejs";
 
@@ -20,9 +21,6 @@ export async function POST(req: Request) {
     const email = String(body?.email || "").trim().toLowerCase();
     const code = String(body?.code || "").trim();
 
-    console.log("VERIFY EMAIL:", email);
-    console.log("VERIFY CODE:", code);
-
     if (!email || !email.includes("@") || code.length < 4) {
       return NextResponse.json({ error: "INVALID_DATA" }, { status: 400 });
     }
@@ -33,19 +31,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "INVALID_CODE" }, { status: 401 });
     }
 
+    // 🔥 ustaw sesję
     setSession(email);
 
-const res = NextResponse.json({ ok: true });
+    // 🔥 pobierz plan
+    const plan = await getUserPlan();
 
-res.cookies.set("nm_email", email, {
-  httpOnly: true,
-  path: "/",
-  maxAge: 60 * 60 * 24 * 30,
-});
+    const res = NextResponse.json({
+    success: true,
+    plan: plan || "free",
+    });
 
-return res;
+    // 🔥 cookie
+    res.cookies.set("nm_email", email, {
+      httpOnly: true,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
 
-return res;
+    return res;
   } catch (e) {
     console.error("VERIFY CODE ERROR:", e);
     return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 });
