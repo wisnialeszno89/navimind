@@ -19,6 +19,7 @@ import {
 import { shapeResponse } from "../../lib/responseShaper";
 import { detectResponseDepth } from "../../lib/responseDepth";
 import { getPseudoMemory } from "../../lib/getPseudoMemory";
+import { decideResponse } from "../../lib/decisionEngine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,7 +63,33 @@ export async function POST(req: Request) {
       status: 400,
     });
   }
+  const decision = decideResponse(userText);
+  const intent = {
+  wantsRelief: /(nie chce|mam dość|przytłacza|bez sensu)/i.test(userText),
+  wantsUnderstanding: /(dlaczego|czemu|jak to działa)/i.test(userText),
+  wantsAction: /(co zrobić|co robic|jak ogarnąć|co dalej)/i.test(userText),
+  };
+  const tension = {
+  conflict:
+    /(chce.*ale|wiem.*ale|powinienem.*ale)/i.test(userText),
 
+  emotionalLoad:
+    userText.length > 200 ||
+    /(nie mogę|ciągle wraca|męczy mnie|nie daje spokoju)/i.test(userText),
+  };
+  let responseDirection = "neutral";
+
+if (intent.wantsAction) {
+  responseDirection = "solution";
+} else if (intent.wantsUnderstanding) {
+  responseDirection = "explain";
+} else if (intent.wantsRelief) {
+  responseDirection = "release";
+}
+
+if (tension.conflict) {
+  responseDirection = "conflict";
+}
   const chatId: string | undefined = body?.chatId;
 
   /* ========= STYLE ========= */
@@ -77,6 +104,8 @@ export async function POST(req: Request) {
 
   const isDirect =
     /(co zrobić|konkretnie|powiedz wprost|bez gadania)/i.test(userText);
+
+    
 
   /* ========= LIMIT ========= */
 
@@ -101,28 +130,90 @@ export async function POST(req: Request) {
     }
   }
 
-  /* ========= HISTORY ========= */
+ /* ========= HISTORY ========= */
 
-  let history: ChatMsg[] = [];
+let history: ChatMsg[] = [];
 
-  if (plan === "free") {
-    history = await getDemoMemory(userId);
-  } else if (email && chatId) {
-    const kvMsgs = await getChatMessagesByEmail(email, chatId);
+if (plan === "free") {
+  history = await getDemoMemory(userId);
+} else if (email && chatId) {
+  const kvMsgs = await getChatMessagesByEmail(email, chatId);
+  history =
+    kvMsgs
+      ?.map((m) => ({
+        role: m.role,
+        content: String(m.content).slice(0, MSG_CHAR_LIMIT),
+      }))
+      .filter((m): m is ChatMsg => isRole(m.role))
+      .slice(-PRO_HISTORY_MAX) ?? [];
+}
 
-    history =
-      kvMsgs
-        ?.map((m) => ({
-          role: m.role,
-          content: String(m.content).slice(0, MSG_CHAR_LIMIT),
-        }))
-        .filter((m): m is ChatMsg => isRole(m.role))
-        .slice(-PRO_HISTORY_MAX) ?? [];
-  }
+/* ========= AFTER HISTORY ========= */
 
-  const isFirstMessage = history.length === 0;
+const isFirstMessage = history.length === 0;
 
-  /* ========= ANALYSIS ========= */
+const memorySummary = history
+  .slice(-6)
+  .map((m) => (m.role === "user" ? `U: ${m.content}` : `A: ${m.content}`))
+  .join("\n");
+
+const userStyle = {
+  isShort,
+  isLong,
+  isChaotic,
+  isDirect,
+};
+let styleInstructions = "";
+const contextBlock = `
+AKTUALNA SYTUACJA:
+
+Ostatnie wiadomości:
+${memorySummary}
+
+Obecny temat rozmowy:
+"${userText.slice(0, 120)}"
+
+Trzymaj się TEGO kontekstu.
+Nie zmieniaj tematu bez powodu.
+`;
+
+if (userStyle.isShort) {
+  styleInstructions += `
+- odpowiadaj krótko
+- jedno trafne zdanie wystarczy
+`;
+}
+
+if (userStyle.isLong) {
+  styleInstructions += `
+- możesz wejść głębiej
+- rozbij na 2–3 warstwy
+`;
+}
+
+if (userStyle.isChaotic) {
+  styleInstructions += `
+- spowolnij tempo
+- uprość przekaz
+- jedna myśl na raz
+`;
+}
+
+if (userStyle.isDirect) {
+  styleInstructions += `
+- konkretnie
+- bez wstępów
+`;
+}
+
+if (!styleInstructions) {
+  styleInstructions = `
+- zachowaj naturalne tempo
+- mów jasno i prosto
+`;
+}
+
+    /* ========= ANALYSIS ========= */
 
   const userState = detectUserState(userText);
   const crisisLevel = detectCrisis(userText);
@@ -188,26 +279,128 @@ export async function POST(req: Request) {
     depth,
     wantsAnswer,
   });
-
   /* ========= PROMPT ========= */
 
-  const systemPrompt = `
+const systemPrompt = `
 ${relationalCore}
 
-USER STYLE:
-${isShort ? "- pisze krótko" : ""}
-${isLong ? "- pisze długo" : ""}
-${isChaotic ? "- chaos" : ""}
-${isDirect ? "- chce konkretów" : ""}
+${contextBlock}
 
-MEMORY:
-${dominantTheme ? `- powtarzający temat: ${dominantTheme}` : ""}
-${dominantTension ? `- napięcie: ${dominantTension}` : ""}
-${dominantAvoidance ? `- unikanie: ${dominantAvoidance}` : ""}
+TRYB ROZMOWY:
 
-ZASADY:
-- nie mów że pamiętasz
-- używaj tego subtelnie
+${decision.type}
+
+ZASADY GŁÓWNE:
+
+- Trzymaj się aktualnego tematu rozmowy
+- Nie powtarzaj tych samych schematów
+- Nie zaczynaj każdej odpowiedzi tak samo
+- Jeśli możesz powiedzieć prościej → powiedz prościej
+
+STYL UŻYTKOWNIKA:
+
+${userStyle.isShort ? "- pisze krótko" : ""}
+${userStyle.isLong ? "- pisze długo" : ""}
+${userStyle.isChaotic ? "- jest przeciążony" : ""}
+${userStyle.isDirect ? "- chce konkretów" : ""}
+
+ADAPTACJA:
+
+${styleInstructions}
+
+ZACHOWANIE (PRIORYTET):
+
+answer →
+- odpowiedz konkretnie
+- bez wstępów
+- bez zbędnej analizy
+
+guide →
+- pokaż kierunek
+- pomóż zobaczyć coś szerzej
+- bez lania wody
+
+clarify →
+- jedno krótkie pytanie
+- tylko jeśli naprawdę potrzebne
+
+slow →
+- uprość odpowiedź
+- jedna myśl na raz
+- spokojne tempo
+
+START ODPOWIEDZI:
+
+- NIE zaczynaj od pytania
+- najpierw interpretacja lub obserwacja
+- pytanie tylko później, jeśli ma sens
+
+UNIKAJ:
+
+- moralizowania
+- "odpowiedzialność jest kluczem"
+- brzmiących jak poradnik zdań
+
+TON:
+
+- mów jak człowiek, nie jak ekspert
+- możesz być bezpośredni
+- krótkie zdania są lepsze niż idealne zdania
+
+PYTANIA:
+
+- nie zadawaj pytania automatycznie
+- jeśli użytkownik pyta → najpierw odpowiedz
+- pytanie tylko jeśli wnosi wartość
+- możesz zakończyć bez pytania
+
+KONTROLA:
+
+- jeśli odpowiedź robi się za długa → skróć
+- jeśli robi się zbyt ogólna → urealnij
+- jeśli temat jest jeden → nie rozbijaj go na wiele
+
+INTENCJA:
+
+- ulga: ${intent.wantsRelief}
+- zrozumienie: ${intent.wantsUnderstanding}
+- działanie: ${intent.wantsAction}
+conflict →
+- nazwij konflikt wprost (bez ogólnych słów)
+- pokaż co dokładnie się ściera (konkret vs konkret)
+- unikaj fraz typu: "sprzeczność", "to normalne", "klasyczne"
+- nie tłumacz zjawiska — pokaż je na przykładzie tej sytuacji
+
+SIŁA ODPOWIEDZI:
+
+- lepiej powiedzieć jedną trafną rzecz niż trzy poprawne
+- unikaj bezpiecznych, ogólnych sformułowań
+- odpowiedź ma trafić, nie tylko być poprawna
+
+PRIORYTET:
+
+Jeśli wykrywasz konflikt → nazwij go w pierwszym zdaniu.
+
+Nie tłumacz go najpierw.
+Nie analizuj.
+Najpierw pokaż.
+
+NAPIĘCIE:
+
+- konflikt: ${tension.conflict}
+- obciążenie: ${tension.emotionalLoad}
+
+UNIKAJ OGÓLNIKÓW:
+
+- nie używaj: "to normalne", "to klasyczne", "to sprzeczność"
+- każda odpowiedź ma odnosić się do konkretu z wypowiedzi użytkownika
+
+KIERUNEK ODPOWIEDZI:
+
+${responseDirection}
+
+Nie mieszaj trybów.
+Trzymaj jedną spójną odpowiedź.
 `;
 
   /* ========= OPENAI ========= */
@@ -221,31 +414,23 @@ ZASADY:
   const response = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
     temperature: 0.8,
-    max_tokens: 1000,
+    max_tokens: 1500,
     messages: [
-      { role: "system", content: systemPrompt },
-      ...history,
-      { role: "user", content: userText },
-    ],
+  { role: "system", content: systemPrompt },
+  ...history,
+  { role: "user", content: userText },
+  ],
   });
 
   let fullText = response.choices?.[0]?.message?.content || "";
-
-  if (isFirstMessage && fullText) {
-    const hooks = [
-      "Zobaczmy to spokojnie.",
-      "Tu jest coś, co warto dobrze złapać.",
-      "Nie chodzi tylko o to, co napisałeś.",
-      "Jest tu jeden moment, który zmienia wszystko.",
-    ];
-
-    const randomHook =
-      hooks[Math.floor(Math.random() * hooks.length)];
-
-    fullText = randomHook + "\n\n" + fullText;
+  // 🔥 FIX: ucięte odpowiedzi
+  if (fullText && !/[.!?]$/.test(fullText.trim())) {
+  const lastDot = fullText.lastIndexOf(".");
+  if (lastDot > 100) {
+    fullText = fullText.slice(0, lastDot + 1);
   }
-
-  if (!fullText.trim()) {
+  }
+   if (!fullText.trim()) {
     fullText =
       "Z tego co opisujesz wynika, że warto spojrzeć na to jeszcze raz z innej strony.";
   }

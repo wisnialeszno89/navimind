@@ -194,10 +194,16 @@ async function send() {
     return;
   }
 
-  setIsTyping(true);
+ setIsTyping(true);
 
-  add({ role: "user", content: raw });
-  add({ role: "assistant", content: "Analizuję..." });
+add({ role: "user", content: raw });
+add({ role: "assistant", content: "..." }); // placeholder
+
+
+// fetch
+
+// potem zamieniasz "..." na odpowiedź
+ 
 
   try {
     const res = await fetch("/api/chat", {
