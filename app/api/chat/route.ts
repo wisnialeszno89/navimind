@@ -1,50 +1,160 @@
+import { getPersonalityStyle } from "../../lib/personalityEngine";
+import { buildResourcePrompt } from "../../lib/smartResources";
+import { getUserProfile, updateUserProfile } from "../../lib/userProfile";
+import { extractActionStep } from "../../lib/nextStepEngine";
+// import { shapeResponse } ...
+// import { detectIntent } ...
+// import { detectMode } ...
+// import { generateOptions } from "../../lib/decisionEngine";
+import { shapeResponse } from "@/lib/responseShaper";
+import { detectIntent } from "@/lib/brainRouter";
+import { buildConversationSummary } from "../../lib/conversationSummary";
+import { extractContextAnchor } from "../../lib/contextAnchor";
+import { updateContextAnchor, getContextAnchor } from "../../lib/userMemory";
+import { updateUserIdentity, getUserIdentity } from "@/lib/userIdentity";
+import {
+  detectMode,
+  isLooping,
+  shouldAllowQuestion,
+  isFirstHeavyMessage
+} from "@/lib/brainRouter";
+import { buildTone } from "../../lib/buildTone";
+import { getNextStep } from "../../lib/nextStepEngine";
+import { buildSystemPrompt } from "@/lib/buildSystemPrompt";
+import { updateMemory, getMemory, updateCoreMemory, getCoreMemory } from "../../lib/userMemory";
+
+import { extractChosenOption } from "../../lib/nextStepEngine";
+import { saveDecision } from "../../lib/userProfile";
 import crypto from "crypto";
 import { getUserId } from "../../lib/userId";
 import { getSessionEmail } from "../../lib/auth/session";
 import { getUserPlan } from "../../lib/userPlan";
-import { getDemoMemory, pushDemoMemory } from "../../lib/demoMemory";
-import { detectUserState } from "../../lib/detectUserState";
+import { getDemoMemory, pushDemoMemory, updateDemoCore, getDemoCore } from "../../lib/demoMemory";
+import { analyzeUserMessage } from "../../lib/analyzeUserMessage";
+import { injectResources } from "../../lib/resources";
+import { formatResponse } from "../../lib/outputEngine";
 import {
   appendChatMessageByEmail,
   getChatMessagesByEmail,
-} from "../../lib/chatHistory";
-import { buildRelationalCore } from "../../lib/relationalCore";
-import { analyzeConversation } from "../../lib/conversationAnalyzer";
-import { detectCrisis } from "../../lib/crisisDetector";
+  } from "../../lib/chatHistory";
+  
+
 import {
-  checkAndIncrementLimit,
-  FREE_HARD_LIMIT,
-  FREE_SOFT_FROM,
-} from "../../lib/chatLimit";
-import { shapeResponse } from "../../lib/responseShaper";
-import { detectResponseDepth } from "../../lib/responseDepth";
-import { getPseudoMemory } from "../../lib/getPseudoMemory";
-import { decideResponse } from "../../lib/decisionEngine";
+  cleanAndShapeOutput,
+  removeRepeatEndings,
+  fixCutOff,
+  } from "../../lib/outputEngine";
+
+import { improveResponse } from "../../lib/responseQuality";
+import { scoreResponse } from "../../lib/responseScore";
+import { addSmartQuestion } from "../../lib/resources"; // lub osobny plik jak chcesz
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+function addEmphasis(text: string) {
+  return text
+    .replace(/\b(problem|ważne|kluczowe|sedno)\b/gi, "**$1**")
+    .replace(/To jest ([^.\n]+)/g, "**To jest $1**")
+    .replace(/Masz dwie opcje:/g, "**Masz dwie opcje:**");
+}
 
-const PRO_HISTORY_MAX = 12;
-const MSG_CHAR_LIMIT = 1800;
+function addSpacing(text: string) {
+  return text
+    .replace(/\. /g, ".\n\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+function addTone(text: string) {
+  if (text.includes("problem")) return "⚠️ " + text;
+  if (text.includes("opcje")) return "👉 " + text;
+  if (text.includes("ważne")) return "🔥 " + text;
+
+  return text;
+}
+function wasHeavyAlready(history: any[]) {
+  return history.some((m) =>
+    m.content.includes("To nie jest lekka sytuacja")
+  );
+}
+const USE_LEGACY_ENGINE = false;
 
 type ChatRole = "user" | "assistant";
 type ChatMsg = { role: ChatRole; content: string };
-
-function getUidFromUrl(req: Request) {
-  try {
-    const url = new URL(req.url);
-    return url.searchParams.get("uid") || null;
-  } catch {
-    return null;
-  }
-}
 
 function isRole(r: any): r is ChatRole {
   return r === "user" || r === "assistant";
 }
 
+/* ========= MODE ========= */
+
+type Mode = "explain" | "action" | "reflect" | "crisis";
+
+function decideMode(input: string): Mode {
+  const t = input.toLowerCase();
+
+  if (/głosy|nie mogę spać|nie daje rady|przytłacza|nie mam po co żyć/.test(t)) {
+    return "crisis";
+  }
+
+  if (/co zrobić|jak|co robic/.test(t)) {
+    return "action";
+  }
+
+  if (/dlaczego|czemu/.test(t)) {
+    return "explain";
+  }
+
+  return "reflect";
+}
+
+/* ========= CORE PROBLEM ========= */
+
+function extractCoreProblem(text: string, history: ChatMsg[]) {
+  const full = [...history.map(m => m.content), text].join(" ").toLowerCase();
+
+  const topics = [
+    {
+      key: "children",
+      label: "brak kontaktu z dziećmi",
+      regex: /dzieci|kontakt z dziecmi/,
+    },
+    {
+      key: "relationship",
+      label: "rozpad związku",
+      regex: /zona|żona|rozstanie|odeszla|odeszła/,
+    },
+    {
+      key: "mental",
+      label: "przeciążenie / depresja",
+      regex: /depresja|nie dam rady|rozsypany|wykonczony|wykończony|nie moge zyc/,
+    },
+  ];
+
+  const scored = topics.map(t => {
+    const matches = full.match(new RegExp(t.regex, "g"));
+    return {
+      ...t,
+      score: matches ? matches.length : 0,
+    };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  const main = scored[0];
+  const secondary = scored[1];
+
+  return {
+    main: main.score > 0 ? main : null,
+    secondary: secondary.score > 0 ? secondary : null,
+    all: scored.filter(s => s.score > 0),
+  };
+}
+
+/* ========= ROUTE ========= */
+
 export async function POST(req: Request) {
-  const userId = getUidFromUrl(req) ?? getUserId();
+  const userId = getUserId();
 
   if (!userId) {
     return new Response(JSON.stringify({ error: "UNAUTHORIZED" }), {
@@ -56,445 +166,359 @@ export async function POST(req: Request) {
   const plan = await getUserPlan();
 
   const body = await req.json().catch(() => null);
-  const userText: string | undefined = body?.message?.trim();
-
-  if (!userText) {
-    return new Response(JSON.stringify({ error: "NO_MESSAGE" }), {
-      status: 400,
-    });
-  }
-  const decision = decideResponse(userText);
-  const intent = {
-  wantsRelief: /(nie chce|mam dość|przytłacza|bez sensu)/i.test(userText),
-  wantsUnderstanding: /(dlaczego|czemu|jak to działa)/i.test(userText),
-  wantsAction: /(co zrobić|co robic|jak ogarnąć|co dalej)/i.test(userText),
-  };
-  const tension = {
-  conflict:
-    /(chce.*ale|wiem.*ale|powinienem.*ale)/i.test(userText),
-
-  emotionalLoad:
-    userText.length > 200 ||
-    /(nie mogę|ciągle wraca|męczy mnie|nie daje spokoju)/i.test(userText),
-  };
-  let responseDirection = "neutral";
-
-if (intent.wantsAction) {
-  responseDirection = "solution";
-} else if (intent.wantsUnderstanding) {
-  responseDirection = "explain";
-} else if (intent.wantsRelief) {
-  responseDirection = "release";
-}
-
-if (tension.conflict) {
-  responseDirection = "conflict";
-}
-  const chatId: string | undefined = body?.chatId;
-
-  /* ========= STYLE ========= */
-
-  const textLen = userText.length;
-
-  const isShort = textLen < 80;
-  const isLong = textLen > 300;
-
-  const isChaotic =
-    /(nie wiem|wszystko naraz|chaos|pogubiony|zagubiony)/i.test(userText);
-
-  const isDirect =
-    /(co zrobić|konkretnie|powiedz wprost|bez gadania)/i.test(userText);
-
+  const userText: string = String(body?.message || "").trim();
+  const analysis = analyzeUserMessage(userText);
+  const intent = "general";
     
+  updateUserProfile(userId, analysis);
 
-  /* ========= LIMIT ========= */
+  const userProfile = getUserProfile(userId);
+  if (!userText) {
+  return new Response(JSON.stringify({ error: "NO_MESSAGE" }), {
+    status: 400,
+  });
+}
 
-  let softLimit = false;
 
-  if (plan === "free") {
-    const limit = await checkAndIncrementLimit(userId, FREE_HARD_LIMIT);
 
-    if (!limit.allowed) {
-      return new Response(
-        JSON.stringify({
-          error: "FREE_LIMIT",
-          message: "Na dziś kończy się darmowa przestrzeń rozmowy.",
-          cta: "Przejdź do NaviMind PRO",
-        }),
-        { status: 402 }
-      );
-    }
+/* ========= MEMORY ========= */
 
-    if (limit.used >= FREE_SOFT_FROM) {
-      softLimit = true;
-    }
-  }
+updateMemory(userId, userText);
+updateUserIdentity(userId, userText);
 
- /* ========= HISTORY ========= */
+const identity = getUserIdentity(userId);
+const memory = getMemory(userId);
+
+/* ========= HISTORY ========= */
 
 let history: ChatMsg[] = [];
 
 if (plan === "free") {
   history = await getDemoMemory(userId);
-} else if (email && chatId) {
-  const kvMsgs = await getChatMessagesByEmail(email, chatId);
+} else if (email && body?.chatId) {
+  const kvMsgs = await getChatMessagesByEmail(email, body.chatId);
   history =
     kvMsgs
       ?.map((m) => ({
         role: m.role,
-        content: String(m.content).slice(0, MSG_CHAR_LIMIT),
+        content: String(m.content),
       }))
       .filter((m): m is ChatMsg => isRole(m.role))
-      .slice(-PRO_HISTORY_MAX) ?? [];
+      .slice(-20) ?? [];
+}
+/* ========= MODE ========= */
+
+const mode = "normal";
+
+/* ========= AUTO FLOW ENGINE ========= */
+
+function detectFlowStage(analysis: any, history: any[]) {
+  const lastMessages = history
+    .slice(-3)
+    .map((m) => m.content)
+    .join(" ")
+    .toLowerCase();
+
+  if (/wybieram|biorę|ok|dobra|idziemy|robimy/.test(lastMessages)) {
+    return "action";
+  }
+
+  if (analysis.mode === "direction") {
+    return "direction";
+  }
+
+  if (
+    analysis.state === "emotional" ||
+    analysis.state === "overthinking"
+  ) {
+    return "support";
+  }
+
+  return "support";
 }
 
-/* ========= AFTER HISTORY ========= */
+const autoFlow = detectFlowStage(analysis, history);
+userProfile.flowStage = autoFlow;
+/* ========= ANALIZA ========= */
 
-const isFirstMessage = history.length === 0;
 
-const memorySummary = history
-  .slice(-6)
-  .map((m) => (m.role === "user" ? `U: ${m.content}` : `A: ${m.content}`))
-  .join("\n");
+const coreProblem = extractCoreProblem(userText, history);
+let safeCoreProblem = coreProblem;
 
-const userStyle = {
-  isShort,
-  isLong,
-  isChaotic,
-  isDirect,
-};
-let styleInstructions = "";
-const contextBlock = `
-AKTUALNA SYTUACJA:
-
-Ostatnie wiadomości:
-${memorySummary}
-
-Obecny temat rozmowy:
-"${userText.slice(0, 120)}"
-
-Trzymaj się TEGO kontekstu.
-Nie zmieniaj tematu bez powodu.
-`;
-
-if (userStyle.isShort) {
-  styleInstructions += `
-- odpowiadaj krótko
-- jedno trafne zdanie wystarczy
-`;
-}
-
-if (userStyle.isLong) {
-  styleInstructions += `
-- możesz wejść głębiej
-- rozbij na 2–3 warstwy
-`;
-}
-
-if (userStyle.isChaotic) {
-  styleInstructions += `
-- spowolnij tempo
-- uprość przekaz
-- jedna myśl na raz
-`;
-}
-
-if (userStyle.isDirect) {
-  styleInstructions += `
-- konkretnie
-- bez wstępów
-`;
-}
-
-if (!styleInstructions) {
-  styleInstructions = `
-- zachowaj naturalne tempo
-- mów jasno i prosto
-`;
-}
-
-    /* ========= ANALYSIS ========= */
-
-  const userState = detectUserState(userText);
-  const crisisLevel = detectCrisis(userText);
-  const analysis = analyzeConversation(userText, history);
-
-  const mode = analysis.mode;
-  const simplified = analysis.simplified;
-  const depth = detectResponseDepth(userText, history.length);
-
-  const wantsAnswer =
-    /(co zrobić|co robic|jak to ogarnąć|jak rozwiazac|co dalej)/i.test(
-      userText.toLowerCase()
-    );
-
-  /* ========= MEMORY ========= */
-
-  const memory = await getPseudoMemory(userId);
-
-  const dominantTheme =
-    memory?.coreThemes &&
-    Object.entries(memory.coreThemes).sort((a, b) => b[1] - a[1])[0]?.[0];
-
-  const dominantTension =
-    memory?.tensions &&
-    Object.entries(memory.tensions).sort((a, b) => b[1] - a[1])[0]?.[0];
-
-  const dominantAvoidance =
-    memory?.avoidances &&
-    Object.entries(memory.avoidances).sort((a, b) => b[1] - a[1])[0]?.[0];
-
-  const styleMemory = memory?.style;
-
-  const memoryStyle = {
-    prefersShort:
-      (styleMemory?.short || 0) > (styleMemory?.long || 0),
-
-    prefersDirect:
-      (styleMemory?.direct || 0) > 3,
-
-    oftenChaotic:
-      (styleMemory?.chaotic || 0) > 3,
+if (
+  analysis.state === "emotional" &&
+  !analysis.intent?.includes("decision")
+) {
+  safeCoreProblem = {
+    main: null,
+    secondary: null,
+    all: [],
   };
+}
 
-  /* ========= BEHAVIOR ========= */
+/* ========= MEMORY CORE ========= */
 
-  const repeatingLifePattern =
-    dominantTheme && history.length > 5 && Math.random() > 0.6;
+if (plan === "free" && coreProblem.main?.label) {
+  updateDemoCore(userId, coreProblem.main.label);
+}
 
-  const likelyLoop =
-    dominantAvoidance && Math.random() > 0.65;
+if (coreProblem.main?.label) {
+  updateCoreMemory(userId, coreProblem.main.label);
+}
 
-  const confrontationTrigger =
-    dominantTension && mode !== "crisis" && Math.random() > 0.7;
+const demoCore = getDemoCore(userId);
+const coreMemory = getCoreMemory(userId);
 
-  /* ========= CORE ========= */
+/* ========= CONTEXT ========= */
 
-  const relationalCore = buildRelationalCore({
-    state: String(userState),
-    messageIndex: history.length,
-    mode,
-    crisisLevel,
-    simplified,
-    depth,
-    wantsAnswer,
-  });
-  /* ========= PROMPT ========= */
+const lastUserMessages = history
+  .filter((m) => m.role === "user")
+  .slice(-3)
+  .map((m) => m.content);
 
-const systemPrompt = `
-${relationalCore}
+const topicAnchor = lastUserMessages.join(" | ");
 
-${contextBlock}
+/* ========= BUILD ELEMENTS ========= */
 
-TRYB ROZMOWY:
+const contextBlock = `
+AKTUALNY WĄTEK:
+${topicAnchor}
 
-${decision.type}
-
-ZASADY GŁÓWNE:
-
-- Trzymaj się aktualnego tematu rozmowy
-- Nie powtarzaj tych samych schematów
-- Nie zaczynaj każdej odpowiedzi tak samo
-- Jeśli możesz powiedzieć prościej → powiedz prościej
-
-STYL UŻYTKOWNIKA:
-
-${userStyle.isShort ? "- pisze krótko" : ""}
-${userStyle.isLong ? "- pisze długo" : ""}
-${userStyle.isChaotic ? "- jest przeciążony" : ""}
-${userStyle.isDirect ? "- chce konkretów" : ""}
-
-ADAPTACJA:
-
-${styleInstructions}
-
-ZACHOWANIE (PRIORYTET):
-
-answer →
-- odpowiedz konkretnie
-- bez wstępów
-- bez zbędnej analizy
-
-guide →
-- pokaż kierunek
-- pomóż zobaczyć coś szerzej
-- bez lania wody
-
-clarify →
-- jedno krótkie pytanie
-- tylko jeśli naprawdę potrzebne
-
-slow →
-- uprość odpowiedź
-- jedna myśl na raz
-- spokojne tempo
-
-START ODPOWIEDZI:
-
-- NIE zaczynaj od pytania
-- najpierw interpretacja lub obserwacja
-- pytanie tylko później, jeśli ma sens
-
-UNIKAJ:
-
-- moralizowania
-- "odpowiedzialność jest kluczem"
-- brzmiących jak poradnik zdań
-
-TON:
-
-- mów jak człowiek, nie jak ekspert
-- możesz być bezpośredni
-- krótkie zdania są lepsze niż idealne zdania
-
-PYTANIA:
-
-- nie zadawaj pytania automatycznie
-- jeśli użytkownik pyta → najpierw odpowiedz
-- pytanie tylko jeśli wnosi wartość
-- możesz zakończyć bez pytania
-
-KONTROLA:
-
-- jeśli odpowiedź robi się za długa → skróć
-- jeśli robi się zbyt ogólna → urealnij
-- jeśli temat jest jeden → nie rozbijaj go na wiele
-
-INTENCJA:
-
-- ulga: ${intent.wantsRelief}
-- zrozumienie: ${intent.wantsUnderstanding}
-- działanie: ${intent.wantsAction}
-conflict →
-- nazwij konflikt wprost (bez ogólnych słów)
-- pokaż co dokładnie się ściera (konkret vs konkret)
-- unikaj fraz typu: "sprzeczność", "to normalne", "klasyczne"
-- nie tłumacz zjawiska — pokaż je na przykładzie tej sytuacji
-
-SIŁA ODPOWIEDZI:
-
-- lepiej powiedzieć jedną trafną rzecz niż trzy poprawne
-- unikaj bezpiecznych, ogólnych sformułowań
-- odpowiedź ma trafić, nie tylko być poprawna
-
-PRIORYTET:
-
-Jeśli wykrywasz konflikt → nazwij go w pierwszym zdaniu.
-
-Nie tłumacz go najpierw.
-Nie analizuj.
-Najpierw pokaż.
-
-NAPIĘCIE:
-
-- konflikt: ${tension.conflict}
-- obciążenie: ${tension.emotionalLoad}
-
-UNIKAJ OGÓLNIKÓW:
-
-- nie używaj: "to normalne", "to klasyczne", "to sprzeczność"
-- każda odpowiedź ma odnosić się do konkretu z wypowiedzi użytkownika
-
-KIERUNEK ODPOWIEDZI:
-
-${responseDirection}
-
-Nie mieszaj trybów.
-Trzymaj jedną spójną odpowiedź.
+NOWA WIADOMOŚĆ:
+"${userText}"
 `;
 
-  /* ========= OPENAI ========= */
+const coreBlock = `
+NAJWAŻNIEJSZY PROBLEM:
+${coreProblem.main?.label || ""}
 
-  const { default: OpenAI } = await import("openai");
+DODATKOWE:
+${coreProblem.secondary?.label || ""}
+`;
 
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+const memoryBlock = `
+PAMIĘĆ:
+${demoCore?.mainTopic ? `- temat: ${demoCore.mainTopic}` : ""}
+${coreMemory?.mainTopic ? `- temat: ${coreMemory.mainTopic}` : ""}
+${memory?.emotionalState ? `- stan: ${memory.emotionalState}` : ""}
+`;
+const tone = buildTone(userProfile);
+const personality = getPersonalityStyle(analysis);
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
-    temperature: 0.8,
-    max_tokens: 1500,
-    messages: [
-  { role: "system", content: systemPrompt },
+/* ========= OPENAI ========= */
+
+const { default: OpenAI } = await import("openai");
+
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// 🔹 summary
+const summary = buildConversationSummary(history);
+
+// 🔹 ostatnia odpowiedź (kontynuacja)
+const lastAssistant = history
+  .filter(m => m.role === "assistant")
+  .slice(-1)[0]?.content;
+
+const continuationHint = lastAssistant
+  ? `NAWIĄŻ do tego co wcześniej powiedziałeś:
+"${lastAssistant.slice(-200)}"`
+  : "";
+
+// 🔹 context anchor (NOWY + zapis)
+const contextAnchor = extractContextAnchor([
   ...history,
-  { role: "user", content: userText },
+  { role: "user", content: userText }
+]);
+
+updateContextAnchor(userId, contextAnchor);
+
+// 🔹 fallback jeśli brak nowego
+const savedAnchor = getContextAnchor(userId);
+
+// 🔹 finalny anchor
+const finalAnchor = contextAnchor || savedAnchor || "";
+const lastUser = history
+  .filter(m => m.role === "user")
+  .slice(-1)[0]?.content || "";
+
+// 🔹 SYSTEM PROMPT
+const systemPrompt = buildSystemPrompt({
+  analysis,
+  userProfile,
+  memory,
+  coreProblem: safeCoreProblem,
+  contextBlock,
+  tone,
+  personality,
+  summary,
+  finalAnchor,
+  lastUser,
+  continuationHint,
+});
+const response = await openai.chat.completions.create({
+  model: "gpt-4.1-mini",
+  temperature: 0.7,
+  max_tokens: 800,
+  stop: ["\n\n\n"],
+  messages: [
+    { role: "system", content: systemPrompt },
+    ...history,
+    { role: "user", content: userText },
   ],
+});
+
+let baseText = response.choices?.[0]?.message?.content || "";
+
+let responseParts: string[] = [];
+
+/* ========= STYLE ENGINE ========= */
+
+const isEmotional =
+  analysis.state === "emotional" ||
+  analysis.state === "overthinking";
+
+const isEarlyStage = history.length < 4;
+
+const shouldUseList =
+  userProfile.flowStage === "direction" &&
+  !isEmotional &&
+  history.length > 5 &&
+  /wybrać|co zrobić|jaką opcję/.test(userText.toLowerCase());
+
+const shouldStayConversational =
+  isEmotional || userProfile.flowStage !== "direction";
+
+const shouldPushAction =
+  userProfile.flowStage === "action";
+
+/* ========= DECISION DETECT ========= */
+
+const lastAssistantMessage =
+  history.filter((m) => m.role === "assistant").slice(-1)[0]?.content || "";
+
+const chosen = extractChosenOption(userText, lastAssistantMessage);
+
+if (chosen) {
+  saveDecision(userId, chosen);
+} else if (
+  /wybieram|biorę|ok|dobra|idziemy/.test(userText.toLowerCase())
+) {
+  saveDecision(userId, userText);
+}
+
+/* ========= CLEAN ========= */
+
+baseText = cleanAndShapeOutput(baseText);
+
+/* ========= QUESTION ========= */
+
+const question = addSmartQuestion("", userText);
+let finalOutput = baseText.trim();
+
+finalOutput = finalOutput
+
+  // 🔥 rozbij nagłówki na osobne linie
+  .replace(/(🔥|⚠️|👉|✔️)\s*/g, "\n\n$1 ")
+
+  // 🔥 każda sekcja po ":" zaczyna nową linię
+  .replace(/:\s*/g, ":\n")
+
+  // 🔥 bullet listy (usuwa inline chaos)
+  .replace(/\s*[-•]\s*/g, "\n• ")
+
+  // 🔥 jeśli punkty są w jednej linii → rozbij
+  .replace(/• ([^•]+)/g, (m) => "\n• " + m.slice(2).trim())
+
+  // 🔥 usuń indenty (twoje 4 spacje)
+  .replace(/\n\s{2,}/g, "\n")
+
+  // 🔥 DODAJ pustą linię po nagłówku (TO JEST KLUCZ)
+  .replace(/(🔥.*?:)/g, "$1\n")
+  .replace(/(⚠️.*?:)/g, "$1\n")
+  .replace(/(👉.*?:)/g, "$1\n")
+
+  // 🔥 normalizacja
+  .replace(/\n{3,}/g, "\n\n")
+  
+  .replace(/•\s*/g, "\n• ")
+  
+  .replace(/•\s*/g, "\n• ")
+
+  .trim();
+
+/* ========= INTENT CONTROL ========= */
+
+// ❌ nie nadpisuj jeśli już było trafne
+if (intent !== "general") return finalOutput;
+
+/* ========= BRAIN CONTROL ========= */
+
+// ⚠️ ciężki temat (tylko start)
+const isFirstTurn = history.length < 2;
+
+// ❌ anty powtórki
+if (finalOutput.includes("To nie jest lekka sytuacja") && history.length > 2) {
+  finalOutput = baseText.trim();
+}
+
+/* ========= DECISION MEMORY ========= */
+
+function getRecentDecision(profile: any) {
+  if (!profile.decisions || profile.decisions.length === 0) return null;
+
+  const last = profile.decisions[profile.decisions.length - 1];
+  const hoursAgo = (Date.now() - last.createdAt) / (1000 * 60 * 60);
+
+  // 👉 sensowny próg (np. 6h)
+  if (hoursAgo > 6) {
+    return last;
+  }
+
+  return null;
+}
+
+// 🔥 highlight (zostaje OK)
+const actionStep = extractActionStep(finalOutput);
+
+let highlight: string | null = null;
+
+if (actionStep && actionStep.length > 10) {
+  highlight = actionStep;
+}
+
+/* ========= SAVE ========= */
+
+if (plan === "free") {
+  await pushDemoMemory(userId, { role: "user", content: userText });
+  await pushDemoMemory(userId, {
+    role: "assistant",
+    content: finalOutput,
+  });
+}
+
+if (plan !== "free" && email && body?.chatId) {
+  await appendChatMessageByEmail(email, body.chatId, {
+    id: crypto.randomUUID(),
+    role: "user",
+    content: userText,
+    createdAt: Date.now(),
   });
 
-  let fullText = response.choices?.[0]?.message?.content || "";
-  // 🔥 FIX: ucięte odpowiedzi
-  if (fullText && !/[.!?]$/.test(fullText.trim())) {
-  const lastDot = fullText.lastIndexOf(".");
-  if (lastDot > 100) {
-    fullText = fullText.slice(0, lastDot + 1);
-  }
-  }
-   if (!fullText.trim()) {
-    fullText =
-      "Z tego co opisujesz wynika, że warto spojrzeć na to jeszcze raz z innej strony.";
-  }
-
-  /* ========= SHAPE ========= */
-
-  const finalText = shapeResponse({
-    text: fullText,
-    softLimit,
-    mode,
+  await appendChatMessageByEmail(email, body.chatId, {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content: finalOutput,
+    createdAt: Date.now(),
   });
+}
 
-  let finalOutput = finalText;
-
-  /* ========= SMART LAYER ========= */
-
-  if (repeatingLifePattern && dominantTheme) {
-    finalOutput += `\n\n— Ten temat wraca. Nie pierwszy raz.`;
+return new Response(
+  JSON.stringify({ reply: finalOutput, highlight }),
+  {
+    headers: { "Content-Type": "application/json" },
   }
-
-  if (likelyLoop && dominantAvoidance) {
-    finalOutput += `\n\n— Możliwe, że znowu omijasz ten sam punkt.`;
-  }
-
-  if (confrontationTrigger && dominantTension) {
-    finalOutput += `\n\n— Tu nie chodzi tylko o sytuację. Jest w tym coś głębszego.`;
-  }
-
-  /* ========= SAVE ========= */
-
-  if (plan === "free") {
-    await pushDemoMemory(userId, {
-      role: "user",
-      content: userText,
-    });
-
-    await pushDemoMemory(userId, {
-      role: "assistant",
-      content: finalOutput,
-    });
-  }
-
-  if (plan !== "free" && email && chatId) {
-    await appendChatMessageByEmail(email, chatId, {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: userText,
-      createdAt: Date.now(),
-    });
-
-    await appendChatMessageByEmail(email, chatId, {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: finalOutput,
-      createdAt: Date.now(),
-    });
-  }
-
-  /* ========= RESPONSE ========= */
-
-  return new Response(
-    JSON.stringify({ reply: finalOutput }),
-    {
-      headers: { "Content-Type": "application/json" },
-    }
-  );
+);
 }

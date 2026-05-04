@@ -5,10 +5,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { Crown } from "lucide-react";
-import { getWelcomeMessage } from "../lib/welcomeMessages";
 
+import { getWelcomeMessage } from "../lib/welcomeMessages";
 import { useChatStore } from "../lib/chatStore";
 import { useLanguage } from "../lib/useLanguage";
+import { extractOptions } from "../lib/nextStepEngine";
 
 import SendForm from "./SendForm";
 import TypingIndicator from "./TypingIndicator";
@@ -30,6 +31,10 @@ export default function ChatWindow({ initialContext }: Props) {
 
   const messages = useChatStore((s) => s.messages);
   const activeChatId = useChatStore((s) => s.activeChatId);
+  const progress = useChatStore((s) => s.progress);
+
+  const toggleProgress = useChatStore((s) => s.toggleProgress);
+  const removeProgress = useChatStore((s) => s.removeProgress);
 
   const [plan, setPlan] = useState<"free" | "pro" | "pro_plus">("free");
   const [showWelcome, setShowWelcome] = useState(false);
@@ -41,7 +46,7 @@ export default function ChatWindow({ initialContext }: Props) {
   const planLabel =
     plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "PRO+";
 
-  /* ✅ PROSTY FETCH PLANU (bez loopów) */
+  /* PLAN */
   useEffect(() => {
     fetch("/api/pro", {
       credentials: "include",
@@ -49,62 +54,55 @@ export default function ChatWindow({ initialContext }: Props) {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data?.plan) {
-          setPlan(data.plan);
-        }
+        if (data?.plan) setPlan(data.plan);
       })
       .catch(() => setPlan("free"));
   }, []);
 
-  /* KONTEKST STARTOWY */
+  /* CONTEXT */
   const contextMessage = useMemo(() => {
     if (!initialContext) return null;
     if (initialContext.from !== "menmind") return null;
     if (messages.length > 0) return null;
 
     if (initialContext.sciezka === "rozstanie") {
-      return lang === "pl"
-        ? "Widzę, że jesteś na ścieżce rozstania. Ułóżmy plan 7 dni stabilizacji: sen, brak kontaktu, ruch, brak alkoholu."
-        : "I see you're on the breakup path. Let's build a 7-day stabilization plan.";
+      return "Widzę, że jesteś na ścieżce rozstania. Ułóżmy plan 7 dni stabilizacji.";
     }
 
     if (initialContext.tryb === "kryzys") {
-      return lang === "pl"
-        ? "Jesteś w trybie kryzysu. Skupimy się na stabilizacji i małych krokach."
-        : "You're in crisis mode. We'll focus on stabilization and small steps.";
+      return "Jesteś w trybie kryzysu. Skupiamy się na małych krokach.";
     }
 
     return null;
-  }, [initialContext, messages.length, lang]);
+  }, [initialContext, messages.length]);
 
-  /* ENTRY SILENCE */
+  /* ENTRY */
   useEffect(() => {
     if (messages.length > 0 || contextMessage) return;
-
     const t = setTimeout(() => setShowWelcome(true), 600);
     return () => clearTimeout(t);
   }, [messages.length, contextMessage]);
 
-  /* AUTO SCROLL */
+  /* SCROLL */
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
   return (
-    <div className="flex flex-col w-full h-dvh overflow-hidden bg-[var(--nm-bg-main)] nm-breath-bg">
+    <div className="flex flex-col w-full h-dvh overflow-hidden bg-[var(--nm-bg-main)]">
 
-      {/* TOP BAR */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--nm-border-soft)] bg-[var(--nm-bg-soft)]">
-        <div className="text-sm text-[var(--nm-accent-warm)]">
+      {/* TOP */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
+        <div className="text-sm opacity-70">
           🔒 {lang === "pl" ? "Rozmowa prywatna" : "Private chat"}
         </div>
 
         <Link
           href="/pro"
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition ${
+          className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
             plan === "free"
-              ? "bg-[var(--nm-pro-gold-soft)] text-[var(--nm-pro-gold)] hover:opacity-90"
-              : "bg-[var(--nm-pro-gold)] text-black"
+              ? "bg-yellow-200 text-black"
+              : "bg-yellow-400 text-black"
           }`}
         >
           <Crown size={12} />
@@ -112,74 +110,69 @@ export default function ChatWindow({ initialContext }: Props) {
         </Link>
       </div>
 
-      {/* DEMO LIMIT */}
-      {plan === "free" && (
-        <div className="px-4 py-2 border-b border-[var(--nm-border-soft)] bg-[var(--nm-bg-soft)]">
-          <ChatLimitBar />
-        </div>
-      )}
+      {/* LIMIT */}
+      {plan === "free" && <ChatLimitBar />}
 
-      {/* MESSAGES */}
+      {/* CHAT */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
 
         {contextMessage && (
-          <div className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
-            style={{
-              background: "var(--nm-assistant-bg)",
-              border: "1px solid var(--nm-border-soft)",
-              color: "var(--nm-text-main)",
-            }}>
+          <div className="bg-white/10 p-3 rounded-xl">
             {contextMessage}
           </div>
         )}
 
         {messages.length === 0 && showWelcome && !contextMessage && (
-          <div className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm"
-            style={{
-              background: "var(--nm-assistant-bg)",
-              border: "1px solid var(--nm-border-soft)",
-              color: "var(--nm-text-main)",
-            }}>
+          <div className="bg-white/10 p-3 rounded-xl">
             {getWelcomeMessage(lang)}
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className="max-w-[88%] md:max-w-[75%] rounded-2xl px-4 py-3 text-[16px] md:text-[17px] leading-8 font-medium shadow-sm nm-fade-in"
-            style={
-              m.role === "user"
-                ? {
-                    background: "var(--nm-user-gradient)",
-                    color: "white",
-                    marginLeft: "auto",
-                  }
-                : {
-                    background: "var(--nm-assistant-bg)",
-                    border: "1px solid var(--nm-border-soft)",
-                    color: "var(--nm-text-main)",
-                  }
-            }
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {m.content}
-            </ReactMarkdown>
-          </div>
-        ))}
+        {messages.map((m, i) => {
+          const isUser = m.role === "user";
+          const options = extractOptions(m.content);
+
+          return (
+            <div
+              key={i}
+              className={`p-3 rounded-xl ${
+                isUser ? "bg-blue-500 text-white ml-auto" : "bg-white/10"
+              }`}
+            >
+              {options.length > 0 && !isUser ? (
+                <div className="flex flex-col gap-2">
+                  {options.map((opt, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        const clean = opt.replace(/^\d+\.\s*/, "");
+                        window.dispatchEvent(
+                          new CustomEvent("quick-send", { detail: clean })
+                        );
+                      }}
+                      className="text-left p-2 rounded bg-white/10 hover:bg-white/20"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {m.content}
+                </ReactMarkdown>
+              )}
+            </div>
+          );
+        })}
 
         {isTyping && <TypingIndicator />}
         <div ref={endRef} />
       </div>
 
+      {/* CRISIS */}
       {crisisLevel === "high" && <CrisisHelp lang={lang} />}
 
-      <div className="text-[10px] text-center text-white/30 py-1">
-        <a href="/regulamin" className="hover:text-white/60">regulamin</a>
-        <span className="mx-1">•</span>
-        <a href="/prywatnosc" className="hover:text-white/60">prywatność</a>
-      </div>
-
+      {/* INPUT */}
       <SendForm
         setIsTyping={setIsTyping}
         setCrisisLevel={setCrisisLevel}

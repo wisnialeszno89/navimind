@@ -59,3 +59,18 @@ export async function pushDemoMemory(userId: string, msg: Msg) {
 
   await kv.set(k, next, { px: ttl });
 }
+type DemoCore = {
+  mainTopic?: string;
+};
+
+const demoCoreStore = new Map<string, DemoCore>();
+
+export function updateDemoCore(userId: string, topic?: string) {
+  if (!topic) return;
+
+  demoCoreStore.set(userId, { mainTopic: topic });
+}
+
+export function getDemoCore(userId: string): DemoCore {
+  return demoCoreStore.get(userId) || {};
+}

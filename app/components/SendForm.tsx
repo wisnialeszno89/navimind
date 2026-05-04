@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useChatStore } from "../lib/chatStore";
 import ProNotice from "./ProNotice";
 import { Plus } from "lucide-react";
@@ -20,6 +20,26 @@ export default function SendForm({ setIsTyping, chatId }: any) {
   const [isSending, setIsSending] = useState(false);
   const add = useChatStore((s) => s.add);
   const plan = useChatStore((s) => s.plan);
+  const addProgress = useChatStore((s) => s.addProgress);
+  useEffect(() => {
+  const handler = (e: any) => {
+    if (!e.detail) return;
+
+    // ustaw tekst jakby user wpisał
+    setText(e.detail);
+
+    // wyślij po krótkim ticku (żeby state się ustawił)
+    setTimeout(() => {
+      send();
+    }, 0);
+  };
+
+  window.addEventListener("quick-send", handler);
+
+  return () => {
+    window.removeEventListener("quick-send", handler);
+  };
+}, []);
   function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -197,6 +217,10 @@ async function send() {
  setIsTyping(true);
 
 add({ role: "user", content: raw });
+
+if (raw.length > 10) {
+  addProgress(raw);
+}
 add({ role: "assistant", content: "..." }); // placeholder
 
 

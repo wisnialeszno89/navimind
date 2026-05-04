@@ -42,62 +42,33 @@ function detectLengthMode(text: string): "short" | "medium" | "deep" {
   if (len < 400) return "medium";
   return "deep";
 }
-export function shapeResponse({ text, softLimit, mode }: ShapeInput) {
-  if (!text) return "";
-
-  let cleaned = text.trim();
-  const lengthMode = detectLengthMode(cleaned);
-
-  // kosmetyka
-  cleaned = removeAiFluff(cleaned);
-  cleaned = limitBold(cleaned);
-  cleaned = limitDashes(cleaned);
-
-  // 🔴 kryzys = nic nie ruszamy
-  if (mode === "crisis") {
-    return cleaned;
-  }
-/* ===== INTELIGENTNA DŁUGOŚĆ ===== */
-
-if (lengthMode === "short") {
-  // zostaw jak jest → nie rozciągamy
-  return cleaned;
-}
-
-if (lengthMode === "medium") {
-  // lekka struktura → nic nie ucinamy
-  return cleaned;
-}
-
-if (lengthMode === "deep") {
-  // delikatne skrócenie jeśli za długie
-  if (cleaned.length > 900) {
-    return cleaned.slice(0, 850).trim() + "…";
-  }
-}
-  // 🟡 soft limit → jeden spójny wariant
-  if (softLimit) {
+export function shapeResponse(
+  baseText: string,
+  intent: string,
+  userText: string
+) {
+  // 🔥 MOTIVE (najważniejsze dla Twojego case)
+  if (intent === "motive") {
     return (
-      cleaned +
-      "\n\n— Możemy to rozwinąć głębiej, jeśli chcesz."
+      "To nie jest jedna rzecz.\n\n" +
+      "Ona może z tego mieć kilka rzeczy naraz.\n\n" +
+      "**Kontrolę** — bo decyduje kiedy masz dostęp.\n\n" +
+      "**Wyrównanie emocji** — jeśli czuje złość, to to jest forma oddania.\n\n" +
+      "**Przewagę** — bo układ jest po jej stronie.\n\n" +
+      "To nie musi być świadome.\n\n" +
+      "Ale efekt jest taki, że to nie jest o dzieciach — tylko o tym, co jest między wami."
     );
   }
 
-  /* ===== MOMENT CISZY ===== */
-
-  const endsWithQuestion = cleaned.trim().endsWith("?");
-
-  // tryby gdzie NIE chcemy ciszy
-  const forceQuestionModes = ["clarify"];
-
-  const shouldSilence =
-    !endsWithQuestion &&
-    !forceQuestionModes.includes(mode || "") &&
-    Math.random() > 0.65;
-
-  if (shouldSilence) {
-    return cleaned; // zostawiamy bez pytania → cisza
+  // 🔥 EXPLAIN
+  if (intent === "explain") {
+    return baseText.replace("To znaczy że", "W praktyce wygląda to tak:");
   }
 
-  return cleaned;
+  // 🔥 EMOTIONAL (bez doradzania)
+  if (intent === "emotional") {
+    return baseText.split(".")[0] + ".";
+  }
+
+  return baseText;
 }
