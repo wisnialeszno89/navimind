@@ -8,6 +8,21 @@ export default function HeaderClient() {
 
   const isFree = plan === "free";
 
+  // 🔥 LOGOUT
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (e) {
+      console.error("Logout error:", e);
+    }
+
+    // odśwież appkę (czyści stan + pobiera nowy plan)
+    window.location.reload();
+  }
+
   return (
     <div
       className="w-full border-b"
@@ -18,6 +33,7 @@ export default function HeaderClient() {
       }}
     >
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        
         {/* LOGO / NAZWA */}
         <div
           className="text-sm tracking-wide"
@@ -28,16 +44,16 @@ export default function HeaderClient() {
 
         {/* PRAWA STRONA */}
         <div className="flex items-center gap-3">
-          
-          {/* legal link */}
-          <Link
-        href="/regulamin"
-        className="text-[11px] uppercase tracking-wide text-white/40 hover:text-white/70 transition"
-        >
-        REGULAMIN
-        </Link>
 
-          {/* FREE label */}
+          {/* REGULAMIN */}
+          <Link
+            href="/regulamin"
+            className="text-[11px] uppercase tracking-wide text-white/40 hover:text-white/70 transition"
+          >
+            REGULAMIN
+          </Link>
+
+          {/* FREE badge */}
           {isFree && (
             <div
               className="text-xs px-2 py-1 rounded-full border"
@@ -50,7 +66,7 @@ export default function HeaderClient() {
             </div>
           )}
 
-          {/* ⭐ PRO BADGE */}
+          {/* ⭐ PRO / UPGRADE */}
           <Link
             href="/pro"
             className="text-xs px-3 py-1.5 rounded-full border transition"
@@ -60,8 +76,19 @@ export default function HeaderClient() {
               background: "var(--nm-pro-gold-soft)",
             }}
           >
-            ⭐ PRO
+            ⭐ {isFree ? "UPGRADE" : "PRO"}
           </Link>
+
+          {/* 🚪 LOGOUT (tylko jeśli zalogowany / PRO) */}
+          {!isFree && (
+            <button
+              onClick={logout}
+              className="text-[11px] uppercase tracking-wide text-white/40 hover:text-white/80 transition"
+            >
+              WYLOGUJ
+            </button>
+          )}
+
         </div>
       </div>
     </div>

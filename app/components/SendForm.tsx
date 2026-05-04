@@ -201,84 +201,82 @@ async function send() {
 
   setText("");
 
- // 📎 FILE FLOW
-if (pendingFile) {
+  // 📎 FILE FLOW
+  if (pendingFile) {
+    add({ role: "user", content: raw });
+
+    try {
+      await processFile(pendingFile, raw);
+    } finally {
+      setIsTyping(false);
+      setIsSending(false);
+      window.dispatchEvent(new Event("limit-refresh"));
+    }
+
+    return;
+  }
+
+  // 🧠 NORMAL CHAT FLOW  ← TWÓJ KOD MUSI BYĆ TU
+
+  setIsTyping(true);
+  
+
   add({ role: "user", content: raw });
 
+  if (raw.length > 10) {
+    addProgress(raw);
+  }
+
+  add({ role: "assistant", content: "..." });
+
   try {
-    await processFile(pendingFile, raw);
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chatId,
+        message: raw,
+      }),
+    });
+
+    const data = await res.json();
+
+    const state = useChatStore.getState();
+    const messages = [...state.messages];
+
+    const reply =
+      data?.reply && data.reply.trim()
+        ? data.reply
+        : "Coś tu nie zagrało. Spróbuj jeszcze raz.";
+
+    messages[messages.length - 1] = {
+      role: "assistant",
+      content: reply,
+      highlight: data.highlight || null,
+    };
+
+    state.setMessages(messages);
+
+  } catch {
+    const state = useChatStore.getState();
+    const messages = [...state.messages];
+
+    messages[messages.length - 1] = {
+      role: "assistant",
+      content: "❌ Błąd czatu",
+    };
+
+    state.setMessages(messages);
+
   } finally {
     setIsTyping(false);
     setIsSending(false);
-
-    // 🔥 refresh limitu
     window.dispatchEvent(new Event("limit-refresh"));
   }
-
-  return; // 🔥 kluczowe — NIE lecisz dalej do chat API
-}
-
-// 🧠 NORMAL CHAT FLOW
-
-setIsTyping(true);
-
-add({ role: "user", content: raw });
-
-if (raw.length > 10) {
-  addProgress(raw);
-}
-
-add({ role: "assistant", content: "..." }); // placeholder
-
-try {
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      chatId,
-      message: raw,
-    }),
-  });
-
-  const data = await res.json();
-
-  const state = useChatStore.getState();
-  const messages = [...state.messages];
-
-  const reply =
-    data?.reply && data.reply.trim()
-      ? data.reply
-      : "Coś tu nie zagrało. Spróbuj jeszcze raz.";
-
-  messages[messages.length - 1] = {
-    role: "assistant",
-    content: reply,
-    highlight: data.highlight || null,
-  };
-
-  state.setMessages(messages);
-
-} catch {
-  const state = useChatStore.getState();
-  const messages = [...state.messages];
-
-  messages[messages.length - 1] = {
-    role: "assistant",
-    content: "❌ Błąd czatu",
-  };
-
-  state.setMessages(messages);
-
-} finally {
-  setIsTyping(false);
-  setIsSending(false);
-
-  // 🔥 KLUCZOWE — odśwież limit
-  window.dispatchEvent(new Event("limit-refresh"));
-}
-
+} 
   /* ================= UI ================= */
 
   return (
@@ -395,8 +393,7 @@ try {
         <button type="submit">➤</button>
       </form>
 
-      {showPro && <ProNotice onClose={() => setShowPro(false)} />}
+          {showPro && <ProNotice onClose={() => setShowPro(false)} />}
     </div>
   );
-}
 }
