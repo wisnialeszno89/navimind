@@ -1,6 +1,7 @@
 import { getPersonalityStyle } from "../../lib/personalityEngine";
 import { buildResourcePrompt } from "../../lib/smartResources";
 import { getUserProfile, updateUserProfile } from "../../lib/userProfile";
+import { checkAndIncrementLimit } from "../../lib/chatLimit";
 import { extractActionStep } from "../../lib/nextStepEngine";
 // import { shapeResponse } ...
 // import { detectIntent } ...
@@ -164,7 +165,22 @@ export async function POST(req: Request) {
 
   const email = getSessionEmail();
   const plan = await getUserPlan();
+  // 🔥 LIMIT (WSTAW TO)
+  if (plan === "free") {
+  const limit = await checkAndIncrementLimit(userId);
 
+  if (!limit.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: "LIMIT_REACHED",
+        used: limit.used,
+        limit: limit.limit,
+        resetAt: limit.resetAt,
+      }),
+      { status: 403 }
+    );
+  }
+}
   const body = await req.json().catch(() => null);
   const userText: string = String(body?.message || "").trim();
   const analysis = analyzeUserMessage(userText);

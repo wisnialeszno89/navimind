@@ -22,33 +22,16 @@ function formatReset(resetAt: number) {
   return `${hours}h ${mins}m`;
 }
 
-function getOrCreateLocalUid() {
-  if (typeof window === "undefined") return "";
-
-  let uid = localStorage.getItem("nm_uid");
-
-  if (!uid) {
-    uid = crypto.randomUUID();
-    localStorage.setItem("nm_uid", uid);
-  }
-
-  return uid;
-}
-
 export default function ChatLimitBar() {
   const { t, lang } = useLanguage();
   const [data, setData] = useState<LimitResult | null>(null);
 
   async function loadLimit() {
     try {
-      const uid = getOrCreateLocalUid();
-
       const res = await fetch("/api/limit", {
-        cache: "no-store",
-        headers: {
-          "x-navimind-uid": uid,
-        },
-      });
+    cache: "no-store",
+    credentials: "include",
+  });
 
       const json = await res.json();
       setData(json);
