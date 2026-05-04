@@ -40,12 +40,20 @@ export default function ChatLimitBar() {
     }
   }
 
-  useEffect(() => {
-    loadLimit();
+ useEffect(() => {
+  loadLimit();
 
-    const tmr = setInterval(loadLimit, 15000);
+  // 🔁 fallback (może zostać, ale rzadziej)
+  const tmr = setInterval(loadLimit, 15000);
 
-    return () => clearInterval(tmr);
+  // 🔥 KLUCZ — natychmiastowy refresh po wiadomości
+  const handler = () => loadLimit();
+  window.addEventListener("limit-refresh", handler);
+
+  return () => {
+    clearInterval(tmr);
+    window.removeEventListener("limit-refresh", handler);
+  };
   }, []);
 
   const percent = useMemo(() => {
