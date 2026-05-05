@@ -468,7 +468,12 @@ finalOutput = finalOutput
 /* ========= INTENT CONTROL ========= */
 
 // ❌ nie nadpisuj jeśli już było trafne
-if (intent !== "general") return finalOutput;
+if (intent !== "general") {
+  return new Response(
+    JSON.stringify({ reply: finalOutput }),
+    { headers: { "Content-Type": "application/json" } }
+  );
+}
 
 /* ========= BRAIN CONTROL ========= */
 

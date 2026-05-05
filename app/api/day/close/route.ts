@@ -31,7 +31,8 @@ export async function POST(req: Request) {
   });
 
   const raw = completion.choices[0].message.content ?? "";
-  const final = shapeResponse({ text: raw });
+
+  const final = shapeResponse(raw, "general", "");
 
   const parts = final.split(/\n|\./).filter(Boolean);
 
