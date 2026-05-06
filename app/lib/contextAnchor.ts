@@ -1,3 +1,4 @@
+import { kv } from "@vercel/kv";
 export function extractContextAnchor(
   history: { role: string; content: string }[]
 ) {
@@ -16,4 +17,12 @@ export function extractContextAnchor(
   }
 
   return "";
+}
+export async function setRelationAnchor(userId: string, text: string) {
+  const key = `user:anchor:${userId}`;
+  await kv.set(key, text);
+}
+
+export async function getRelationAnchor(userId: string): Promise<string | null> {
+  return await kv.get(`user:anchor:${userId}`);
 }

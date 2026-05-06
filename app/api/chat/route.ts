@@ -8,17 +8,19 @@ import { detectTopic } from "../../lib/topicEngine";
 import { saveTopic, getTopics } from "../../lib/userMemory";
 import { detectDecisionMoment, getDecisionNudge } from "../../lib/decisionEngine";
 import { detectProgress } from "../../lib/progressEngine";
-import { saveUserStyle, getUserStyle } from "../..//lib/userMemory";
 import { detectReturnContext } from "../../lib/returnEngine";
+import { analyzeConversationStep } from "../../lib/conversationInsights";
 import { setLastActive, getLastActive } from "../../lib/lastActive";
-// import { shapeResponse } ...
-// import { detectIntent } ...
-// import { detectMode } ...
-// import { generateOptions } from "../../lib/decisionEngine";
-import { shapeResponse } from "@/lib/responseShaper";
-import { detectPattern } from "@/lib/patternEngine";
+import { shapeResponse } from "../../lib/responseShaper";
+import { detectPattern } from "../../lib/patternEngine";
 import { savePattern, getPatterns } from "../../lib/userMemory";
 import { predictNext } from "../../lib/predictEngine";
+import { scoreConversationStep, saveScore } from "../../lib/conversationScore";
+import { setRelationAnchor, getRelationAnchor } from "../../lib/contextAnchor";
+import { setUserStyle, getUserStyle } from "../../lib/userMemory";
+import { detectUserType } from "../../lib/psychologyEngine";
+import { setUserType, getUserType } from "../../lib/userMemory";
+import { refineResponse } from "../../lib/responseShaper";
 import { detectIntent } from "../../lib/brainRouter";
 import { buildConversationSummary } from "../../lib/conversationSummary";
 import { detectConversationMode } from "../../lib/conversationMode";
@@ -207,10 +209,7 @@ const topic = detectTopic(userText);
 if (topic) {
   await saveTopic(userId, topic);
 }
-const detectedStyle = detectUserStyle(userText);
 
-// 🔹 zapis stylu (uczenie się usera)
-await saveUserStyle(userId, detectedStyle);
 await saveMicroDetail(userId, userText);
 
 if (!userText) {
@@ -255,15 +254,30 @@ if (plan === "free") {
       .filter((m): m is ChatMsg => isRole(m.role))
       .slice(-20) ?? [];
 }
+// 🔥 PSYCHOLOGIA USERA (TU WŁAŚNIE)
+const historyTexts = history.map((m: any) => m.content);
+
+const detectedType = detectUserType(userText, historyTexts);
+await setUserType(userId, detectedType);
+
+const userType = (await getUserType(userId)) || "talker";
 // 👇 dopiero tutaj zaczyna się normalny flow
 const analysis = analyzeUserMessage(userText);
-// 🔹 pobranie zapamiętanego stylu
-const persistentStyle = await getUserStyle(userId);
-const topics = await getTopics(userId);
+const isSensitive =
+  analysis.state === "emotional" ||
+  analysis.state === "kryzys";
+if (userText.length > 40 && analysis.state !== "low") {
+  await setRelationAnchor(userId, userText);
+}
 
+const detectedStyle = detectUserStyle(userText);
+await setUserStyle(userId, detectedStyle);
+
+const persistentStyle = (await getUserStyle(userId)) || "direct";
+const topics = await getTopics(userId);
+const relationAnchor = (await getRelationAnchor(userId)) || undefined;
 
 const conversationMode = detectConversationMode(userText, analysis, history);
-const historyTexts = history.map((m: any) => m.content);
 
 const progress = detectProgress(userText, historyTexts);
 function detectStyle(userText: string, analysis: any) {
@@ -304,6 +318,7 @@ if (isShortReply) {
   return "deep";
 }
 
+
 const styleMode = detectStyle(userText, analysis);
 const intent = "general";
 
@@ -328,7 +343,9 @@ const identity = getUserIdentity(userId);
 const memory = getMemory(userId);
 
 const lastActive = await getLastActive(userId);
+
 const returnContext = detectReturnContext(lastActive);
+
 
 /* ========= MODE ========= */
 
@@ -512,7 +529,9 @@ shapeResponse({
   actions,
   progress: progress || undefined,
   returnContext: returnContext ?? undefined,
-});
+  userType,
+  isSensitive,
+  });
 
 let finalOutput = shapeResponse({
   text: baseText,
@@ -521,14 +540,21 @@ let finalOutput = shapeResponse({
   mode: conversationMode,
   microDetail: microDetail || undefined,
   userStyle: persistentStyle,
-  });
-
+  userType,
+  topics,
+  patterns,
+  prediction: prediction || undefined,
+  decisionNudge: decisionNudge || undefined,
+  actions,
+  progress: progress || undefined,
+  returnContext: returnContext ?? undefined,
+  isSensitive,
+});
 /* ========= STYLE ENGINE ========= */
 
 const isEmotional =
   analysis.state === "emotional" ||
   analysis.state === "overthinking";
-
 const isEarlyStage = history.length < 4;
 
 const shouldUseList =
@@ -559,36 +585,47 @@ if (chosen) {
 }
 
 finalOutput = finalOutput
-
-  // 🔥 każda sekcja po ":" zaczyna nową linię
   .replace(/:\s*/g, ":\n")
-
-  // 🔥 bullet listy (usuwa inline chaos)
   .replace(/\s*[-•]\s*/g, "\n• ")
-
-  // 🔥 jeśli punkty są w jednej linii → rozbij
   .replace(/• ([^•]+)/g, (m) => "\n• " + m.slice(2).trim())
-
-  // 🔥 usuń indenty (twoje 4 spacje)
   .replace(/\n\s{2,}/g, "\n")
-
-  // 🔥 DODAJ pustą linię po nagłówku (TO JEST KLUCZ)
   .replace(/(🔥.*?:)/g, "$1\n")
   .replace(/(⚠️.*?:)/g, "$1\n")
   .replace(/(👉.*?:)/g, "$1\n")
-
-  // 🔥 normalizacja
   .replace(/\n{3,}/g, "\n\n")
-  
   .replace(/•\s*/g, "\n• ")
-  
-  .replace(/•\s*/g, "\n• ")
-
   .trim();
 
-/* ========= INTENT CONTROL ========= */
+// 🔥 ANALIZA (TU!)
+const insight = analyzeConversationStep(userText, finalOutput);
+
+const score = scoreConversationStep(userText, finalOutput);
+
+finalOutput = refineResponse(finalOutput, score);
+
+await saveScore(userId, score, plan);
+
+console.log("SCORE", score);
+
+await saveScore(userId, score, plan);
+
+console.log("INSIGHT", {
+  user: userText,
+  ai: finalOutput,
+  insight,
+});
+
+console.log("SCORE", score);
+const isDrop =
+  userText.length < 10 &&
+  /ok|haha|xd|no/.test(userText.toLowerCase());
+
+console.log("DROP?", isDrop);
+
+// 🔥 AKTYWNOŚĆ
 await setLastActive(userId);
 
+// 🔥 RETURN
 if (intent !== "general") {
   return new Response(
     JSON.stringify({ reply: finalOutput }),

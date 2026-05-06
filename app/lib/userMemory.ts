@@ -179,3 +179,13 @@ export async function saveAction(userId: string, action: string) {
 export async function getActions(userId: string): Promise<string[]> {
   return (await kv.get<string[]>(`user:actions:${userId}`)) || [];
 }
+export async function setUserStyle(userId: string, style: string) {
+  await kv.set(`user:style:${userId}`, style);
+}
+export async function setUserType(userId: string, type: string) {
+  await kv.set(`user:type:${userId}`, type);
+}
+
+export async function getUserType(userId: string): Promise<string | null> {
+  return await kv.get(`user:type:${userId}`);
+}
