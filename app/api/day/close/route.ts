@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   const raw = completion.choices[0].message.content ?? "";
 
-  const final = shapeResponse({
+  const { text: final } = shapeResponse({
   text: raw,
   mode: "deep",
   });

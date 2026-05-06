@@ -15,7 +15,8 @@ type ShapeInput = {
   returnContext?: string;
   isSensitive?: boolean;
   score?: { score: number; label: string };
-};
+  recentEffects?: { type: string; ts: number }[];
+  };
 
 // 🔹 usuwa AI-fluff
 function removeAiFluff(text: string) {
@@ -450,9 +451,41 @@ export function refineResponse(
       return text + "\n\nMoże tu jest coś jeszcze.";
     }
   }
+function addPatternReflection(text: string, patterns?: any) {
+  if (!patterns) return text;
 
+  // 🔒 blokada: nie powtarzaj w tej samej odpowiedzi
+  if (text.includes("Widać, że to się u Ciebie powtarza")) {
+    return text;
+  }
+
+  if (Math.random() > 0.3) return text;
+
+  const variants = [
+  "Widać, że to się u Ciebie powtarza.",
+  "To nie wygląda na jednorazową sytuację.",
+  "Jakby ten schemat wracał co jakiś czas.",
+];
+
+const pick = variants[Math.floor(Math.random() * variants.length)];
+
+return text + "\n\n" + pick;
+}
   // 🟢 HIGH → zostaw
   return text;
+}
+function isOnCooldown(
+  effects: { type: string; ts: number }[] | undefined,
+  type: string,
+  cooldownMs: number
+) {
+  if (!effects) return false;
+
+  const now = Date.now();
+
+  return effects.some(
+    (e) => e.type === type && now - e.ts < cooldownMs
+  );
 }
 // 🔥 MAIN
 export function shapeResponse({
@@ -472,6 +505,7 @@ export function shapeResponse({
   returnContext,
   isSensitive,
   score,
+  recentEffects,
 }: ShapeInput) {
   let output = text.trim();
 
@@ -497,21 +531,24 @@ output = softenTone(output);
 output = adaptLength(output, userText);
 output = adaptToUserStyle(output, userStyle);
 
+let usedEffect: string | null = null;
 // 🔥 INTELIGENCJA (LOSOWANA — max 1–2 rzeczy)
 const rand = Math.random();
 
-if (rand < 0.25) {
+const usedRecently = (type: string) =>
+  recentEffects?.some((e) => e.type === "pattern")
+
+const COOLDOWN = 2 * 60 * 1000; // 2 minuty
+
+if (rand < 0.25 && !isOnCooldown(recentEffects, "topic", COOLDOWN)) {
   output = addTopicCallback(output, topics);
-} else if (rand < 0.45) {
+  usedEffect = "topic";
+} else if (rand < 0.40 && !isOnCooldown(recentEffects, "pattern", COOLDOWN)) {
   output = addPatternReflection(output, patterns);
-} else if (rand < 0.6) {
+  usedEffect = "pattern";
+} else if (rand < 0.6 && !isOnCooldown(recentEffects, "prediction", COOLDOWN)) {
   output = addPrediction(output, prediction);
-} else if (rand < 0.75) {
-  output = addDecisionNudge(output, decisionNudge);
-} else if (rand < 0.9) {
-  output = addActionCheck(output, actions);
-} else if (rand < 1) {
-  output = addProgressSignal(output, progress);
+  usedEffect = "prediction";
 }
 // 🔥 CLEAN
 output = removeRepetitions(output);
@@ -536,6 +573,9 @@ if (effectRand < 0.35) {
   output = addLooseEnding(output, mode);
 }
 
-return output.trim();
+return {
+  text: output.trim(),
+  usedEffect,
+};
  
 }

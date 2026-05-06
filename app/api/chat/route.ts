@@ -28,6 +28,7 @@ import { extractContextAnchor } from "../../lib/contextAnchor";
 import { saveMicroDetail, getMicroDetail } from "@/lib/userMemory";
 import { updateUserIdentity, getUserIdentity } from "@/lib/userIdentity";
 import { updateContextAnchor, getContextAnchor } from "../../lib/userMemory";
+import { getRecentEffects, saveEffect } from "../../lib/effectMemory";
 import {
   detectMode,
   isLooping,
@@ -515,6 +516,8 @@ const response = await openai.chat.completions.create({
 });
 let baseText = response.choices?.[0]?.message?.content || "";
 
+const recentEffects = await getRecentEffects(userId);
+
 shapeResponse({
   text: baseText,
   intent,
@@ -531,9 +534,12 @@ shapeResponse({
   returnContext: returnContext ?? undefined,
   userType,
   isSensitive,
+  recentEffects,
+  
   });
 
-let finalOutput = shapeResponse({
+  // 🔥 NAJPIERW WYWOŁANIE
+const { text, usedEffect } = shapeResponse({
   text: baseText,
   intent,
   userText,
@@ -549,7 +555,16 @@ let finalOutput = shapeResponse({
   progress: progress || undefined,
   returnContext: returnContext ?? undefined,
   isSensitive,
+  recentEffects,
 });
+
+// 🔥 TEKST
+let finalOutput = text;
+
+// 🔥 ZAPIS EFEKTU (TYLKO RAZ!)
+if (usedEffect) {
+  await saveEffect(userId, usedEffect);
+}
 /* ========= STYLE ENGINE ========= */
 
 const isEmotional =
