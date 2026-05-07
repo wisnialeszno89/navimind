@@ -20,13 +20,14 @@ import { setRelationAnchor, getRelationAnchor } from "../../lib/contextAnchor";
 import { setUserStyle, getUserStyle } from "../../lib/userMemory";
 import { detectUserType } from "../../lib/psychologyEngine";
 import { setUserType, getUserType } from "../../lib/userMemory";
+import { detectResponseType } from "../../lib/responseType";
 import { refineResponse } from "../../lib/responseShaper";
 import { detectIntent } from "../../lib/brainRouter";
 import { buildConversationSummary } from "../../lib/conversationSummary";
 import { detectConversationMode } from "../../lib/conversationMode";
 import { extractContextAnchor } from "../../lib/contextAnchor";
-import { saveMicroDetail, getMicroDetail } from "@/lib/userMemory";
-import { updateUserIdentity, getUserIdentity } from "@/lib/userIdentity";
+import { saveMicroDetail, getMicroDetail } from "../../lib/userMemory";
+import { updateUserIdentity, getUserIdentity } from "../../lib/userIdentity";
 import { updateContextAnchor, getContextAnchor } from "../../lib/userMemory";
 import { getRecentEffects, saveEffect } from "../../lib/effectMemory";
 import {
@@ -322,6 +323,7 @@ if (isShortReply) {
 
 const styleMode = detectStyle(userText, analysis);
 const intent = "general";
+const responseType = detectResponseType(userText, analysis);
 
 updateUserProfile(userId, analysis);
 
@@ -501,13 +503,13 @@ const systemPrompt = buildSystemPrompt({
   lastUser,
   continuationHint,
   conversationMode,
+  responseType,
   microDetail: microDetail || undefined,
 });
 const response = await openai.chat.completions.create({
   model: "gpt-4.1-mini",
   temperature: 0.7,
-  max_tokens: 800,
-  stop: ["\n\n\n"],
+  max_tokens: 1200,
   messages: [
     { role: "system", content: systemPrompt },
     ...history,
@@ -534,8 +536,7 @@ shapeResponse({
   returnContext: returnContext ?? undefined,
   userType,
   isSensitive,
-  recentEffects,
-  
+  recentEffects,  
   });
 
   // 🔥 NAJPIERW WYWOŁANIE
@@ -611,12 +612,14 @@ finalOutput = finalOutput
   .replace(/•\s*/g, "\n• ")
   .trim();
 
-// 🔥 ANALIZA (TU!)
+finalOutput = formatResponse(finalOutput);
+  // 🔥 ANALIZA (TU!)
+
 const insight = analyzeConversationStep(userText, finalOutput);
 
 const score = scoreConversationStep(userText, finalOutput);
 
-finalOutput = refineResponse(finalOutput, score);
+// finalOutput = refineResponse(finalOutput, score);
 
 await saveScore(userId, score, plan);
 

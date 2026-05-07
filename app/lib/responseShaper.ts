@@ -487,6 +487,55 @@ function isOnCooldown(
     (e) => e.type === type && now - e.ts < cooldownMs
   );
 }
+function limitQuestions(text: string) {
+  const matches = text.match(/\?/g);
+
+  if (!matches || matches.length <= 1) {
+    return text;
+  }
+
+  let found = false;
+
+  return text.replace(/\?/g, () => {
+    if (!found) {
+      found = true;
+      return "?";
+    }
+
+    return ".";
+  });
+}
+function removeWeakOpeners(text: string) {
+  return text
+    .replace(/^To zależy[^.]*\./i, "")
+    .replace(/^Zacznijmy od[^.]*\./i, "")
+    .replace(/^Warto zastanowić się[^.]*\./i, "")
+    .replace(/^Pytanie kluczowe[^.]*\./i, "");
+}
+function removeCorporateTone(text: string) {
+  return text
+    .replace(/realny potencjał/gi, "potencjał")
+    .replace(/mierzalne cele/gi, "konkretny plan")
+    .replace(/zasoby/gi, "czas i możliwości")
+    .replace(/w perspektywie 6-12 miesięcy/gi, "w najbliższym czasie")
+    .replace(/skalować/gi, "rozwinąć")
+    .replace(/targetowanie/gi, "trafienie do właściwych ludzi")
+    .replace(/konwersję/gi, "reakcję ludzi");
+}
+function humanizeTone(text: string) {
+  return text
+    .replace(/Jeśli chcesz szybko i realnie podnieść ruch/gi, "Szczerze? Żeby realnie podnieść ruch")
+    .replace(/warto ogarnąć/gi, "najpierw trzeba ogarnąć")
+    .replace(/wyraźna komunikacja wartości/gi, "jasny przekaz")
+    .replace(/Twoi potencjalni klienci/gi, "ludzie, którzy mogą tego używać")
+    .replace(/zainteresowanie to najlepszy wskaźnik/gi, "zainteresowanie najlepiej pokazuje")
+}
+function removeAiClosings(text: string) {
+  return text
+    .replace(/Jeśli chcesz, mogę pomóc[^.]*\./gi, "")
+    .replace(/Mogę też pomóc[^.]*\./gi, "")
+    .replace(/Jeśli chcesz, mogę[^.]*\./gi, "");
+}
 // 🔥 MAIN
 export function shapeResponse({
   text,
@@ -522,55 +571,55 @@ export function shapeResponse({
   if (mode === "reflective") {
     output = output.replace(/👉[\s\S]*/g, "").trim();
   }
-
+output = removeWeakOpeners(output);
+output = removeCorporateTone(output);
+output = humanizeTone(output);
+output = removeAiClosings(output);
   // 🔥 FLOW (rdzeń rozmowy)
-output = addHumanTouch(output, mode);
-output = injectDeeperResponse(output, userText);
-output = addMemoryEcho(output, microDetail);
-output = softenTone(output);
-output = adaptLength(output, userText);
+// output = addHumanTouch(output, mode);
+  // output = injectDeeperResponse(output, userText);
+// output = addMemoryEcho(output, microDetail);
+// output = softenTone(output);
+// output = adaptLength(output, userText);
 output = adaptToUserStyle(output, userStyle);
+output = limitQuestions(output);
 
 let usedEffect: string | null = null;
 // 🔥 INTELIGENCJA (LOSOWANA — max 1–2 rzeczy)
-const rand = Math.random();
 
 const usedRecently = (type: string) =>
   recentEffects?.some((e) => e.type === "pattern")
 
 const COOLDOWN = 2 * 60 * 1000; // 2 minuty
 
-if (rand < 0.25 && !isOnCooldown(recentEffects, "topic", COOLDOWN)) {
+if (
+  mode === "reflective" &&
+  !isSensitive &&
+  userText.length > 120
+) {
   output = addTopicCallback(output, topics);
-  usedEffect = "topic";
-} else if (rand < 0.40 && !isOnCooldown(recentEffects, "pattern", COOLDOWN)) {
-  output = addPatternReflection(output, patterns);
-  usedEffect = "pattern";
-} else if (rand < 0.6 && !isOnCooldown(recentEffects, "prediction", COOLDOWN)) {
-  output = addPrediction(output, prediction);
-  usedEffect = "prediction";
 }
 // 🔥 CLEAN
 output = removeRepetitions(output);
 
 // 🔥 CHARAKTER 
-output = injectCharacter(output, mode, userType);
+// output = injectCharacter(output, mode, userType);
 
 // 🔥 MIKRO KONFLIKT 
-output = addMicroConflict(output, userText, userType, isSensitive);
+// output = addMicroConflict(output, userText, userType, isSensitive);
 
-output = applyAutoTuning(output, score);
-output = addMicroConflict(output, userText, userType, isSensitive);
+// output = applyAutoTuning(output, score);
+// output = addMicroConflict(output, userText, userType, isSensitive);
 
 // 🔥 1 efekt specjalny
 const effectRand = Math.random();
 
-if (effectRand < 0.35) {
+if (
+  mode === "reflective" &&
+  !isSensitive &&
+  userText.length > 80
+) {
   output = addReturnHook(output, returnContext);
-} else if (effectRand < 0.55) {
-  output = addHook(output, mode);
-} else if (effectRand < 0.7) {
-  output = addLooseEnding(output, mode);
 }
 
 return {
