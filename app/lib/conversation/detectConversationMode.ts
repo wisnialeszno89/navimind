@@ -1,37 +1,38 @@
-import { ConversationMode } from "./conversationModes";
+export type ConversationMode =
+  | "casual"
+  | "reflective"
+  | "deep"
+  | "technical"
+  | "social";
 
 export function detectConversationMode(
-  input: string,
-  analysis: any
+  text: string
 ): ConversationMode {
-  const text = input.toLowerCase();
+  const t = text.toLowerCase();
 
-  // 1️⃣ PĘTLA – wracanie w to samo miejsce
-  // priorytet najwyższy
   if (
-    analysis?.avoidance === true &&
-    analysis?.clarity === "low"
+    /kod|typescript|nextjs|api|błąd|terminal|deploy/.test(t)
   ) {
-    return "LOOP";
+    return "technical";
   }
 
-  // 2️⃣ EMOCJE
-  if (analysis?.emotionalCharge === "high") {
-    return "EMOTIONAL";
-  }
-
-  // 3️⃣ KONKRET
   if (
-    text.includes("?") ||
-    text.startsWith("jak ") ||
-    text.startsWith("co ") ||
-    text.startsWith("zrób") ||
-    text.startsWith("podaj") ||
-    text.startsWith("wymyśl")
+    /ludzie|społeczeństwo|relacje|ego|zachowanie/.test(t)
   ) {
-    return "CONCRETE";
+    return "social";
   }
 
-  // 4️⃣ DOMYŚLNE – rozmowa
-  return "CASUAL";
+  if (
+    /świadomość|dusza|istnienie|sens/.test(t)
+  ) {
+    return "deep";
+  }
+
+  if (
+    /czuję|mam dość|męczy/.test(t)
+  ) {
+    return "reflective";
+  }
+
+  return "casual";
 }

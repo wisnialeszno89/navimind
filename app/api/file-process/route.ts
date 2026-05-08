@@ -6,7 +6,7 @@ import { checkAndIncrementMonthlyUsage } from "../../lib/monthlyUsage";
 
 import { processImage } from "../../lib/ai/image";
 import { processPdf } from "../../lib/pdf/processPdf";
-import { generatePdf } from "../../lib/pdf/generatePdf";
+import { createPdfBuffer } from "../../lib/pdf/createPdfBuffer";
 import { canUse } from "../../lib/usage/permissions";
 
 export const runtime = "nodejs";
@@ -167,7 +167,10 @@ Zasady:
   const newText =
     aiRes.choices?.[0]?.message?.content?.trim() || originalText;
 
-  const pdfBuffer = await generatePdf(newText);
+  const pdfBuffer = await createPdfBuffer(
+  newText,
+  "Navimind PDF"
+  );
 
   return NextResponse.json({
     type: "pdf",

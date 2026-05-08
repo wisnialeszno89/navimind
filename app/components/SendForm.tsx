@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../lib/chatStore";
 import ProNotice from "./ProNotice";
 import { Plus } from "lucide-react";
 import { imageToBase64 } from "../lib/imageToBase64";
 
+
 export default function SendForm({ setIsTyping, chatId }: any) {
   const [text, setText] = useState("");
+
+  const [plan, setPlan] = useState<
+    "free" | "pro" | "pro_plus"
+  >("free");
+
   const [showPro, setShowPro] = useState(false);
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -18,28 +24,52 @@ export default function SendForm({ setIsTyping, chatId }: any) {
   const recognitionRef = useRef<any>(null);
 
   const [isSending, setIsSending] = useState(false);
+
   const add = useChatStore((s) => s.add);
-  const plan = useChatStore((s) => s.plan);
   const addProgress = useChatStore((s) => s.addProgress);
+
   useEffect(() => {
-  const handler = (e: any) => {
-    if (!e.detail) return;
+    async function loadPlan() {
+      try {
+        const res = await fetch("/api/plan");
+        const data = await res.json();
 
-    // ustaw tekst jakby user wpisał
-    setText(e.detail);
+        if (data?.plan) {
+          setPlan(data.plan);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
-    // wyślij po krótkim ticku (żeby state się ustawił)
-    setTimeout(() => {
-      send();
-    }, 0);
-  };
+    loadPlan();
+  }, []);
 
-  window.addEventListener("quick-send", handler);
+  const canUseImage =
+    plan === "pro" || plan === "pro_plus";
 
-  return () => {
-    window.removeEventListener("quick-send", handler);
-  };
-}, []);
+  const canUsePdf =
+    plan === "pro" || plan === "pro_plus";
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (!e.detail) return;
+
+      // ustaw tekst jakby user wpisał
+      setText(e.detail);
+
+      // wyślij po ticku
+      setTimeout(() => {
+        send();
+      }, 0);
+    };
+
+    window.addEventListener("quick-send", handler);
+
+    return () => {
+      window.removeEventListener("quick-send", handler);
+    };
+  }, []);
   function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -153,7 +183,7 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 
   const data = await res.json();
 
-  // 🖼️ IMAGE
+    // 🖼️ IMAGE
   if (data.type === "image") {
     const url = `data:image/png;base64,${data.data}`;
     setPreviewUrl(null);
@@ -161,6 +191,39 @@ export default function SendForm({ setIsTyping, chatId }: any) {
     setPendingFile(null);
     return;
   }
+  // 📄 PDF ACTION
+if (data.action === "generate_pdf") {
+  const pdfRes = await fetch("/api/export-pdf", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      title: "Navimind PDF",
+      content: data.content,
+    }),
+  });
+
+  const blob = await pdfRes.blob();
+
+  const url = URL.createObjectURL(blob);
+
+  setSelected(url);
+
+  const messages = [...useChatStore.getState().messages];
+
+  messages[messages.length - 1] = {
+    role: "assistant",
+    content: "📄 Gotowy PDF poniżej",
+  };
+
+  useChatStore.getState().setMessages(messages);
+
+  setIsTyping(false);
+  setIsSending(false);
+
+  return;
+}
 
   // 📄 PDF
   if (data.type === "pdf") {
@@ -191,7 +254,6 @@ export default function SendForm({ setIsTyping, chatId }: any) {
 }
 
   /* ================= SEND ================= */
-
 async function send() {
   const raw = text.trim();
   if (!raw) return;
@@ -292,12 +354,21 @@ async function send() {
       </div>
 
       <div className="flex justify-center">
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="px-3 py-2 bg-blue-600 rounded text-sm"
-        >
-          📸 Dodaj zdjęcie
-        </button>
+        {canUseImage ? (
+  <button
+    onClick={() => fileInputRef.current?.click()}
+    className="px-3 py-2 bg-blue-600 rounded text-sm"
+  >
+    📸 Dodaj zdjęcie
+  </button>
+) : (
+  <button
+    disabled
+    className="px-3 py-2 bg-white/10 rounded text-sm opacity-50"
+  >
+    🔒 Zdjęcia i PDF — PRO
+  </button>
+)}
       </div>
 
       {previewUrl && (

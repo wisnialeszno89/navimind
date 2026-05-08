@@ -8,7 +8,9 @@ import { detectTopic } from "../../lib/topicEngine";
 import { saveTopic, getTopics } from "../../lib/userMemory";
 import { detectDecisionMoment, getDecisionNudge } from "../../lib/decisionEngine";
 import { detectProgress } from "../../lib/progressEngine";
-import { detectReturnContext } from "../../lib/returnEngine";
+import { buildSystemPrompt } from "../../lib/conversation/buildSystemPrompt";
+import { detectConversationMode } from "../../lib/conversation/detectConversationMode";
+import { detectResponseStrategy } from "../../lib/conversation/detectResponseStrategy";
 import { analyzeConversationStep } from "../../lib/conversationInsights";
 import { setLastActive, getLastActive } from "../../lib/lastActive";
 import { shapeResponse } from "../../lib/responseShaper";
@@ -24,7 +26,7 @@ import { detectResponseType } from "../../lib/responseType";
 import { refineResponse } from "../../lib/responseShaper";
 import { detectIntent } from "../../lib/brainRouter";
 import { buildConversationSummary } from "../../lib/conversationSummary";
-import { detectConversationMode } from "../../lib/conversationMode";
+
 import { extractContextAnchor } from "../../lib/contextAnchor";
 import { saveMicroDetail, getMicroDetail } from "../../lib/userMemory";
 import { updateUserIdentity, getUserIdentity } from "../../lib/userIdentity";
@@ -38,7 +40,7 @@ import {
 } from "@/lib/brainRouter";
 import { buildTone } from "../../lib/buildTone";
 import { getNextStep } from "../../lib/nextStepEngine";
-import { buildSystemPrompt } from "@/lib/buildSystemPrompt";
+// import { buildSystemPrompt } from "@/lib/buildSystemPrompt";
 import { updateMemory, getMemory, updateCoreMemory, getCoreMemory,saveAction,getActions, } from "../../lib/userMemory";
 
 import { extractChosenOption } from "../../lib/nextStepEngine";
@@ -55,6 +57,7 @@ import {
   appendChatMessageByEmail,
   getChatMessagesByEmail,
   } from "../../lib/chatHistory";
+  import { detectActionIntent } from "../../lib/actionRouter";
   
 
 import {
@@ -171,56 +174,185 @@ function extractCoreProblem(text: string, history: ChatMsg[]) {
 
 /* ========= ROUTE ========= */
 
+function detectFlowStage(
+  analysis: any,
+  history: any[]
+) {
+  const lastMessages = history
+    .slice(-3)
+    .map((m) => m.content)
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    /wybieram|biorę|ok|dobra|idziemy|robimy/.test(
+      lastMessages
+    )
+  ) {
+    return "action";
+  }
+
+  if (analysis.mode === "direction") {
+    return "direction";
+  }
+
+  if (
+    analysis.state === "emotional" ||
+    analysis.state === "overthinking"
+  ) {
+    return "support";
+  }
+
+  return "support";
+}
+
+function isDependentFollowup(text: string) {
+  const t = text
+    .trim()
+    .toLowerCase();
+
+  return (
+    t.length < 25 &&
+    /^(ale )?(po co|dlaczego|czemu|czyli|i co|i\?|to po co|serio|no ale|i wtedy|i co wtedy)/i.test(
+      t
+    )
+  );
+}function buildFollowupHint(
+  userText: string,
+  lastAssistant: string
+) {
+  const t = userText
+    .trim()
+    .toLowerCase();
+
+  const last = lastAssistant
+    .slice(-1200)
+    .toLowerCase();
+
+  // 🔥 PYTANIE O POWÓD
+  if (
+    /^(ale )?(po co|dlaczego|czemu)\??$/.test(
+      t
+    )
+  ) {
+    return `
+User pyta o POWÓD lub MOTYW
+mechanizmu opisanego wcześniej.
+
+NIE zmieniaj tematu.
+NIE odpowiadaj ogólnie.
+NIE dawaj porad życiowych.
+
+Masz wyjaśnić:
+DLACZEGO ludzie robią to,
+o czym była poprzednia odpowiedź.
+
+Odpowiadasz bez dopytywania.
+`;
+  }
+
+  // 🔥 NIE ROZUMIE
+  if (
+    /nie rozumiem|bez sensu|co\?/.test(t)
+  ) {
+    return `
+User nie zrozumiał
+POPRZEDNIEGO mechanizmu.
+
+Wyjaśnij prościej tę samą myśl.
+Nie zmieniaj tematu.
+`;
+  }
+
+  // 🔥 OGÓLNY FOLLOWUP
+  return `
+To jest kontynuacja
+ostatniego tematu.
+
+Kontynuuj poprzednią myśl,
+a nie zaczynaj nowej rozmowy.
+`;
+}
 export async function POST(req: Request) {
   const userId = getUserId();
 
   if (!userId) {
-    return new Response(JSON.stringify({ error: "UNAUTHORIZED" }), {
-      status: 401,
-    });
+    return new Response(
+      JSON.stringify({
+        error: "UNAUTHORIZED",
+      }),
+      {
+        status: 401,
+      }
+    );
   }
 
   const email = getSessionEmail();
   const plan = await getUserPlan();
-  // 🔥 LIMIT (WSTAW TO)
-  if (plan === "free") {
-  const limit = await checkAndIncrementLimit(userId);
 
-  if (!limit.allowed) {
+  // 🔥 LIMIT
+  if (plan === "free") {
+    const limit =
+      await checkAndIncrementLimit(userId);
+
+    if (!limit.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: "LIMIT_REACHED",
+          used: limit.used,
+          limit: limit.limit,
+          resetAt: limit.resetAt,
+        }),
+        {
+          status: 403,
+        }
+      );
+    }
+  }
+
+  const body = await req
+    .json()
+    .catch(() => null);
+
+  const userText: string = String(
+    body?.message || ""
+  ).trim();
+
+  const actionIntent =
+    detectActionIntent(userText);
+
+  const pattern = detectPattern(userText);
+
+  if (pattern) {
+    await savePattern(userId, pattern);
+  }
+
+  const patterns = await getPatterns(userId);
+
+  const topic = detectTopic(userText);
+
+  if (topic) {
+    await saveTopic(userId, topic);
+  }
+
+  await saveMicroDetail(
+    userId,
+    userText
+  );
+
+  if (!userText) {
     return new Response(
       JSON.stringify({
-        error: "LIMIT_REACHED",
-        used: limit.used,
-        limit: limit.limit,
-        resetAt: limit.resetAt,
+        error: "NO_MESSAGE",
       }),
-      { status: 403 }
+      {
+        status: 400,
+      }
     );
   }
-}
- const body = await req.json().catch(() => null);
-const userText: string = String(body?.message || "").trim();
-const pattern = detectPattern(userText);
 
-if (pattern) {
-  await savePattern(userId, pattern);
-}
-const patterns = await getPatterns(userId);
-const topic = detectTopic(userText);
-
-if (topic) {
-  await saveTopic(userId, topic);
-}
-
-await saveMicroDetail(userId, userText);
-
-if (!userText) {
-  return new Response(JSON.stringify({ error: "NO_MESSAGE" }), {
-    status: 400,
-  });
-}
-
-const lower = userText.toLowerCase();
+  const lower =
+    userText.toLowerCase();
 
 // 🔥 SMALL TALK / LIGHT MODE (JEDYNY FILTR)
 const isGreeting =
@@ -278,8 +410,6 @@ await setUserStyle(userId, detectedStyle);
 const persistentStyle = (await getUserStyle(userId)) || "direct";
 const topics = await getTopics(userId);
 const relationAnchor = (await getRelationAnchor(userId)) || undefined;
-
-const conversationMode = detectConversationMode(userText, analysis, history);
 
 const progress = detectProgress(userText, historyTexts);
 function detectStyle(userText: string, analysis: any) {
@@ -346,13 +476,6 @@ const identity = getUserIdentity(userId);
 const memory = getMemory(userId);
 
 const lastActive = await getLastActive(userId);
-
-const returnContext = detectReturnContext(lastActive);
-
-
-/* ========= MODE ========= */
-
-const mode = "normal";
 
 /* ========= AUTO FLOW ENGINE ========= */
 
@@ -473,7 +596,7 @@ const continuationHint = lastAssistant
 
 // 🔹 context anchor (NOWY + zapis)
 const contextAnchor = extractContextAnchor([
-  ...history,
+  ...history.slice(-8),
   { role: "user", content: userText }
 ]);
 
@@ -490,73 +613,118 @@ const lastUser = history
 
 const microDetail = await getMicroDetail(userId);
 // 🔹 SYSTEM PROMPT
+const mode =
+  detectConversationMode(userText);
+
+const strategy =
+  detectResponseStrategy({
+    userText,
+    mode,
+  });
+
 const systemPrompt = buildSystemPrompt({
-  analysis,
-  userProfile,
+  mode,
+  strategy,
   memory,
-  coreProblem: safeCoreProblem,
   contextBlock,
-  tone,
-  personality,
   summary,
-  finalAnchor,
-  lastUser,
   continuationHint,
-  conversationMode,
-  responseType,
-  microDetail: microDetail || undefined,
 });
+if (actionIntent === "generate_pdf") {
+  return new Response(
+    JSON.stringify({
+      action: "generate_pdf",
+      content: userText,
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+console.log({
+  mode,
+  strategy,
+  userText,
+});
+const shortFollowup =
+  isDependentFollowup(userText);
+
+let contextualUserText = userText;
+
+if (
+  shortFollowup &&
+  history.length > 0
+) {
+  const lastAssistant = history
+    .filter((m) => m.role === "assistant")
+    .slice(-1)[0]?.content;
+
+  contextualUserText = `
+KONTEKST POPRZEDNIEJ ODPOWIEDZI:
+${lastAssistant}
+
+NOWA WIADOMOŚĆ USERA:
+${userText}
+
+Ta wiadomość jest kontynuacją
+poprzedniego tematu.
+
+NIE pytaj użytkownika:
+- "co masz na myśli?"
+- "o co chodzi?"
+- "możesz doprecyzować?"
+
+Samodzielnie wywnioskuj,
+do czego odnosi się pytanie.
+
+Zinterpretuj krótką wiadomość
+w kontekście poprzedniej rozmowy.
+`;
+}
 const response = await openai.chat.completions.create({
   model: "gpt-4.1-mini",
   temperature: 0.7,
   max_tokens: 1200,
   messages: [
-    { role: "system", content: systemPrompt },
-    ...history,
-    { role: "user", content: userText },
-  ],
+  {
+    role: "system",
+    content: systemPrompt,
+  },
+
+  ...history,
+
+  ...(isDependentFollowup(userText)
+  ? [
+      {
+        role: "system" as const,
+        content: buildFollowupHint(
+      userText,
+      lastAssistant || ""
+      ),
+      },
+    ]
+  : []),
+
+  {
+    role: "user",
+    content: userText,
+  },
+],
 });
 let baseText = response.choices?.[0]?.message?.content || "";
 
 const recentEffects = await getRecentEffects(userId);
 
-shapeResponse({
-  text: baseText,
-  intent,
-  userText,
-  mode: conversationMode,
-  microDetail: microDetail || undefined,
-  userStyle: persistentStyle,
-  topics,
-  patterns,
-  prediction: prediction || undefined,
-  decisionNudge: decisionNudge || undefined,
-  actions,
-  progress: progress || undefined,
-  returnContext: returnContext ?? undefined,
-  userType,
-  isSensitive,
-  recentEffects,  
-  });
-
-  // 🔥 NAJPIERW WYWOŁANIE
+ // 🔥 RESPONSE SHAPER
 const { text, usedEffect } = shapeResponse({
   text: baseText,
-  intent,
   userText,
-  mode: conversationMode,
-  microDetail: microDetail || undefined,
+  mode,
   userStyle: persistentStyle,
   userType,
-  topics,
-  patterns,
-  prediction: prediction || undefined,
-  decisionNudge: decisionNudge || undefined,
-  actions,
-  progress: progress || undefined,
-  returnContext: returnContext ?? undefined,
-  isSensitive,
-  recentEffects,
 });
 
 // 🔥 TEKST
@@ -601,15 +769,7 @@ if (chosen) {
 }
 
 finalOutput = finalOutput
-  .replace(/:\s*/g, ":\n")
-  .replace(/\s*[-•]\s*/g, "\n• ")
-  .replace(/• ([^•]+)/g, (m) => "\n• " + m.slice(2).trim())
-  .replace(/\n\s{2,}/g, "\n")
-  .replace(/(🔥.*?:)/g, "$1\n")
-  .replace(/(⚠️.*?:)/g, "$1\n")
-  .replace(/(👉.*?:)/g, "$1\n")
   .replace(/\n{3,}/g, "\n\n")
-  .replace(/•\s*/g, "\n• ")
   .trim();
 
 finalOutput = formatResponse(finalOutput);

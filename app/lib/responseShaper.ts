@@ -1,9 +1,12 @@
+import { ConversationMode } from "./conversation/detectConversationMode";
+import { formatResponse } from "./formatResponse";
+
+
 type ShapeInput = {
   text: string;
   intent?: string;
   userText?: string;
-  mode?: "casual" | "reflective" | "deep";
-  microDetail?: string;
+  mode?: ConversationMode;
   userStyle?: string;
   userType?: string;
   topics?: any;
@@ -26,79 +29,25 @@ function removeAiFluff(text: string) {
   );
 }
 
-// 🔹 lekki ludzki start
-function addHumanTouch(text: string, mode: string) {
-  if (mode === "casual") return text;
-
-  // 🔥 tylko czasem
-  if (Math.random() > 0.2) return text;
-
-  const starters = [
-    "Wiesz co…",
-    "Szczerze?",
-    "Mam wrażenie, że…",
-  ];
-
-  const pick = starters[Math.floor(Math.random() * starters.length)];
-
-  return `${pick}\n\n${text}`;
-}
 function removeRepetitions(text: string) {
   return text
     .replace(/^No właśnie[, ]*/i, "")
     .replace(/^Wiesz co[, ]*/i, "")
     .replace(/^Trochę to wygląda jak[, ]*/i, "");
 }
-// 🔹 niedomknięcie
-function addLooseEnding(text: string, mode?: string) {
-  if (mode === "deep") return text;
-
-  const endings = [
-    "",
-    "\n\nCoś w tym jest.",
-    "\n\nTrochę to wszystko się łączy.",
-  ];
-
-  return text + endings[Math.floor(Math.random() * endings.length)];
-}
 
 // 🔹 skraca gdy user pisze krótko
 function adaptLength(text: string, userText?: string) {
   if (!userText) return text;
 
-  if (userText.length < 40) {
-    return text.split(".").slice(0, 2).join(".") + ".";
+  if (userText.length < 120) {
+    const paragraphs = text.split("\n\n");
+
+    return paragraphs.slice(0, 2).join("\n\n");
   }
 
   return text;
 }
-// 🔹 dodatki
-function softenTone(text: string) {
-  return text
-    .replace(/^Bo /, "Często to jest tak, że ")
-    .replace(/Ludzie/g, "Część ludzi")
-    .replace(/Zawsze/g, "Często");
-}
-
-function randomBreak(text: string) {
-  if (Math.random() < 0.3) {
-    return text.split(".")[0] + ".";
-  }
-  return text;
-}
-function addHook(text: string, mode?: string) {
-  if (mode === "deep") return text;
-
-  const hooks = [
-    "",
-    "\n\nI to zwykle nie jest przypadek.",
-    "\n\nI tu się robi ciekawie.",
-    "\n\nBo to często nie chodzi tylko o to.",
-  ];
-
-  return text + hooks[Math.floor(Math.random() * hooks.length)];
-}
-
 function detectHiddenLayer(text: string) {
   const t = text.toLowerCase();
 
@@ -108,21 +57,6 @@ function detectHiddenLayer(text: string) {
 
   return null;
 }
-
-function injectDeeperResponse(text: string, userText: string) {
-  const layer = detectHiddenLayer(userText);
-
-  if (layer === "overload") {
-    return "Brzmi jakbyś miał tego za dużo.\n\n" + text;
-  }
-
-  if (layer === "seeking") {
-    return "To pytanie raczej nie jest przypadkowe.\n\n" + text;
-  }
-
-  return text;
-}
-
 function addMemoryEcho(text: string, microDetail?: string) {
   if (!microDetail) return text;
 
@@ -175,25 +109,6 @@ function addPatternReflection(text: string, patterns?: string[]) {
     const pick = variants[Math.floor(Math.random() * variants.length)];
 
     return pick + "\n\n" + text;
-  }
-
-  return text;
-}
-function injectCoreMeaning(text: string, userText: string) {
-  const t = userText.toLowerCase();
-
-  if (/czemu ludzie/.test(t)) {
-    return (
-      "Bo większość ludzi działa z napięcia, nie ze spokoju.\n\n" +
-      text
-    );
-  }
-
-  if (/mam dość|wkurwiają/.test(t)) {
-    return (
-      "To nie są tylko oni — to też to, że masz już tego za dużo.\n\n" +
-      text
-    );
   }
 
   return text;
@@ -307,11 +222,10 @@ function adaptToUserStyle(text: string, style?: string) {
 
   // 🔹 DIRECT
   if (style === "direct") {
-    return text
-      .split(".")
-      .slice(0, 2)
-      .join(".") + ".";
+  if (text.length > 350) {
+    return text.slice(0, 350).trim() + "...";
   }
+}
 
   // 🔹 CHAOTIC
   if (style === "chaotic") {
@@ -328,39 +242,6 @@ function adaptToUserStyle(text: string, style?: string) {
   // 🔹 REFLECTIVE
   if (style === "reflective") {
     return text + "\n\nTo ma trochę więcej warstw niż się wydaje.";
-  }
-
-  return text;
-}
-function injectCharacter(text: string, mode?: string, userType?: string) {
-  if (mode === "deep") return text;
-
-  // 🔹 lekkie „rozluźnienie języka”
-  text = text
-    .replace(/to jest/g, "to jest trochę")
-    .replace(/wydaje się/g, "trochę wygląda");
-
-  // 🔹 dopasowanie do typu usera
-  if (userType === "chaotic" && Math.random() < 0.3) {
-    return text + "\n\nTrochę odklejone, ale działa.";
-  }
-
-  if (userType === "direct" && text.length > 120) {
-    return text.split(".").slice(0, 2).join(".") + ".";
-  }
-
-  // 🔹 neutralny vibe
-  if (Math.random() < 0.3) {
-    const adds = [
-      "I to jest ciekawe.",
-      "Coś tu się powtarza.",
-      "Nie wygląda to przypadkowo.",
-      "Jest w tym jakiś schemat.",
-    ];
-
-    const pick = adds[Math.floor(Math.random() * adds.length)];
-
-    return `${text}\n\n${pick}`;
   }
 
   return text;
@@ -494,11 +375,11 @@ function limitQuestions(text: string) {
     return text;
   }
 
-  let found = false;
+  let firstFound = false;
 
   return text.replace(/\?/g, () => {
-    if (!found) {
-      found = true;
+    if (!firstFound) {
+      firstFound = true;
       return "?";
     }
 
@@ -510,7 +391,10 @@ function removeWeakOpeners(text: string) {
     .replace(/^To zależy[^.]*\./i, "")
     .replace(/^Zacznijmy od[^.]*\./i, "")
     .replace(/^Warto zastanowić się[^.]*\./i, "")
-    .replace(/^Pytanie kluczowe[^.]*\./i, "");
+    .replace(/^Pytanie kluczowe[^.]*\./i, "")
+    .replace(/^No właśnie[, ]*/i, "")
+    .replace(/^Szczerze[, ]*/i, "")
+    .replace(/^Wiesz co[, ]*/i, "");
 }
 function removeCorporateTone(text: string) {
   return text
@@ -536,95 +420,96 @@ function removeAiClosings(text: string) {
     .replace(/Mogę też pomóc[^.]*\./gi, "")
     .replace(/Jeśli chcesz, mogę[^.]*\./gi, "");
 }
+function removeAiConclusions(text: string) {
+  return text
+    .replace(/Podsumowując[:,]?/gi, "")
+    .replace(/W skrócie[:,]?/gi, "")
+    .replace(/Krótko mówiąc[:,]?/gi, "")
+    .replace(/Finalnie[:,]?/gi, "");
+}
+function trimOverExplaining(
+  text: string,
+  mode?: string
+) {
+  if (mode !== "casual") return text;
+
+  const parts = text.split("\n\n");
+
+  if (parts.length > 4) {
+    return parts.slice(0, 4).join("\n\n");
+  }
+
+  return text;
+}
+function reduceOvercertainty(text: string) {
+  return text
+    .replace(/To jest właśnie/gi, "Czasem to jest")
+    .replace(/To pokazuje/gi, "To może pokazywać")
+    .replace(/To oznacza/gi, "To często oznacza")
+    .replace(/Ludzie są/gi, "Część ludzi jest");
+}
+
 // 🔥 MAIN
 export function shapeResponse({
   text,
-  intent,
   userText = "",
   mode = "casual",
-  microDetail,
   userStyle,
   userType,
-  topics,
-  patterns,
-  prediction,
-  decisionNudge,
-  actions,
-  progress,
-  returnContext,
-  isSensitive,
-  score,
-  recentEffects,
 }: ShapeInput) {
   let output = text.trim();
 
-  output = removeAiFluff(output);
+  // 🔹 podstawowe czyszczenie
+ // 🔹 zmniejsz sztuczną pewność
+output = reduceOvercertainty(output);
 
-  if (mode === "casual") {
-    output = output
-      .replace(/🔥[\s\S]*?👉/g, "")
-      .replace(/⚠️[\s\S]*?\n/g, "")
-      .replace(/👉[\s\S]*/g, "")
-      .trim();
-  }
+// 🔹 mniej przesadnego tłumaczenia
+output = trimOverExplaining(output, mode);
 
-  if (mode === "reflective") {
-    output = output.replace(/👉[\s\S]*/g, "").trim();
-  }
-output = removeWeakOpeners(output);
-output = removeCorporateTone(output);
-output = humanizeTone(output);
-output = removeAiClosings(output);
-  // 🔥 FLOW (rdzeń rozmowy)
-// output = addHumanTouch(output, mode);
-  // output = injectDeeperResponse(output, userText);
-// output = addMemoryEcho(output, microDetail);
-// output = softenTone(output);
-// output = adaptLength(output, userText);
-output = adaptToUserStyle(output, userStyle);
+// 🔹 skracanie dla krótkich wiadomości
+output = adaptLength(output, userText);
+
+// 🔹 ogranicz ilość pytań
 output = limitQuestions(output);
 
-let usedEffect: string | null = null;
-// 🔥 INTELIGENCJA (LOSOWANA — max 1–2 rzeczy)
-
-const usedRecently = (type: string) =>
-  recentEffects?.some((e) => e.type === "pattern")
-
-const COOLDOWN = 2 * 60 * 1000; // 2 minuty
-
+// 🔹 miękkie domknięcie bez psucia kontekstu
 if (
-  mode === "reflective" &&
-  !isSensitive &&
-  userText.length > 120
+  mode === "casual" &&
+  Math.random() < 0.06
 ) {
-  output = addTopicCallback(output, topics);
+  const softEnds = [
+    "",
+    "",
+    "\n\nTo bywa bardziej złożone niż wygląda.",
+    "\n\nLudzie często nawet tego u siebie nie widzą.",
+  ];
+
+  output +=
+    softEnds[
+      Math.floor(
+        Math.random() * softEnds.length
+      )
+    ];
 }
-// 🔥 CLEAN
-output = removeRepetitions(output);
+  // 🔹 styl usera
+  if (userStyle && Math.random() < 0.35) {
+    output = adaptToUserStyle(
+      output,
+      userStyle
+    );
+  }
 
-// 🔥 CHARAKTER 
-// output = injectCharacter(output, mode, userType);
+  // 🔹 usuń powtórzenia
+  output = removeRepetitions(output);
 
-// 🔥 MIKRO KONFLIKT 
-// output = addMicroConflict(output, userText, userType, isSensitive);
+  // 🔹 final cleanup
+  output = output
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ ]{2,}/g, " ")
+    .trim();
 
-// output = applyAutoTuning(output, score);
-// output = addMicroConflict(output, userText, userType, isSensitive);
-
-// 🔥 1 efekt specjalny
-const effectRand = Math.random();
-
-if (
-  mode === "reflective" &&
-  !isSensitive &&
-  userText.length > 80
-) {
-  output = addReturnHook(output, returnContext);
-}
-
-return {
-  text: output.trim(),
-  usedEffect,
-};
- 
+  return {
+    text: formatResponse(output),
+    usedEffect: null,
+  };
 }
