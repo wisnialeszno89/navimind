@@ -1,11 +1,12 @@
 import { getPersonalityStyle } from "../../lib/personalityEngine";
-import { buildResourcePrompt } from "../../lib/smartResources";
+//import { buildResourcePrompt } from "../../lib/smartResources";
 import { getUserProfile, updateUserProfile } from "../../lib/userProfile";
 import { checkAndIncrementLimit } from "../../lib/chatLimit";
 import { extractActionStep } from "../../lib/nextStepEngine";
 import { detectUserStyle } from "../../lib/personalityEngine";
 import { detectTopic } from "../../lib/topicEngine";
 import { saveTopic, getTopics } from "../../lib/userMemory";
+import { normalizeFollowup } from "../../lib/followupNormalizer";
 import { detectDecisionMoment, getDecisionNudge } from "../../lib/decisionEngine";
 import { detectProgress } from "../../lib/progressEngine";
 import { buildSystemPrompt } from "../../lib/conversation/buildSystemPrompt";
@@ -16,14 +17,18 @@ import { setLastActive, getLastActive } from "../../lib/lastActive";
 import { shapeResponse } from "../../lib/responseShaper";
 import { detectPattern } from "../../lib/patternEngine";
 import { savePattern, getPatterns } from "../../lib/userMemory";
+import {
+  detectConversationPhase,
+} from "../../lib/detectConversationPhase";
 import { predictNext } from "../../lib/predictEngine";
 import { scoreConversationStep, saveScore } from "../../lib/conversationScore";
 import { setRelationAnchor, getRelationAnchor } from "../../lib/contextAnchor";
 import { setUserStyle, getUserStyle } from "../../lib/userMemory";
 import { detectUserType } from "../../lib/psychologyEngine";
 import { setUserType, getUserType } from "../../lib/userMemory";
+import { buildContextAnchor } from "../../lib/buildContextAnchor";
 import { detectResponseType } from "../../lib/responseType";
-import { refineResponse } from "../../lib/responseShaper";
+//import { refineResponse } from "../../lib/responseShaper";
 import { detectIntent } from "../../lib/brainRouter";
 import { buildConversationSummary } from "../../lib/conversationSummary";
 
@@ -32,6 +37,9 @@ import { saveMicroDetail, getMicroDetail } from "../../lib/userMemory";
 import { updateUserIdentity, getUserIdentity } from "../../lib/userIdentity";
 import { updateContextAnchor, getContextAnchor } from "../../lib/userMemory";
 import { getRecentEffects, saveEffect } from "../../lib/effectMemory";
+import {
+  buildConversationState,
+} from "../../lib/conversationState";
 import {
   detectMode,
   isLooping,
@@ -50,6 +58,7 @@ import { getUserId } from "../../lib/userId";
 import { getSessionEmail } from "../../lib/auth/session";
 import { getUserPlan } from "../../lib/userPlan";
 import { getDemoMemory, pushDemoMemory, updateDemoCore, getDemoCore } from "../../lib/demoMemory";
+import { detectViolenceRisk } from "../../lib/violenceDetector";
 import { analyzeUserMessage } from "../../lib/analyzeUserMessage";
 import { injectResources } from "../../lib/resources";
 import { formatResponse } from "../../lib/outputEngine";
@@ -66,9 +75,9 @@ import {
   fixCutOff,
   } from "../../lib/outputEngine";
 
-import { improveResponse } from "../../lib/responseQuality";
+//import { improveResponse } from "../../lib/responseQuality";
 import { scoreResponse } from "../../lib/responseScore";
-import { addSmartQuestion } from "../../lib/resources"; // lub osobny plik jak chcesz
+//import { addSmartQuestion } from "../../lib/resources"; 
 
 
 export const runtime = "nodejs";
@@ -211,13 +220,28 @@ function isDependentFollowup(text: string) {
     .trim()
     .toLowerCase();
 
+  // 🔥 krótkie pytania kontekstowe
+  const contextualPatterns =
+    /po co|dlaczego|czemu|i co|czyli|serio|dokładnie|właśnie|rozwiń|wyjaśnij|tak naprawdę/i;
+
+  // 🔥 zaimki bez kontekstu
+  const vagueReferences =
+    /\b(to|tego|tym|taka|takie|tak)\b/i;
+
+  // 🔥 followup
+  const shortFollowup = t.length < 180;
+
   return (
-    t.length < 25 &&
-    /^(ale )?(po co|dlaczego|czemu|czyli|i co|i\?|to po co|serio|no ale|i wtedy|i co wtedy)/i.test(
-      t
+    shortFollowup &&
+    (
+      contextualPatterns.test(t) ||
+      vagueReferences.test(t)
     )
   );
-}function buildFollowupHint(
+}
+
+
+function buildFollowupHint(
   userText: string,
   lastAssistant: string
 ) {
@@ -397,6 +421,7 @@ await setUserType(userId, detectedType);
 const userType = (await getUserType(userId)) || "talker";
 // 👇 dopiero tutaj zaczyna się normalny flow
 const analysis = analyzeUserMessage(userText);
+const conversationState = buildConversationState( userText, history );
 const isSensitive =
   analysis.state === "emotional" ||
   analysis.state === "kryzys";
@@ -452,19 +477,12 @@ if (isShortReply) {
 
 
 const styleMode = detectStyle(userText, analysis);
-const intent = "general";
-const responseType = detectResponseType(userText, analysis);
+const intent = detectIntent(userText);
+
 
 updateUserProfile(userId, analysis);
 
 const userProfile = getUserProfile(userId);
-const prediction = predictNext(userText, patterns);
-const isDecision = detectDecisionMoment(userText);
-const decisionNudge = isDecision ? getDecisionNudge(userText) : null;
-if (decisionNudge) {
-  await saveAction(userId, decisionNudge);
-}
-const actions = await getActions(userId);
 
 /* ========= MEMORY ========= */
 
@@ -582,7 +600,14 @@ const openai = new OpenAI({
 });
 
 // 🔹 summary
-const summary = buildConversationSummary(history);
+
+const summary =
+  history.length > 15
+    ? buildConversationSummary(history)
+    : "";
+
+
+
 
 // 🔹 ostatnia odpowiedź (kontynuacja)
 const lastAssistant = history
@@ -621,38 +646,98 @@ const strategy =
     userText,
     mode,
   });
+const semanticAnchor = buildContextAnchor([
+  ...history,
+  { role: "user", content: userText },
+]);
+const shortFollowup =
+  isDependentFollowup(userText);
+
+const violenceRisk =
+  detectViolenceRisk(userText);
+
+let escalationMode = false;
+
+if (
+  violenceRisk ||
+  /ma w ryj|wpierdole|rozjebie|potracic|lufe|zajebie|skopie/.test(
+    userText.toLowerCase()
+  )
+) {
+  escalationMode = true;
+}
+const escalationContext = escalationMode
+  ? `
+Użytkownik jest mocno wzburzony i agresywny.
+
+Nie:
+- eskaluj emocji,
+- rezonuj z przemocą,
+- romantyzuj konfrontacji,
+- zachęcaj do "załatwienia sprawy".
+
+Nie zakładaj, że przemoc już się wydarzyła.
+
+Mów spokojnie, konkretnie i naturalnie.
+Skupiaj rozmowę na konsekwencjach i emocjach,
+a nie na fantazjach o przemocy.
+`
+  : "";
+
+const phase =
+  detectConversationPhase(history);
+
+const phaseContext =
+  phase === "direction"
+    ? `
+Problem użytkownika jest już dobrze znany.
+
+Nie zadawaj kolejnych pytań,
+jeśli kontekst jest już jasny.
+
+Zamiast tego:
+- nazwij sedno problemu,
+- pokaż mechanizm sytuacji,
+- wskaż możliwe kierunki działania,
+- pomóż użytkownikowi spojrzeć szerzej.
+
+Rozmowa ma prowadzić do refleksji,
+zrozumienia albo decyzji.
+`
+    : "";
 
 const systemPrompt = buildSystemPrompt({
-  mode,
-  strategy,
-  memory,
-  contextBlock,
-  summary,
+  contextBlock: `
+${escalationContext}
+
+${phaseContext}
+
+${semanticAnchor}
+
+${contextBlock || ""}
+`,
   continuationHint,
 });
-if (actionIntent === "generate_pdf") {
-  return new Response(
-    JSON.stringify({
-      action: "generate_pdf",
-      content: userText,
-    }),
-    {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    }
-  );
-}
 
 console.log({
   mode,
   strategy,
   userText,
 });
-const shortFollowup =
-  isDependentFollowup(userText);
 
-let contextualUserText = userText;
+if (
+  violenceRisk ||
+  /ma w ryj|wpierdole|rozjebie|potracic|lufe|zajebie|skopie/.test(
+    userText.toLowerCase()
+  )
+) {
+  escalationMode = true;
+}
+
+let contextualUserText: string = userText || "";
+
+
+contextualUserText = normalizeFollowup( userText, history ) || userText;
 
 if (
   shortFollowup &&
@@ -672,59 +757,44 @@ ${userText}
 Ta wiadomość jest kontynuacją
 poprzedniego tematu.
 
-NIE pytaj użytkownika:
-- "co masz na myśli?"
-- "o co chodzi?"
-- "możesz doprecyzować?"
-
-Samodzielnie wywnioskuj,
-do czego odnosi się pytanie.
+Kontekst poprzedniej wiadomości jest wystarczający do zrozumienia pytania użytkownika. 
+Nie proś o doprecyzowanie. 
+Nie zadawaj pytań typu: - "o co chodzi?" - "co masz na myśli?" - "możesz rozwinąć?" 
+Masz SAMODZIELNIE wywnioskować, do czego odnosi się użytkownik. To kontynuacja tego samego tematu.
 
 Zinterpretuj krótką wiadomość
 w kontekście poprzedniej rozmowy.
 `;
 }
+let forcedReply: string | null = null;
+
+if (violenceRisk) {
+  forcedReply =
+    "Widzę, że jesteś na granicy wybuchu. Ta złość jest realna, ale nie możesz pozwolić, żeby przejęła stery.";
+}
 const response = await openai.chat.completions.create({
   model: "gpt-4.1-mini",
-  temperature: 0.7,
-  max_tokens: 1200,
-  messages: [
-  {
-    role: "system",
-    content: systemPrompt,
-  },
-
-  ...history,
-
-  ...(isDependentFollowup(userText)
-  ? [
-      {
-        role: "system" as const,
-        content: buildFollowupHint(
-      userText,
-      lastAssistant || ""
-      ),
-      },
-    ]
-  : []),
-
-  {
-    role: "user",
-    content: userText,
-  },
-],
+  temperature: 0.82,
+  max_tokens: 220,
+  messages: [ { role: "system", content: systemPrompt, }, 
+  ...history, ...(isDependentFollowup(userText) ? 
+  [ { role: "system" as const, content: buildFollowupHint
+    ( userText, lastAssistant || "" ), }, ] : []), 
+    { role: "user", content: contextualUserText, }, ],
 });
 let baseText = response.choices?.[0]?.message?.content || "";
+
+if (forcedReply) {
+  baseText =
+    forcedReply + "\n\n" + baseText;
+}
 
 const recentEffects = await getRecentEffects(userId);
 
  // 🔥 RESPONSE SHAPER
+// 🔥 RESPONSE SHAPER
 const { text, usedEffect } = shapeResponse({
   text: baseText,
-  userText,
-  mode,
-  userStyle: persistentStyle,
-  userType,
 });
 
 // 🔥 TEKST
@@ -740,18 +810,6 @@ const isEmotional =
   analysis.state === "emotional" ||
   analysis.state === "overthinking";
 const isEarlyStage = history.length < 4;
-
-const shouldUseList =
-  userProfile.flowStage === "direction" &&
-  !isEmotional &&
-  history.length > 5 &&
-  /wybrać|co zrobić|jaką opcję/.test(userText.toLowerCase());
-
-const shouldStayConversational =
-  isEmotional || userProfile.flowStage !== "direction";
-
-const shouldPushAction =
-  userProfile.flowStage === "action";
 
 /* ========= DECISION DETECT ========= */
 
@@ -775,8 +833,6 @@ finalOutput = finalOutput
 finalOutput = formatResponse(finalOutput);
   // 🔥 ANALIZA (TU!)
 
-const insight = analyzeConversationStep(userText, finalOutput);
-
 const score = scoreConversationStep(userText, finalOutput);
 
 // finalOutput = refineResponse(finalOutput, score);
@@ -790,8 +846,7 @@ await saveScore(userId, score, plan);
 console.log("INSIGHT", {
   user: userText,
   ai: finalOutput,
-  insight,
-});
+  });
 
 console.log("SCORE", score);
 const isDrop =
@@ -860,7 +915,7 @@ if (plan !== "free" && email && body?.chatId) {
   await appendChatMessageByEmail(email, body.chatId, {
     id: crypto.randomUUID(),
     role: "user",
-    content: userText,
+    content: contextualUserText,
     createdAt: Date.now(),
   });
 

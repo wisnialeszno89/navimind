@@ -105,6 +105,5 @@ export function addSmartQuestion(text: string, userText: string): string {
 export function formatResponse(text: string): string {
   return text
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/(\*\*.*?\*\*)/g, "\n$1\n")
     .trim();
 }

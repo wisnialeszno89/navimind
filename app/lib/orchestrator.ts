@@ -10,7 +10,7 @@ export function orchestrateResponse(userText: string, base: string): string {
   let output = base;
 
   // 🔥 1. WYBÓR TRYBU
-  const route = routeResponse(userText);
+const route = routeResponse(userText, []);
 
   if (route === "crisis") {
     output = crisisOverride(userText, output);

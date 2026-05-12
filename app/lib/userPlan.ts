@@ -6,6 +6,8 @@ export type Plan = "free" | "pro" | "pro_plus";
 type PlanState = {
   plan: Plan;
   updatedAt: number;
+  subscriptionId?: string;
+  customerId?: string;
 };
 
 function normalizeEmail(email: string) {
@@ -18,9 +20,19 @@ export async function getPlanByEmail(email: string): Promise<Plan> {
   return state?.plan ?? "free";
 }
 
-export async function setPlanByEmail(email: string, plan: Plan) {
+export async function setPlanByEmail(
+  email: string,
+  plan: Plan,
+  subscriptionId?: string,
+  customerId?: string
+) {
   const key = `plan:${normalizeEmail(email)}`;
-  const state: PlanState = { plan, updatedAt: Date.now() };
+  const state: PlanState = {
+  plan,
+  updatedAt: Date.now(),
+  subscriptionId,
+  customerId,
+};
   await kv.set(key, state);
 }
 
@@ -43,4 +55,13 @@ export async function setUserPlan(plan: Plan): Promise<void> {
   const email = getSessionEmail();
   if (!email) return;
   await setPlanByEmail(email, plan);
+}
+export async function getUserBilling() {
+  const email = getSessionEmail();
+
+  if (!email) return null;
+
+  const key = `plan:${normalizeEmail(email)}`;
+
+  return kv.get<PlanState>(key);
 }
