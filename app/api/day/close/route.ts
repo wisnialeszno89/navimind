@@ -34,8 +34,7 @@ export async function POST(req: Request) {
 
   const { text: final } = shapeResponse({
   text: raw,
-  mode: "deep",
-  });
+});
 
   const parts = final.split(/\n|\./).filter(Boolean);
 
