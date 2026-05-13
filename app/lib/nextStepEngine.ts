@@ -53,6 +53,13 @@ export function extractActionStep(text: string): string | null {
   return null;
 }
 export function extractOptions(text: string): string[] {
+  if (
+  text.includes("http://") ||
+  text.includes("https://") ||
+  text.includes("](")
+) {
+  return [];
+}
   const lines = text.split("\n");
 
   return lines

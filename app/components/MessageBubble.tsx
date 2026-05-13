@@ -10,30 +10,23 @@ function splitSections(text: string) {
 }
 
 function extractOptions(section: string) {
+
+  // 🔥 jeśli są linki → NIE rób buttonów
+  if (
+    section.includes("http://") ||
+    section.includes("https://") ||
+    section.includes("](")
+  ) {
+    return [];
+  }
+
   const lines = section.split("\n");
-  return lines.filter((l) => /^\d+\./.test(l));
-}
 
-function renderLinks(text: string) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-
-  return text.split(urlRegex).map((part, i) =>
-    urlRegex.test(part) ? (
-      <a
-        key={i}
-        href={part}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-400 underline break-all"
-      >
-        {part}
-      </a>
-    ) : (
-      part
-    )
+  return lines.filter(
+    (l) =>
+      /^\d+\./.test(l)
   );
 }
-
 // 🔥 wykrywanie nagłówków (emoji + tekst:)
 function isHeader(section: string) {
   return /^(🔥|⚠️|👉|✔️)/.test(section.trim());
@@ -128,7 +121,23 @@ export default function MessageBubble({
                       />
                     );
                   },
-
+                  a({ href, children }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="
+        text-blue-400
+        underline
+        break-all
+        hover:text-blue-300
+      "
+    >
+      {children}
+    </a>
+  );
+},
                   p({ children }) {
                     return (
                       <p className="mb-2 last:mb-0 leading-relaxed">
@@ -165,13 +174,7 @@ export default function MessageBubble({
                 {section}
               </ReactMarkdown>
 
-              {/* 🔥 LINKI */}
-              {isLinks && (
-                <div className="mt-2 text-sm">
-                  {renderLinks(section)}
-                </div>
-              )}
-            </div>
+              </div>
           );
         })}
       </div>

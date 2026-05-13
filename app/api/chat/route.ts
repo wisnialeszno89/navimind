@@ -16,6 +16,8 @@ import { detectResponseStrategy } from "../../lib/conversation/detectResponseStr
 import { buildActiveTopic } from "../../lib/buildActiveTopic";
 import { shouldShowImages } from "../../lib/visualIntent";
 import { searchWeb } from "../../lib/searchWeb";
+import { detectContinuation } from "@/lib/detectContinuation";
+import { detectAffirmative } from "@/lib/detectAffirmative";
 import { analyzeConversationStep } from "../../lib/conversationInsights";
 import { setLastActive, getLastActive } from "../../lib/lastActive";
 import { buildEntityContext } from "../../lib/entityMemory";
@@ -220,22 +222,21 @@ function detectFlowStage(
 
   return "support";
 }
-
-function isDependentFollowup(text: string) {
+function isDependentFollowup(
+  text: string
+): boolean {
   const t = text
     .trim()
     .toLowerCase();
 
-  // 🔥 krótkie pytania kontekstowe
   const contextualPatterns =
     /po co|dlaczego|czemu|i co|czyli|serio|dokładnie|właśnie|rozwiń|wyjaśnij|tak naprawdę/i;
 
-  // 🔥 zaimki bez kontekstu
   const vagueReferences =
     /\b(to|tego|tym|taka|takie|tak)\b/i;
 
-  // 🔥 followup
-  const shortFollowup = t.length < 180;
+  const shortFollowup =
+    t.length < 180;
 
   return (
     shortFollowup &&
@@ -245,8 +246,6 @@ function isDependentFollowup(text: string) {
     )
   );
 }
-
-
 function buildFollowupHint(
   userText: string,
   lastAssistant: string
@@ -351,22 +350,29 @@ export async function POST(req: Request) {
   const actionIntent =
   detectActionIntent(userText);
 
-  const localIntent =
+ const localIntent =
   detectLocalIntent(userText);
 
-  let webResults = "";
+let webResults = "";
+let formattedResults = "";
 
 if (localIntent) {
-  const results = await searchWeb(
-    userText
-  );
+  try {
+    const results =
+      await searchWeb(userText);
 
-  webResults = results
-    .map(
-      (r: any) =>
-        `- ${r.title}: ${r.url}`
-    )
-    .join("\n");
+    console.log(
+      "WEB RESULTS",
+      results
+    );
+
+   
+} catch (err) {
+  console.log(
+    "SEARCH ERROR",
+    err
+  );
+}
 }
 
   const pattern = detectPattern(userText);
@@ -650,19 +656,100 @@ const summary =
     ? buildConversationSummary(history)
     : "";
 
+// 🔹 ostatnia odpowiedź
+const lastAssistant =
+  history
+    .filter(
+      (m) =>
+        m.role === "assistant"
+    )
+    .slice(-1)[0]?.content || "";
 
-
-
-// 🔹 ostatnia odpowiedź (kontynuacja)
-const lastAssistant = history
-  .filter(m => m.role === "assistant")
-  .slice(-1)[0]?.content;
-
-const continuationHint = lastAssistant
-  ? `NAWIĄŻ do tego co wcześniej powiedziałeś:
+// 🔹 hint kontynuacji
+const continuationHint =
+  lastAssistant
+    ? `NAWIĄŻ do tego co wcześniej powiedziałeś:
 "${lastAssistant.slice(-200)}"`
-  : "";
+    : "";
 
+// 🔹 czy assistant wcześniej oferował linki
+const assistantOfferedLinks =
+  /chcesz.*link|mog[eę].*link|podrzuc[eę].*link/i.test(
+    lastAssistant.toLowerCase()
+  );
+
+// 🔹 czy assistant oferował rekomendacje
+const assistantOfferedRecommendations =
+  /polec|rekomend|mog[eę].*pokaza|mog[eę].*podrzuci/i.test(
+    lastAssistant.toLowerCase()
+  );
+
+// 🔹 user chce linków
+const wantsLinks =
+  /link|kontakt|strona|telefon/i.test(
+    userText.toLowerCase()
+  );
+
+// 🔹 krótkie potwierdzenie typu:
+// "tak", "dawaj", "ok"
+const affirmativeFollowup =
+  detectAffirmative(userText);
+
+// 🔹 wymuszenie podania linków
+const shouldForceLinks =
+  (
+    wantsLinks ||
+    (
+      affirmativeFollowup &&
+      assistantOfferedLinks
+    )
+  ) &&
+  formattedResults.length > 0;
+
+// 🔹 wymuszenie rekomendacji
+const shouldForceRecommendations =
+  affirmativeFollowup &&
+  assistantOfferedRecommendations;
+
+const forcedActionContext =
+  shouldForceLinks
+    ? `
+Użytkownik chce teraz otrzymać:
+- linki,
+- kontakty,
+- konkretne wyniki.
+
+NIE pytaj ponownie o kontekst.
+NIE pytaj:
+- "o jakie linki chodzi",
+- "do czego?",
+- "co masz na myśli?".
+
+Wykorzystaj dostępne wyniki wyszukiwania
+i podaj je użytkownikowi.
+`
+    : "";
+
+    if (
+  shouldForceLinks &&
+  formattedResults
+) {
+  return new Response(
+    JSON.stringify({
+      reply: `
+Znalazłem kilka konkretnych opcji 😄
+
+${formattedResults}
+`,
+    }),
+    {
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+    }
+  );
+}
 // 🔹 context anchor (NOWY + zapis)
 const contextAnchor = extractContextAnchor([
   ...history.slice(-8),
@@ -704,6 +791,14 @@ const strategy =
   ...history,
   { role: "user", content: userText },
 ]);
+const activeContext = `
+AKTYWNY TEMAT ROZMOWY:
+${semanticAnchor}
+
+NIE zmieniaj tematu rozmowy,
+jeśli użytkownik pisze krótko,
+chaotycznie albo emocjonalnie.
+`;
   const entityContext =
   buildEntityContext([
     ...history,
@@ -711,6 +806,12 @@ const strategy =
   ]);
 const shortFollowup =
   isDependentFollowup(userText);
+
+const continuationIntent =
+  detectContinuation(userText);
+
+  const affirmativeIntent =
+  detectAffirmative(userText);
 
 const violenceRisk =
   detectViolenceRisk(userText);
@@ -765,40 +866,29 @@ zrozumienia albo decyzji.
 `
     : "";
 
-const systemPrompt = buildSystemPrompt({
-  contextBlock: `
+const systemPrompt =
+  buildSystemPrompt({
+    contextBlock: `
 ${escalationContext}
 
 ${phaseContext}
 
-${entityContext}
-
-${semanticMemory}
-
-${activeTopic}
-
-${webResults ? `
-REALNE WYNIKI WYSZUKIWANIA:
-${webResults}
-
-Jeśli pasują do rozmowy:
-- podawaj konkretne linki,
-- polecaj najlepsze opcje,
-- pomagaj użytkownikowi wybrać.
-` : ""}
-
 ${semanticAnchor}
 
+${entityContext}
+
+AKTUALNE WYNIKI WYSZUKIWANIA:
+${webResults}
+${activeContext}
 ${contextBlock || ""}
 `,
 
-  continuationHint,
-});
-console.log({
-  mode,
-  strategy,
-  userText,
-});
+    continuationHint: `
+${forcedActionContext || ""}
+
+${continuationHint || ""}
+`,
+  });
 
 if (
   violenceRisk ||
@@ -821,10 +911,23 @@ if (
   const lastAssistant = history
     .filter((m) => m.role === "assistant")
     .slice(-1)[0]?.content;
+  
+    const assistantOfferedLinks =
+  /chcesz.*link|mog[eę].*link|podrzuc[eę].*link/i.test(
+    lastAssistant.toLowerCase()
+  );
+
+    const assistantOfferedRecommendations =
+  /polec|rekomend|mog[eę].*pokaza|mog[eę].*podrzuci/i.test(
+    lastAssistant.toLowerCase()
+  );
 
   contextualUserText = `
 KONTEKST POPRZEDNIEJ ODPOWIEDZI:
 ${lastAssistant}
+
+AKTUALNY TEMAT ROZMOWY:
+${semanticAnchor}
 
 NOWA WIADOMOŚĆ USERA:
 ${userText}
@@ -847,16 +950,77 @@ if (violenceRisk) {
   forcedReply =
     "Widzę, że jesteś na granicy wybuchu. Ta złość jest realna, ale nie możesz pozwolić, żeby przejęła stery.";
 }
-const response = await openai.chat.completions.create({
-  model: "gpt-4.1-mini",
-  temperature: 0.82,
-  max_tokens: 220,
-  messages: [ { role: "system", content: systemPrompt, }, 
-  ...history, ...(isDependentFollowup(userText) ? 
-  [ { role: "system" as const, content: buildFollowupHint
-    ( userText, lastAssistant || "" ), }, ] : []), 
-    { role: "user", content: contextualUserText, }, ],
-});
+let dynamicTokens = 550;
+
+if (localIntent) {
+  dynamicTokens = 1100;
+}
+
+if (violenceRisk) {
+  dynamicTokens = 450;
+}
+
+if (
+  /link|kontakt|telefon|strona/i.test(
+    userText
+  )
+) {
+  dynamicTokens = 900;
+}
+
+const response =
+  await openai.chat.completions.create({
+    model: "gpt-4.1-mini",
+    temperature: 0.82,
+    max_tokens: dynamicTokens,
+
+    messages: [
+      {
+        role: "system",
+        content: systemPrompt,
+      },
+
+      ...history,
+
+      ...(shortFollowup ||
+    continuationIntent ||
+    affirmativeIntent
+        ? [
+            {
+              role: "system" as const,
+
+              content:
+                buildFollowupHint(
+  userText,
+  `
+AKTYWNY TEMAT:
+${semanticAnchor}
+
+OSTATNIA ODPOWIEDŹ:
+${lastAssistant || ""}
+
+JEŚLI użytkownik pisze:
+- "tak"
+- "dawaj"
+- "ok"
+- "linki"
+
+to prawdopodobnie chce
+kontynuacji poprzedniej propozycji.
+`
+)
+            },
+          ]
+        : []),
+
+      {
+        role: "user",
+        content:
+          contextualUserText,
+      },
+    ],
+  });
+
 let baseText = response.choices?.[0]?.message?.content || "";
 
 if (forcedReply) {
@@ -905,8 +1069,14 @@ finalOutput = finalOutput
   .replace(/\n{3,}/g, "\n\n")
   .trim();
 
-finalOutput = formatResponse(finalOutput);
-  // 🔥 ANALIZA (TU!)
+finalOutput = formatResponse(
+  finalOutput
+);
+
+finalOutput = finalOutput.replace(
+  /^\d+\.\s*\*\*/gm,
+  "• **"
+);
 
 const score = scoreConversationStep(userText, finalOutput);
 

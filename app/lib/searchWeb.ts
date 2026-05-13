@@ -13,7 +13,12 @@ export async function searchWeb(
         body: JSON.stringify({
           api_key:
             process.env.TAVILY_API_KEY,
-          query,
+          query: `
+          Znajdź oficjalne strony WWW,
+          kontakty i informacje:
+
+          ${query}
+          `,
           search_depth: "basic",
           include_answer: true,
           max_results: 5,
