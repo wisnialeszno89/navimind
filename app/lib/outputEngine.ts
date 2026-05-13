@@ -91,19 +91,49 @@ export function fixCutOff(text: string): string {
 
   return text;
 }
-export function addSmartQuestion(text: string, userText: string): string {
-  if (/wyjazd|kamper/.test(userText)) {
-    return text + "\n\nChcesz bardziej dziko czy z dostępem do miasta?";
-  }
+//export function addSmartQuestion(text: string, userText: string): string {
+  //if (/wyjazd|kamper/.test(userText)) {
+    //return text + "\n\nChcesz bardziej dziko czy z dostępem do miasta?";
+  //}
 
-  if (/dzieci|sąd/.test(userText)) {
-    return text + "\n\nMasz już jakiś kontakt z dziećmi czy całkowita blokada?";
-  }
+  //if (/dzieci|sąd/.test(userText)) {
+  //  return text + "\n\nMasz już jakiś kontakt z dziećmi czy całkowita blokada?";
+  //}
 
-  return text;
-}
+  //return text;
+//}
 export function formatResponse(text: string): string {
-  return text
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  let t = (text || "").trim();
+
+  if (!t) return t;
+
+  // 🔥 spacing
+  t = t.replace(/\n{3,}/g, "\n\n");
+
+  // 🔥 większe odstępy po kropkach
+  t = t.replace(/([.!?])\s+(?=[A-ZĄĆĘŁŃÓŚŹŻ])/g, "$1\n\n");
+
+  // 🔥 lekkie podkreślenie ważnych rzeczy
+  t = t.replace(
+    /(najgorsze|najważniejsze|problem jest taki|sedno jest takie)/gi,
+    "**$1**"
+  );
+
+  // 🔥 lekkie emocjonalne pacing
+  const emotional =
+    /bezsilność|samotność|strata|ból|wkurwia|przytłacza/i.test(t);
+
+  if (emotional && !t.includes("😐")) {
+    t = "😐 " + t;
+  }
+
+  // 🔥 unikaj ściany tekstu
+  const parts = t.split("\n\n");
+
+  t = parts
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join("\n\n");
+
+  return t.trim();
 }

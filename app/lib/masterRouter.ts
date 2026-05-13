@@ -1,6 +1,8 @@
 export function isContextDependent(text: string) {
-  return /^(a jeśli|ale|i co|czemu|dlaczego|po co|jak to|to czemu|i dlatego|czyli)/i.test(
-    text.trim().toLowerCase()
+  const t = text.trim().toLowerCase();
+
+  return /^(a jeśli|ale|i co|czemu|dlaczego|po co|jak to|to czemu|i dlatego|czyli|poleć|daj|a jakiś|jakiegoś|ten drugi|inne|inny|a gdzie|ile kosztuje)/i.test(
+    t
   );
 }
 

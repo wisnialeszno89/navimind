@@ -32,13 +32,13 @@ export function improveResponse(text: string): string {
   /* ========= 3. SHORTEN ========= */
 
   const sentences = t
-    .split(".")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  .split(".")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-  if (sentences.length > 2) {
-    t = sentences.slice(0, 2).join(". ") + ".";
-  }
+if (sentences.length > 5) {
+  t = sentences.slice(0, 5).join(". ") + ".";
+}
 
   /* ========= 4. FORCE END ========= */
 

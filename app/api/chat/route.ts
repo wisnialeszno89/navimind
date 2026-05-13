@@ -7,13 +7,18 @@ import { detectUserStyle } from "../../lib/personalityEngine";
 import { detectTopic } from "../../lib/topicEngine";
 import { saveTopic, getTopics } from "../../lib/userMemory";
 import { normalizeFollowup } from "../../lib/followupNormalizer";
+import { detectLocalIntent } from "../../lib/detectLocalIntent";
 import { detectDecisionMoment, getDecisionNudge } from "../../lib/decisionEngine";
 import { detectProgress } from "../../lib/progressEngine";
 import { buildSystemPrompt } from "../../lib/conversation/buildSystemPrompt";
 import { detectConversationMode } from "../../lib/conversation/detectConversationMode";
 import { detectResponseStrategy } from "../../lib/conversation/detectResponseStrategy";
+import { buildActiveTopic } from "../../lib/buildActiveTopic";
+import { shouldShowImages } from "../../lib/visualIntent";
+import { searchWeb } from "../../lib/searchWeb";
 import { analyzeConversationStep } from "../../lib/conversationInsights";
 import { setLastActive, getLastActive } from "../../lib/lastActive";
+import { buildEntityContext } from "../../lib/entityMemory";
 import { shapeResponse } from "../../lib/responseShaper";
 import { detectPattern } from "../../lib/patternEngine";
 import { savePattern, getPatterns } from "../../lib/userMemory";
@@ -37,6 +42,7 @@ import { saveMicroDetail, getMicroDetail } from "../../lib/userMemory";
 import { updateUserIdentity, getUserIdentity } from "../../lib/userIdentity";
 import { updateContextAnchor, getContextAnchor } from "../../lib/userMemory";
 import { getRecentEffects, saveEffect } from "../../lib/effectMemory";
+import { buildSemanticMemory } from "../../lib/buildSemanticMemory";
 import {
   buildConversationState,
 } from "../../lib/conversationState";
@@ -343,7 +349,25 @@ export async function POST(req: Request) {
   ).trim();
 
   const actionIntent =
-    detectActionIntent(userText);
+  detectActionIntent(userText);
+
+  const localIntent =
+  detectLocalIntent(userText);
+
+  let webResults = "";
+
+if (localIntent) {
+  const results = await searchWeb(
+    userText
+  );
+
+  webResults = results
+    .map(
+      (r: any) =>
+        `- ${r.title}: ${r.url}`
+    )
+    .join("\n");
+}
 
   const pattern = detectPattern(userText);
 
@@ -571,6 +595,26 @@ ${topicAnchor}
 
 NOWA WIADOMOŚĆ:
 "${userText}"
+
+${localIntent ? `
+Użytkownik prawdopodobnie szuka:
+- realnej usługi,
+- firmy,
+- kontaktu,
+- miejsca,
+- lokalnej rekomendacji,
+- linku lub konkretnej pomocy.
+
+Jeśli temat i lokalizacja są już znane:
+- nie pytaj ponownie o branżę,
+- nie resetuj kontekstu,
+- zakładaj ciągłość rozmowy.
+
+Jeśli możesz:
+- podawaj konkretne przykłady,
+- proponuj sensowne opcje,
+- pomagaj użytkownikowi szybciej przejść do działania.
+` : ""}
 `;
 
 const coreBlock = `
@@ -646,10 +690,25 @@ const strategy =
     userText,
     mode,
   });
-const semanticAnchor = buildContextAnchor([
+
+  const semanticMemory =
+  buildSemanticMemory(history);
+
+  const activeTopic =
+  buildActiveTopic([
+    ...history,
+    { role: "user", content: userText },
+  ]);
+
+  const semanticAnchor = buildContextAnchor([
   ...history,
   { role: "user", content: userText },
 ]);
+  const entityContext =
+  buildEntityContext([
+    ...history,
+    { role: "user", content: userText },
+  ]);
 const shortFollowup =
   isDependentFollowup(userText);
 
@@ -712,13 +771,29 @@ ${escalationContext}
 
 ${phaseContext}
 
+${entityContext}
+
+${semanticMemory}
+
+${activeTopic}
+
+${webResults ? `
+REALNE WYNIKI WYSZUKIWANIA:
+${webResults}
+
+Jeśli pasują do rozmowy:
+- podawaj konkretne linki,
+- polecaj najlepsze opcje,
+- pomagaj użytkownikowi wybrać.
+` : ""}
+
 ${semanticAnchor}
 
 ${contextBlock || ""}
 `,
+
   continuationHint,
 });
-
 console.log({
   mode,
   strategy,
@@ -837,11 +912,11 @@ const score = scoreConversationStep(userText, finalOutput);
 
 // finalOutput = refineResponse(finalOutput, score);
 
-await saveScore(userId, score, plan);
+//await saveScore(userId, score, plan);
 
-console.log("SCORE", score);
+//console.log("SCORE", score);
 
-await saveScore(userId, score, plan);
+//await saveScore(userId, score, plan);
 
 console.log("INSIGHT", {
   user: userText,
@@ -926,9 +1001,14 @@ if (plan !== "free" && email && body?.chatId) {
     createdAt: Date.now(),
   });
 }
-
+const includeImages =
+  shouldShowImages(userText);
 return new Response(
-  JSON.stringify({ reply: finalOutput, highlight }),
+  JSON.stringify({
+    reply: finalOutput,
+    highlight,
+    includeImages,
+  }),
   {
     headers: { "Content-Type": "application/json" },
   }

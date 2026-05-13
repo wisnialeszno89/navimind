@@ -27,10 +27,10 @@ const route = routeResponse(userText, []);
   }
 
   // 🔥 3. ANTY-ŚCIANA
-  output = preventDeadEnd(output, userText);
+  //output = preventDeadEnd(output, userText);
 
   // 🔥 4. KONTYNUACJA
-  output = addContinuation(output, userText);
+  //output = addContinuation(output, userText);
 
   return output.trim();
 }
