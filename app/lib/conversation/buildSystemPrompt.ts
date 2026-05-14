@@ -2,7 +2,14 @@ import { ConversationMode } from "./detectConversationMode";
 import { ResponseStrategy } from "./detectResponseStrategy";
 
 type PromptInput = {
+  mode?: any;
+  strategy?: any;
+
+  memory?: any;
+  summary?: string;
+
   contextBlock?: string;
+
   continuationHint?: string;
 };
 

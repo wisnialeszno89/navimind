@@ -1,0 +1,1483 @@
+import crypto from "crypto";
+
+import { getPersonalityStyle } from "../../lib/personalityEngine";
+import { getUserProfile, updateUserProfile } from "../../lib/userProfile";
+
+import { checkAndIncrementLimit } from "../../lib/chatLimit";
+
+import {
+  extractActionStep,
+  extractChosenOption,
+  getNextStep,
+} from "../../lib/nextStepEngine";
+
+import { detectUserStyle } from "../../lib/personalityEngine";
+
+import { detectTopic } from "../../lib/topicEngine";
+
+import {
+  saveTopic,
+  getTopics,
+  setUserStyle,
+  getUserStyle,
+  saveMicroDetail,
+  updateContextAnchor,
+  getContextAnchor,
+  updateMemory,
+  getMemory,
+  updateCoreMemory,
+  getCoreMemory,
+  saveAction,
+  getActions,
+  savePattern,
+  getPatterns,
+  setUserType,
+  getUserType,
+} from "../../lib/userMemory";
+
+import { detectLocalIntent } from "../../lib/detectLocalIntent";
+
+import {
+  detectDecisionMoment,
+  getDecisionNudge,
+} from "../../lib/decisionEngine";
+
+import { detectProgress } from "../../lib/progressEngine";
+
+import { buildSystemPrompt } from "../../lib/conversation/buildSystemPrompt";
+
+import { detectConversationMode } from "../../lib/conversation/detectConversationMode";
+
+import { detectResponseStrategy } from "../../lib/conversation/detectResponseStrategy";
+
+import { buildConversationSummary } from "../../lib/conversationSummary";
+
+import {
+  buildConversationState,
+} from "../../lib/conversationState";
+
+import { buildEntityContext } from "../../lib/entityMemory";
+
+import { shouldShowImages } from "../../lib/visualIntent";
+
+import { searchWeb } from "../../lib/searchWeb";
+
+import { detectContinuation } from "@/lib/detectContinuation";
+
+import { detectAffirmative } from "@/lib/detectAffirmative";
+
+import { analyzeConversationStep } from "../../lib/conversationInsights";
+
+import {
+  setLastActive,
+  getLastActive,
+} from "../../lib/lastActive";
+
+import { shapeResponse } from "../../lib/responseShaper";
+
+import { detectPattern } from "../../lib/patternEngine";
+
+import {
+  detectConversationPhase,
+} from "../../lib/detectConversationPhase";
+
+import { predictNext } from "../../lib/predictEngine";
+
+import {
+  scoreConversationStep,
+  saveScore,
+} from "../../lib/conversationScore";
+
+import {
+  setRelationAnchor,
+  getRelationAnchor,
+  extractContextAnchor,
+} from "../../lib/contextAnchor";
+
+import { detectUserType } from "../../lib/psychologyEngine";
+
+import { detectResponseType } from "../../lib/responseType";
+
+import {
+  detectIntent,
+  detectMode,
+  isLooping,
+  shouldAllowQuestion,
+  isFirstHeavyMessage,
+} from "@/lib/brainRouter";
+
+import { buildTone } from "../../lib/buildTone";
+
+import {
+  updateUserIdentity,
+  getUserIdentity,
+} from "../../lib/userIdentity";
+
+import {
+  getRecentEffects,
+  saveEffect,
+} from "../../lib/effectMemory";
+
+import { getUserId } from "../../lib/userId";
+
+import { getSessionEmail } from "../../lib/auth/session";
+
+import { getUserPlan } from "../../lib/userPlan";
+
+import {
+  getDemoMemory,
+  pushDemoMemory,
+  updateDemoCore,
+  getDemoCore,
+} from "../../lib/demoMemory";
+
+import { detectViolenceRisk } from "../../lib/violenceDetector";
+
+import { analyzeUserMessage } from "../../lib/analyzeUserMessage";
+
+import { injectResources } from "../../lib/resources";
+
+import {
+  formatResponse,
+  cleanAndShapeOutput,
+  removeRepeatEndings,
+  fixCutOff,
+} from "../../lib/outputEngine";
+
+import {
+  appendChatMessageByEmail,
+  getChatMessagesByEmail,
+} from "../../lib/chatHistory";
+
+import { detectActionIntent } from "../../lib/actionRouter";
+
+import { saveDecision } from "../../lib/userProfile";
+
+import { scoreResponse } from "../../lib/responseScore";
+
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/* ========= TYPES ========= */
+
+type ChatRole =
+| "user"
+| "assistant"
+| "system";
+
+type ChatMsg = {
+role: ChatRole;
+content: string;
+};
+
+function isRole(
+role: any
+): role is ChatRole {
+return (
+role === "user" ||
+role === "assistant" ||
+role === "system"
+);
+}
+
+/* ========= HELPERS ========= */
+
+function isDependentFollowup(
+text: string
+): boolean {
+const t =
+text
+.trim()
+.toLowerCase();
+
+const contextualPatterns =
+/po co|dlaczego|czemu|i co|czyli|serio|dokładnie|właśnie|rozwiń|wyjaśnij|tak naprawdę/i;
+
+const vagueReferences =
+/\b(to|tego|tym|taka|takie|tak)\b/i;
+
+return (
+t.length < 180 &&
+(
+contextualPatterns.test(t) ||
+vagueReferences.test(t)
+)
+);
+}
+
+function buildFollowupHint(
+userText: string,
+lastAssistant: string
+) {
+const t =
+userText
+.trim()
+.toLowerCase();
+
+if (
+/^(ale )?(po co|dlaczego|czemu)??$/.test(
+t
+)
+) {
+return `
+User asks about the REASON
+behind the previous explanation.
+
+Continue the same topic.
+Do not reset conversation.
+Explain the mechanism directly.
+`;
+}
+
+if (
+/nie rozumiem|bez sensu|co?/.test(
+t
+)
+) {
+return `
+User did not understand
+the previous explanation.
+
+Explain the same idea
+more simply.
+`;
+}
+
+return `
+This is a continuation
+of the previous topic.
+
+Continue naturally.
+Do not restart context.
+`;
+}
+
+function extractCoreProblem(
+  text: string,
+  history: ChatMsg[]
+) {
+  const full =
+    [
+      ...history.map(
+        (m) => m.content
+      ),
+      text,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+  const topics = [
+    {
+      key: "children",
+      label:
+        "brak kontaktu z dziećmi",
+
+      regex:
+        /dzieci|kontakt z dziecmi/g,
+    },
+
+    {
+      key: "relationship",
+      label:
+        "rozpad związku",
+
+      regex:
+        /zona|żona|rozstanie|odeszla|odeszła/g,
+    },
+
+    {
+      key: "mental",
+      label:
+        "przeciążenie / depresja",
+
+      regex:
+        /depresja|nie dam rady|rozsypany|wykonczony|wykończony|nie moge zyc/g,
+    },
+  ];
+
+  const scored =
+    topics.map((t) => {
+      const matches =
+        full.match(
+          t.regex
+        );
+
+      return {
+        ...t,
+
+        score:
+          matches
+            ? matches.length
+            : 0,
+      };
+    });
+
+  scored.sort(
+    (
+      a,
+      b
+    ) =>
+      b.score -
+      a.score
+  );
+
+  return {
+    main:
+      scored[0]?.score > 0
+        ? scored[0]
+        : null,
+
+    secondary:
+      scored[1]?.score > 0
+        ? scored[1]
+        : null,
+
+    all:
+      scored.filter(
+        (s) =>
+          s.score > 0
+      ),
+  };
+}
+/* ========= POST ========= */
+
+export async function POST(
+req: Request
+) {
+/* ========= USER ========= */
+
+const userId =
+getUserId();
+
+if (!userId) {
+return new Response(
+JSON.stringify({
+error:
+"UNAUTHORIZED",
+}),
+{
+status: 401,
+}
+);
+}
+
+const email =
+getSessionEmail();
+
+const plan =
+await getUserPlan();
+
+/* ========= LIMIT ========= */
+
+if (plan === "free") {
+const limit =
+await checkAndIncrementLimit(
+userId
+);
+
+```
+if (!limit.allowed) {
+  return new Response(
+    JSON.stringify({
+      error:
+        "LIMIT_REACHED",
+
+      used:
+        limit.used,
+
+      limit:
+        limit.limit,
+
+      resetAt:
+        limit.resetAt,
+    }),
+    {
+      status: 403,
+    }
+  );
+}
+```
+
+}
+
+/* ========= BODY ========= */
+
+const body =
+await req
+.json()
+.catch(() => null);
+
+const userText =
+String(
+body?.message || ""
+).trim();
+
+if (!userText) {
+return new Response(
+JSON.stringify({
+error:
+"NO_MESSAGE",
+}),
+{
+status: 400,
+}
+);
+}
+
+const lower =
+userText.toLowerCase();
+
+/* ========= LIGHT MODE ========= */
+
+const isGreeting =
+/^(hej|siema|elo|yo|haha|xd|ok|okej|no|test)$/i.test(
+lower
+);
+
+const isWhoQuestion =
+/kim jestes|kim jesteś|kto ty|co ty/i.test(
+lower
+);
+
+if (
+lower.length < 40 &&
+(
+isGreeting ||
+isWhoQuestion
+)
+) {
+let reply =
+"Hej 🙂 Co u Ciebie?";
+
+```
+if (isWhoQuestion) {
+  reply =
+    "Jestem tu, żeby pomóc Ci ogarnąć to, co masz na głowie. Bez spiny 🙂";
+}
+
+return new Response(
+  JSON.stringify({
+    reply,
+  }),
+  {
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+  }
+);
+```
+
+}
+
+/* ========= HISTORY ========= */
+
+let history:
+ChatMsg[] = [];
+
+if (plan === "free") {
+history =
+await getDemoMemory(
+userId
+);
+} else if (
+email &&
+body?.chatId
+) {
+const kvMsgs =
+await getChatMessagesByEmail(
+email,
+body.chatId
+);
+
+```
+history =
+  kvMsgs
+    ?.map((m) => ({
+      role: m.role,
+      content: String(
+        m.content
+      ),
+    }))
+    .filter(
+      (
+        m
+      ): m is ChatMsg =>
+        isRole(m.role)
+    )
+    .slice(-20) || [];
+```
+
+}
+
+/* ========= ANALYSIS ========= */
+
+const historyTexts =
+history.map(
+(m) => m.content
+);
+
+const analysis =
+analyzeUserMessage(
+userText
+);
+
+const intent =
+detectIntent(
+userText
+);
+
+const localIntent =
+detectLocalIntent(
+userText
+);
+
+const violenceRisk =
+detectViolenceRisk(
+userText
+);
+
+/* ========= USER TYPE ========= */
+
+const detectedType =
+detectUserType(
+userText,
+historyTexts
+);
+
+await setUserType(
+userId,
+detectedType
+);
+
+const userType =
+(
+await getUserType(
+userId
+)
+) || "talker";
+
+/* ========= STYLE ========= */
+
+const detectedStyle =
+detectUserStyle(
+userText
+);
+
+await setUserStyle(
+userId,
+detectedStyle
+);
+
+const persistentStyle =
+(
+await getUserStyle(
+userId
+)
+) || "direct";
+
+/* ========= PROFILE ========= */
+
+updateUserProfile(
+userId,
+analysis
+);
+
+const userProfile =
+getUserProfile(
+userId
+);
+
+/* ========= MEMORY ========= */
+
+updateMemory(
+userId,
+userText
+);
+
+await saveMicroDetail(
+userId,
+userText
+);
+
+updateUserIdentity(
+userId,
+userText
+);
+
+const identity =
+getUserIdentity(
+userId
+);
+
+const memory =
+getMemory(
+userId
+);
+
+/* ========= ACTIVITY ========= */
+
+await setLastActive(
+userId
+);
+
+const lastActive =
+await getLastActive(
+userId
+);
+/* ========= SEARCH ========= */
+let webResults = "";
+let formattedResults = "";
+
+if (localIntent) {
+  try {
+    const results =
+      await searchWeb(
+        userText
+      );
+
+    if (results) {
+      webResults =
+        typeof results ===
+        "string"
+          ? results
+          : JSON.stringify(
+              results,
+              null,
+              2
+            );
+
+      formattedResults =
+        webResults;
+    }
+
+    console.log(
+      "WEB RESULTS",
+      results
+    );
+  } catch (err) {
+    console.log(
+      "SEARCH ERROR",
+      err
+    );
+  }
+}
+
+/* ========= PATTERNS ========= */
+
+const pattern =
+  detectPattern(
+    userText
+  );
+
+if (pattern) {
+  await savePattern(
+    userId,
+    pattern
+  );
+}
+
+const patterns =
+  await getPatterns(
+    userId
+  );
+/* ========= TOPICS ========= */
+
+const topic =
+detectTopic(
+userText
+);
+
+if (topic) {
+await saveTopic(
+userId,
+topic
+);
+}
+
+const topics =
+await getTopics(
+userId
+);
+
+/* ========= RELATION ========= */
+
+if (
+userText.length > 40 &&
+analysis.state !== "low"
+) {
+await setRelationAnchor(
+userId,
+userText
+);
+}
+
+const relationAnchor =
+(
+await getRelationAnchor(
+userId
+)
+) || "";
+
+/* ========= PROGRESS ========= */
+
+const progress =
+detectProgress(
+userText,
+historyTexts
+);
+
+/* ========= CORE PROBLEM ========= */
+
+const coreProblem =
+extractCoreProblem(
+userText,
+history
+);
+
+/* ========= MEMORY CORE ========= */
+
+if (
+plan === "free" &&
+coreProblem.main
+?.label
+) {
+updateDemoCore(
+userId,
+coreProblem.main
+.label
+);
+}
+
+if (
+coreProblem.main
+?.label
+) {
+updateCoreMemory(
+userId,
+coreProblem.main
+.label
+);
+}
+
+const demoCore =
+getDemoCore(
+userId
+);
+
+const coreMemory =
+getCoreMemory(
+userId
+);
+
+/* ========= CONVERSATION STATE ========= */
+
+const previousState =
+history
+.slice()
+.reverse()
+.find(
+(m: any) =>
+m.role ===
+"assistant" &&
+(
+m as any
+)
+.conversationState
+) as any;
+
+const conversationState =
+buildConversationState(
+userText,
+history,
+previousState?.conversationState
+);
+
+/* ========= SUMMARY ========= */
+
+const summary =
+buildConversationSummary(
+conversationState
+);
+
+/* ========= ENTITY CONTEXT ========= */
+
+const entityContext =
+buildEntityContext(
+conversationState
+);
+
+/* ========= ESCALATION ========= */
+
+const escalationMode =
+violenceRisk ||
+/ma w ryj|wpierdole|rozjebie|potracic|lufe|zajebie|skopie/i.test(
+userText.toLowerCase()
+);
+
+const escalationContext =
+  escalationMode
+    ? `
+User is emotionally escalated.
+
+Do not:
+
+* encourage violence
+* amplify aggression
+* romanticize revenge
+* escalate conflict
+
+Stay calm and grounded.
+`
+    : "";
+
+/* ========= PHASE ========= */
+
+const phase =
+detectConversationPhase(
+history
+);
+
+const phaseContext =
+  phase === "direction"
+    ? `
+Conversation context is already established.
+
+Do not restart the topic.
+Avoid unnecessary clarification questions.
+Help the user move forward.
+`
+    : "";
+
+/* ========= CONTEXT ANCHOR ========= */
+
+const contextAnchor =
+extractContextAnchor(
+[
+...history.slice(
+-8
+),
+
+```
+    {
+      role: "user",
+      content:
+        userText,
+    },
+  ]
+);
+```
+
+updateContextAnchor(
+userId,
+contextAnchor
+);
+
+const savedAnchor =
+getContextAnchor(
+userId
+);
+
+const finalAnchor =
+contextAnchor ||
+savedAnchor ||
+"";
+
+/* ========= LAST ASSISTANT ========= */
+
+const lastAssistant =
+history
+.filter(
+(m) =>
+m.role ===
+"assistant"
+)
+.slice(-1)[0]
+?.content || "";
+
+/* ========= FOLLOWUP ========= */
+
+const assistantOfferedLinks =
+/chcesz.*link|mog[eę].*link|podrzuc[eę].*link/i.test(
+lastAssistant.toLowerCase()
+);
+
+const wantsLinks =
+/link|kontakt|strona|telefon/i.test(
+userText.toLowerCase()
+);
+const shortFollowup =
+  isDependentFollowup(
+    userText
+  );
+
+const continuationIntent =
+  detectContinuation(
+    userText
+  );
+
+const affirmativeIntent =
+  detectAffirmative(
+    userText
+  );
+const shouldForceLinks =
+(
+wantsLinks ||
+(
+affirmativeIntent &&
+assistantOfferedLinks
+)
+) &&
+formattedResults.length >
+0;
+
+const forcedActionContext =
+shouldForceLinks
+? `
+User wants:
+
+* links
+* contacts
+* concrete results
+
+Do not ask again for clarification.
+Provide actionable results directly.
+`
+: "";
+
+if (
+shouldForceLinks &&
+formattedResults
+) {
+return new Response(
+JSON.stringify({
+reply: `
+Znalazłem kilka konkretnych opcji 😄
+
+${formattedResults}
+`,
+}),
+{
+headers: {
+"Content-Type":
+"application/json",
+},
+}
+);
+}
+
+/* ========= CONTEXT ========= */
+
+const contextBlock =
+`
+CURRENT CONVERSATION STATE:
+
+TOPIC:
+${conversationState.activeTopic || "general"}
+
+INTENT:
+${conversationState.activeIntent || "general"}
+
+KNOWN ENTITIES:
+${
+conversationState
+.activeEntities
+?.length
+? conversationState.activeEntities.join(
+", "
+)
+: "none"
+}
+
+USER GOAL:
+${conversationState.userGoal || "general"}
+
+CONTINUITY:
+${
+conversationState.continuityStrength >
+1
+? "ongoing conversation"
+: "weak continuity"
+}
+
+${entityContext}
+
+${phaseContext}
+
+${escalationContext}
+
+${
+localIntent
+? `
+USER EXPECTATION:
+
+* recommendations
+* links
+* practical help
+* concrete options
+
+Avoid resetting context.
+`
+: ""
+}
+
+WEB RESULTS:
+${webResults || "none"}
+
+IMPORTANT:
+Assume continuity unless
+the user clearly changes topic.
+`;
+/* ========= STYLE ========= */
+
+const tone =
+buildTone(
+userProfile
+);
+
+const personality =
+getPersonalityStyle(
+analysis,
+userText
+);
+
+/* ========= MODE ========= */
+
+const mode =
+detectConversationMode(
+userText
+);
+
+const strategy =
+detectResponseStrategy(
+{
+userText,
+mode,
+}
+);
+
+/* ========= FOLLOWUP DETECTION ========= */
+
+const shortFollowup =
+  isDependentFollowup(
+    userText
+  );
+
+const continuationIntent =
+  detectContinuation(
+    userText
+  );
+
+const affirmativeIntent =
+  detectAffirmative(
+    userText
+  );
+
+
+/* ========= SYSTEM PROMPT ========= */
+
+const systemPrompt = buildSystemPrompt({
+  mode,
+  strategy,
+  memory,
+  summary,
+
+  contextBlock: `
+${escalationContext}
+
+${phaseContext}
+
+${entityContext}
+
+AKTUALNE WYNIKI WYSZUKIWANIA:
+${webResults || "brak"}
+
+${contextBlock || ""}
+`,
+
+  continuationHint: `
+${forcedActionContext || ""}
+`,
+});
+
+/* ========= CONTEXTUAL USER TEXT ========= */
+
+let contextualUserText = userText || "";
+
+if (
+  shortFollowup &&
+  history.length > 0
+) {
+  contextualUserText = `
+KONTEKST POPRZEDNIEJ ODPOWIEDZI:
+${lastAssistant}
+
+NOWA WIADOMOŚĆ:
+${userText}
+
+To jest kontynuacja poprzedniego tematu.
+
+Nie resetuj rozmowy.
+Nie pytaj ponownie o kontekst.
+`;
+}
+
+/* ========= FORCED REPLY ========= */
+
+let forcedReply: string | null =
+  null;
+
+if (violenceRisk) {
+  forcedReply =
+    "Widzę, że jesteś mocno wzburzony. Nie pozwól, żeby emocje przejęły stery.";
+}
+
+/* ========= TOKENS ========= */
+
+let dynamicTokens = 550;
+
+if (localIntent) {
+  dynamicTokens = 1100;
+}
+
+if (violenceRisk) {
+  dynamicTokens = 450;
+}
+
+if (
+  /link|kontakt|telefon|strona/i.test(
+    userText
+  )
+) {
+  dynamicTokens = 900;
+}
+
+/* ========= FOLLOWUP MESSAGES ========= */
+
+const followupMessages =
+  shortFollowup ||
+  continuationIntent ||
+  affirmativeIntent
+    ? [
+        {
+          role: "system" as const,
+
+          content:
+            buildFollowupHint(
+              userText,
+              lastAssistant
+            ),
+        },
+      ]
+    : [];
+
+/* ========= OPENAI ========= */
+
+const {
+  default: OpenAI,
+} = await import("openai");
+
+const openai =
+  new OpenAI({
+    apiKey:
+      process.env.OPENAI_API_KEY,
+  });
+
+const response =
+  await openai.chat.completions.create({
+    model: "gpt-4.1-mini",
+
+    temperature: 0.82,
+
+    max_tokens:
+      dynamicTokens,
+
+    messages: [
+      {
+        role: "system",
+
+        content:
+          systemPrompt,
+      },
+
+      ...history,
+
+      ...followupMessages,
+
+      {
+        role: "user",
+
+        content:
+          contextualUserText,
+      },
+    ],
+  });
+
+/* ========= BASE TEXT ========= */
+
+let baseText =
+  response.choices?.[0]
+    ?.message?.content || "";
+
+if (forcedReply) {
+  baseText =
+    forcedReply +
+    "\n\n" +
+    baseText;
+}
+
+/* ========= RESPONSE SHAPER ========= */
+
+const recentEffects =
+  await getRecentEffects(
+    userId
+  );
+
+const {
+  text,
+  usedEffect,
+} = shapeResponse({
+  text: baseText,
+});
+
+let finalOutput = text;
+
+if (usedEffect) {
+  await saveEffect(
+    userId,
+    usedEffect
+  );
+}
+
+/* ========= FORMAT ========= */
+
+finalOutput =
+  finalOutput
+    .replace(
+      /\n{3,}/g,
+      "\n\n"
+    )
+    .trim();
+
+finalOutput =
+  formatResponse(
+    finalOutput
+  );
+
+finalOutput =
+  finalOutput.replace(
+    /^\d+\.\s*\*\*/gm,
+    "• **"
+  );
+
+/* ========= DECISION DETECT ========= */
+
+const chosen =
+  extractChosenOption(
+    userText,
+    lastAssistant
+  );
+
+if (chosen) {
+  saveDecision(
+    userId,
+    chosen
+  );
+} else if (
+  /wybieram|biorę|ok|dobra|idziemy/i.test(
+    userText.toLowerCase()
+  )
+) {
+  saveDecision(
+    userId,
+    userText
+  );
+}
+
+/* ========= SCORE ========= */
+
+const score =
+  scoreConversationStep(
+    userText,
+    finalOutput
+  );
+
+console.log(
+  "INSIGHT",
+  {
+    user: userText,
+
+    ai: finalOutput,
+  }
+);
+
+console.log(
+  "SCORE",
+  score
+);
+
+const isDrop =
+  userText.length < 10 &&
+  /ok|haha|xd|no/i.test(
+    userText.toLowerCase()
+  );
+
+console.log(
+  "DROP?",
+  isDrop
+);
+
+/* ========= ANTI LOOP ========= */
+
+if (
+  finalOutput.includes(
+    "To nie jest lekka sytuacja"
+  ) &&
+  history.length > 2
+) {
+  finalOutput =
+    baseText.trim();
+}
+
+/* ========= HIGHLIGHT ========= */
+
+const actionStep =
+  extractActionStep(
+    finalOutput
+  );
+
+let highlight:
+  | string
+  | null = null;
+
+if (
+  actionStep &&
+  actionStep.length > 10
+) {
+  highlight =
+    actionStep;
+}
+
+/* ========= ACTIVITY ========= */
+
+await setLastActive(
+  userId
+);
+
+/* ========= SAVE MEMORY ========= */
+
+if (plan === "free") {
+  await pushDemoMemory(
+    userId,
+    {
+      role: "user",
+
+      content:
+        userText,
+    }
+  );
+
+  await pushDemoMemory(
+    userId,
+    {
+      role:
+        "assistant",
+
+      content:
+        finalOutput,
+    }
+  );
+}
+
+/* ========= SAVE CHAT ========= */
+
+if (
+  plan !== "free" &&
+  email &&
+  body?.chatId
+) {
+  await appendChatMessageByEmail(
+    email,
+    body.chatId,
+    {
+      id:
+        crypto.randomUUID(),
+
+      role:
+        "user",
+
+      content:
+        contextualUserText,
+
+      createdAt:
+        Date.now(),
+    }
+  );
+
+  await appendChatMessageByEmail(
+    email,
+    body.chatId,
+    {
+      id:
+        crypto.randomUUID(),
+
+      role:
+        "assistant",
+
+      content:
+        finalOutput,
+
+      createdAt:
+        Date.now(),
+    }
+  );
+}
+
+/* ========= QUICK RETURN ========= */
+
+if (
+  intent !== "general"
+) {
+  return new Response(
+    JSON.stringify({
+      reply:
+        finalOutput,
+    }),
+
+    {
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+    }
+  );
+}
+
+/* ========= IMAGES ========= */
+
+const includeImages =
+  shouldShowImages(
+    userText
+  );
+
+/* ========= FINAL RESPONSE ========= */
+
+return new Response(
+  JSON.stringify({
+    reply:
+      finalOutput,
+
+    highlight,
+
+    includeImages,
+  }),
+
+  {
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+  }
+);
+}

@@ -1,3 +1,5 @@
+import type { ConversationState } from "./conversationState";
+
 export function isContextDependent(text: string) {
   const t = text.trim().toLowerCase();
 
@@ -8,7 +10,8 @@ export function isContextDependent(text: string) {
 
 export function routeResponse(
   userText: string,
-  history: any[] = []
+  history: any[],
+  state?: ConversationState
 ): "crisis" | "action" | "explore" | "default" {
   const t = userText.toLowerCase();
 

@@ -1,18 +1,19 @@
+import type { ConversationState } from "./conversationState";
+
 export function buildConversationSummary(
-  history: { role: string; content: string }[]
+  state: ConversationState
 ) {
-  if (!history || history.length === 0) return "";
-
-  // bierzemy ostatnie wiadomości
-  const recent = history.slice(-6);
-
-  const combined = recent.map(m => m.content).join(" ");
-
-  // jak za krótkie — nie ma sensu robić summary
-  if (combined.length < 200) return "";
-
   return `
-PODSUMOWANIE ROZMOWY:
-${combined.slice(0, 500)}
+ACTIVE TOPIC:
+${state.activeTopic}
+
+ACTIVE INTENT:
+${state.activeIntent}
+
+ACTIVE ENTITIES:
+${state.activeEntities.join(", ")}
+
+USER GOAL:
+${state.userGoal || "general"}
 `;
 }

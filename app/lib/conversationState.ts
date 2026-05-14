@@ -1,369 +1,288 @@
+import { isContinuation } from "./isContinuation";
+
 export type ConversationState = {
   activeTopic: string;
 
-  activeEntity?: string;
-  pendingAction?: string;
-  conversationPhase?:
-  | "discovery"
-  | "offering"
-  | "executing"
-  | "clarifying";
+  activeIntent:
+    | "travel"
+    | "recommendation"
+    | "coding"
+    | "relationship"
+    | "emotional"
+    | "planning"
+    | "general";
 
-  activeSubject?: string;
-  lastUserFocus?: string;
-  conversationIntent?: string;
+  activeEntities: string[];
 
-  emotionalTone:
-    | "neutral"
-    | "frustrated"
-    | "curious"
-    | "sad";
+  resolvedEntities: Record<
+    string,
+    {
+      type: string;
+      confidence: number;
+    }
+  >;
 
-  userGoal:
-    | "understand"
-    | "vent"
-    | "solve"
-    | "reflect";
+  userGoal?: string;
 
-  mode:
-    | "casual"
-    | "technical"
-    | "emotional";
+  lastAssistantAction?: string;
+
+  continuityStrength: number;
+
+  lastUpdated: number;
 };
 
-export function buildConversationState(
-  userText: string,
-  history: any[]
-): ConversationState {
+function detectIntent(text: string): ConversationState["activeIntent"] {
+  const t = text.toLowerCase();
 
-  const t =
-    userText.toLowerCase();
-
-  const shortMessage =
-    t.trim().split(" ").length <= 4;
-
-  const vagueContinuation =
-    /cos|coś|dawaj|linki|jakieś|polec|pokaż|no|tak|okej|ok/i.test(
+  if (
+    /kamper|podróż|podroz|wyjazd|góry|gory|wakacje|kemping|szlak|trasa|nocleg/.test(
       t
-    );
-
-  const joined = [
-    ...history
-      .slice(-8)
-      .map((m) => m.content),
-    userText,
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  const lastAssistant =
-    history
-      .filter(
-        (m) =>
-          m.role === "assistant"
-      )
-      .slice(-1)[0]?.content
-      ?.toLowerCase() || "";
-    const previousState =
-  history
-    .slice()
-    .reverse()
-    .find(
-      (m) =>
-        m.role === "system" &&
-        m.conversationState
-    )?.conversationState;
-
-    if (
-  previousState &&
-  shortMessage &&
-  vagueContinuation
-) {
-  return {
-    ...previousState,
-  };
-}
-  /* =========================
-     EMOTIONAL TONE
-  ========================= */
-
-  /* =========================
-   EMOTIONAL TONE
-========================= */
-
-let emotionalTone:
-  ConversationState["emotionalTone"] =
-    "neutral";
-
-if (
-  /frustruje|wkurza|chaos|toksyczny|ciągle to samo|ciagle to samo|mam dość|kurwa|wkurw/.test(
-    joined
-  )
-) {
-  emotionalTone =
-    "frustrated";
-
-} else if (
-  /smutne|przykre|samotny|żal|strata|bez sensu/.test(
-    joined
-  )
-) {
-  emotionalTone =
-    "sad";
-
-} else if (
-  /dlaczego|po co|czemu|jak to działa|o co chodzi/.test(
-    joined
-  )
-) {
-  emotionalTone =
-    "curious";
-}
-
-/* =========================
-   USER GOAL
-========================= */
-
-let userGoal:
-  ConversationState["userGoal"] =
-    "reflect";
-
-if (
-  /jak zrobić|co zrobić|jak mam|poleć|szukam|daj|znajdź|link|kontakt|gdzie/.test(
-    joined
-  )
-) {
-  userGoal = "solve";
-
-} else if (
-  /dlaczego|po co|czemu|jak to działa/.test(
-    joined
-  )
-) {
-  userGoal =
-    "understand";
-
-} else if (
-  emotionalTone ===
-  "frustrated"
-) {
-  userGoal = "vent";
-}
-
-/* =========================
-   CONVERSATION PHASE
-========================= */
-
-let conversationPhase:
-  ConversationState["conversationPhase"] =
-    "discovery";
-
-const affirmativeFollowup =
-  /tak|dawaj|ok|okej|jasne|poproszę|no/.test(
-    t.trim()
-  );
-
-if (
-  /mog[eę].*link|chcesz.*link|mog[eę].*pokaza|podrzuc[eę].*miejsce|mam kilka propozycji/.test(
-    lastAssistant
-  )
-) {
-  conversationPhase =
-    "offering";
-}
-
-if (
-  conversationPhase ===
-    "offering" &&
-  affirmativeFollowup
-) {
-  conversationPhase =
-    "executing";
-}
-
-if (
-  shortMessage &&
-  !affirmativeFollowup &&
-  !vagueContinuation
-) {
-  conversationPhase =
-    "clarifying";
-}
-
-  /* =========================
-     MODE
-  ========================= */
-
-  let mode:
-    ConversationState["mode"] =
-      "casual";
-
-  if (
-    /typescript|nextjs|api|kod|błąd/.test(
-      joined
     )
   ) {
-    mode = "technical";
-  } else if (
-    emotionalTone ===
-      "frustrated" ||
-    emotionalTone === "sad"
-  ) {
-    mode = "emotional";
-  }
-
-  /* =========================
-     GLOBAL TOPIC DETECTION
-  ========================= */
-
-  let activeTopic =
-    "general";
-
-  let activeEntity = "";
-  let pendingAction = "";
-
-  if (
-    /kamper|kemping|camping|wakacje|balaton|podróż|wegry|węgry/.test(
-      joined
-    )
-  ) {
-    activeTopic =
-      "podróże i wakacje";
+    return "travel";
   }
 
   if (
-    /mechanik|samochód|auto|silnik|dym spod maski/.test(
-      joined
+    /poleć|polecisz|rekomend|jaki kupić|co wybrać|ranking/.test(
+      t
     )
   ) {
-    activeTopic =
-      "motoryzacja";
+    return "recommendation";
   }
 
   if (
-    /związek|żona|partner|ex|dzieci|rozwód/.test(
-      joined
+    /nextjs|typescript|react|vercel|api|backend|frontend|kod|bug|błąd/.test(
+      t
     )
   ) {
-    activeTopic =
-      "relacje";
+    return "coding";
   }
 
   if (
-    /kod|nextjs|typescript|api|vercel/.test(
-      joined
+    /żona|partner|partnerka|dziewczyna|związek|rozwód|ex/.test(
+      t
     )
   ) {
-    activeTopic =
-      "programowanie";
+    return "relationship";
   }
 
-  /* =========================
-     ENTITY DETECTION
-  ========================= */
+  if (
+    /plan|strategia|krok po kroku|działanie|co robić/.test(
+      t
+    )
+  ) {
+    return "planning";
+  }
 
-  const entityPatterns = [
-    "balaton",
-    "budapeszt",
-    "mazda",
-    "bmw",
+  if (
+    /mam dość|smutno|samotny|depresja|wkurza|frustruje/.test(
+      t
+    )
+  ) {
+    return "emotional";
+  }
+
+  return "general";
+}
+
+function detectTopic(text: string): string {
+  const t = text.toLowerCase();
+
+  if (
+    /wielka sowa|góry sowie|gory sowie/.test(t)
+  ) {
+    return "trip to Wielka Sowa";
+  }
+
+  if (
+    /kamper|camping|kemping/.test(t)
+  ) {
+    return "camper travel";
+  }
+
+  if (
+    /nextjs|typescript|vercel|api/.test(t)
+  ) {
+    return "programming";
+  }
+
+  if (
+    /związek|rozwód|partnerka|żona/.test(t)
+  ) {
+    return "relationship";
+  }
+
+  return "general";
+}
+
+function detectGoal(text: string): string {
+  const t = text.toLowerCase();
+
+  if (
+    /gdzie|poleć|znajdź|szukam|jaki|jaka|jakie/.test(t)
+  ) {
+    return "find recommendations";
+  }
+
+  if (
+    /jak zrobić|jak działa|dlaczego/.test(t)
+  ) {
+    return "understand";
+  }
+
+  if (
+    /plan|krok po kroku/.test(t)
+  ) {
+    return "create plan";
+  }
+
+  return "general";
+}
+
+function extractEntities(text: string): string[] {
+  const t = text.toLowerCase();
+
+  const knownEntities = [
+    "wielka sowa",
     "kamper",
-    "dzieci",
-    "pies",
-    "vercel",
     "nextjs",
     "typescript",
+    "vercel",
+    "balaton",
+    "mazda",
+    "bmw",
   ];
 
-  for (const entity of entityPatterns) {
-    if (
-      joined.includes(entity)
-    ) {
-      activeEntity =
-        entity;
-      break;
+  return knownEntities.filter((e) =>
+    t.includes(e)
+  );
+}
+
+function buildResolvedEntities(
+  entities: string[]
+): ConversationState["resolvedEntities"] {
+  const resolved: ConversationState["resolvedEntities"] =
+    {};
+
+  for (const entity of entities) {
+    if (entity === "wielka sowa") {
+      resolved[entity] = {
+        type: "mountain",
+        confidence: 0.95,
+      };
+    } else if (entity === "nextjs") {
+      resolved[entity] = {
+        type: "framework",
+        confidence: 0.95,
+      };
+    } else if (entity === "vercel") {
+      resolved[entity] = {
+        type: "platform",
+        confidence: 0.95,
+      };
+    } else if (entity === "kamper") {
+      resolved[entity] = {
+        type: "vehicle",
+        confidence: 0.9,
+      };
+    } else {
+      resolved[entity] = {
+        type: "general",
+        confidence: 0.7,
+      };
     }
   }
 
-  /* =========================
-     PENDING ACTIONS
-  ========================= */
-
-  if (
-    /mog[eę].*link|podrzuc[eę].*link|chcesz.*link/.test(
-      lastAssistant
-    )
-  ) {
-    if (
-  /kamper|kemping|camping|balaton/.test(
-    joined
-  )
-) {
-  pendingAction =
-    "provide_camping_links";
-} else {
-  pendingAction =
-    "provide_links";
+  return resolved;
 }
-  }
 
+export function buildConversationState(
+  userText: string,
+  history: any[],
+  previousState?: ConversationState
+): ConversationState {
+  const current =
+    userText.toLowerCase();
+
+  const recentMessages =
+    history.slice(-6);
+
+  const recentText =
+    recentMessages
+      .map((m) => m.content || "")
+      .join(" ")
+      .toLowerCase();
+
+  // 🔥 CONTINUATION INHERITANCE
   if (
-    /mog[eę].*zdjęci|pokazać.*miejsce/.test(
-      lastAssistant
-    )
+    previousState &&
+    isContinuation(userText)
   ) {
-    pendingAction =
-      "show_examples";
+    const mergedEntities = [
+      ...new Set([
+        ...previousState.activeEntities,
+        ...extractEntities(current),
+      ]),
+    ];
+
+    return {
+      ...previousState,
+
+      activeEntities:
+        mergedEntities,
+
+      resolvedEntities: {
+        ...previousState.resolvedEntities,
+        ...buildResolvedEntities(
+          mergedEntities
+        ),
+      },
+
+      continuityStrength:
+        previousState.continuityStrength + 1,
+
+      lastUpdated:
+        Date.now(),
+    };
   }
 
-  if (
-    /polec|rekomend|szukam|gdzie/.test(
-      joined
-    )
-  ) {
-    pendingAction =
-      "provide_recommendations";
-  }
+  // 🔥 FRESH STATE
+  const activeIntent =
+    detectIntent(
+      `${recentText} ${current}`
+    );
 
-  /* =========================
-     SUBJECT / FOCUS
-  ========================= */
+  const activeTopic =
+    detectTopic(
+      `${recentText} ${current}`
+    );
 
-  let activeSubject = "";
-  let lastUserFocus = "";
-  let conversationIntent =
-    "";
-
-  if (
-    /toksyczny|manipulacja|dominacja|kontrola/.test(
-      joined
-    )
-  ) {
-    activeSubject =
-      "toksyczne zachowania";
-
-    lastUserFocus =
-      "zrozumienie zachowań ludzi";
-
-    conversationIntent =
-      "analiza toksycznych relacji";
-  }
-
-  /* =========================
-     RETURN
-  ========================= */
+  const activeEntities =
+    extractEntities(
+      `${recentText} ${current}`
+    );
 
   return {
     activeTopic,
-    activeEntity,
-    pendingAction,
 
-    activeSubject,
-    lastUserFocus,
-    conversationIntent,
+    activeIntent,
 
-    emotionalTone,
-    userGoal,
-    mode,
+    activeEntities,
+
+    resolvedEntities:
+      buildResolvedEntities(
+        activeEntities
+      ),
+
+    userGoal:
+      detectGoal(current),
+
+    lastAssistantAction:
+      undefined,
+
+    continuityStrength: 1,
+
+    lastUpdated:
+      Date.now(),
   };
 }

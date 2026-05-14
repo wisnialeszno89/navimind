@@ -1,41 +1,71 @@
-export function extractEntities(text: string): string[] {
-  const matches =
-    text.match(
-      /\b([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźżA-Z0-9.-]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż0-9.-]+){0,3})\b/g
-    ) || [];
+import type { ConversationState } from "./conversationState";
 
-  const blacklist = [
-    "Tak",
-    "No",
-    "Można",
-    "Poza",
-    "Jasne",
-    "Dobra",
+export function updateResolvedEntities(
+  state: ConversationState,
+  text: string
+) {
+  const t = text.toLowerCase();
+
+  const entities = [
+    {
+      trigger: "wielka sowa",
+      type: "mountain",
+    },
+    {
+      trigger: "nextjs",
+      type: "framework",
+    },
+    {
+      trigger: "vercel",
+      type: "platform",
+    },
+    {
+      trigger: "kamper",
+      type: "vehicle",
+    },
   ];
 
-  return [...new Set(
-    matches.filter(
-      (m) =>
-        m.length > 2 &&
-        !blacklist.includes(m)
-    )
-  )];
+  for (const entity of entities) {
+    if (t.includes(entity.trigger)) {
+      state.resolvedEntities[
+        entity.trigger
+      ] = {
+        type: entity.type,
+        confidence: 0.95,
+      };
+
+      state.activeEntities = [
+        ...new Set([
+          ...state.activeEntities,
+          entity.trigger,
+        ]),
+      ];
+    }
+  }
+
+  return state;
 }
 
 export function buildEntityContext(
-  history: any[]
-): string {
-  const recent = history
-    .slice(-16)
-    .map((m) => m.content)
-    .join(" ");
+  state: ConversationState
+) {
+  const entities =
+    Object.entries(
+      state.resolvedEntities
+    );
 
-  const entities = extractEntities(recent);
-
-  if (!entities.length) return "";
+  if (!entities.length) {
+    return "";
+  }
 
   return `
-AKTYWNE BYTY ROZMOWY:
-${entities.join(", ")}
+KNOWN ENTITIES:
+
+${entities
+  .map(
+    ([name, value]) =>
+      `- ${name} (${value.type})`
+  )
+  .join("\n")}
 `;
 }

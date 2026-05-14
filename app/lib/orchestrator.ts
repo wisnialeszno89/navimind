@@ -3,34 +3,55 @@ import { crisisOverride } from "./crisisOverride";
 import { actionOverride } from "./actionOverride";
 import { exploreOverride } from "./exploreOverride";
 import { injectRealHelp } from "./realHelp";
-import { addContinuation } from "./continuationEngine";
-import { preventDeadEnd } from "./deadEndFix";
 
-export function orchestrateResponse(userText: string, base: string): string {
+import type { ConversationState } from "./conversationState";
+
+export function orchestrateResponse(
+  userText: string,
+  base: string,
+  history: any[],
+  conversationState: ConversationState
+): string {
+
   let output = base;
 
-  // 🔥 1. WYBÓR TRYBU
-const route = routeResponse(userText, []);
+  // 🔥 ROUTING Z PEŁNYM KONTEKSTEM
+  const route = routeResponse(
+    userText,
+    history,
+    conversationState
+  );
 
+  // 🔥 TRYB ODPOWIEDZI
   if (route === "crisis") {
-    output = crisisOverride(userText, output);
+    output = crisisOverride(
+      userText,
+      output
+    );
+
   } else if (route === "action") {
-    output = actionOverride(userText, output);
+    output = actionOverride(
+      userText,
+      output
+    );
+
   } else if (route === "explore") {
-    output = exploreOverride(userText, output);
+    output = exploreOverride(
+      userText,
+      output
+    );
   }
 
-  // 🔥 2. REALNA POMOC
-  const helpText = injectRealHelp(userText, route);
+  // 🔥 DODATKOWA PRAKTYCZNA POMOC
+  const helpText =
+    injectRealHelp(
+      userText,
+      route
+    );
+
   if (helpText) {
     output += "\n\n" + helpText;
   }
-
-  // 🔥 3. ANTY-ŚCIANA
-  //output = preventDeadEnd(output, userText);
-
-  // 🔥 4. KONTYNUACJA
-  //output = addContinuation(output, userText);
 
   return output.trim();
 }
