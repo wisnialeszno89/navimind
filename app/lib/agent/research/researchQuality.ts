@@ -28,8 +28,11 @@ const INSTITUTIONAL_DOMAINS = new Set([
 ]);
 
 const TARGET_YEAR_PATTERN = /\b(20\d{2})\b/;
-export const GERMAN_AUTHORITY_RECOVERY_DOMAINS = [
+export const GERMAN_LEGAL_RECOVERY_DOMAINS = [
   "gesetze-im-internet.de",
+];
+
+export const GERMAN_INSTITUTIONAL_RECOVERY_DOMAINS = [
   "dibt.de",
   "bmwsb.bund.de",
   "bundesregierung.de",
@@ -40,14 +43,27 @@ export const GERMAN_AUTHORITY_RECOVERY_DOMAINS = [
   "europa.eu",
 ];
 
-export function buildAuthorityRecoveryQuery(query: string): string {
-  const suffix = " Fenster Uw Anforderungen GEG Deutschland";
+export function buildGermanLegalRecoveryQuery(query: string): string {
+  return [
+    query,
+    "GEG",
+    "§ 48",
+    "Anlage 7",
+    "Fenster",
+    "Uw",
+  ].join(" ");
+}
 
-  if (/fenster|okn/i.test(query)) {
-    return query.includes("GEG") ? query : query + " GEG Deutschland";
-  }
-
-  return query + suffix;
+export function buildGermanInstitutionalRecoveryQuery(
+  query: string
+): string {
+  return [
+    query,
+    "GEG",
+    "Fenster",
+    "Uw",
+    "Deutschland",
+  ].join(" ");
 }
 
 
