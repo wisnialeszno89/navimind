@@ -58,4 +58,5 @@ export type AgentTaskReasoningResponse = {
   action: AgentTaskAction | null;
   requires_manual_review: boolean;
   metadata?: Record<string, unknown>;
+  knowledge?: AgentKnowledgeEnvelope | null;
 };
