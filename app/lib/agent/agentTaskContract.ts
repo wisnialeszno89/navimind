@@ -1,3 +1,5 @@
+import type { AgentKnowledgeEnvelope } from "./knowledgeContext";
+
 export type AgentTaskWorldElement = {
   kind: string;
   label: string | null;
@@ -28,7 +30,7 @@ export type AgentTaskContract = {
     element_count: number;
   };
   offer_workflow: Record<string, unknown> | null;
-  knowledge: Record<string, unknown> | null;
+  knowledge: AgentKnowledgeEnvelope | null;
   experience: Record<string, unknown>[];
   constraints: {
     semantic_only: boolean;
