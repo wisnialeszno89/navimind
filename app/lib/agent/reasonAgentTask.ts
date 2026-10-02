@@ -4,6 +4,7 @@ import type {
   AgentTaskContract,
   AgentTaskReasoningResponse,
 } from "./agentTaskContract";
+import type { AgentKnowledgeEnvelope } from "./knowledgeContext";
 import { validateAgentKnowledgeEnvelope } from "./knowledgeContext";
 
 const FORBIDDEN_TERMS = [
@@ -120,7 +121,7 @@ function visibleLabels(task: AgentTaskContract): string[] {
 export async function reasonAgentTask(
   task: AgentTaskContract
 ): Promise<AgentTaskReasoningResponse> {
-  let knowledge;
+  let knowledge: AgentKnowledgeEnvelope;
 
   try {
     knowledge = validateAgentKnowledgeEnvelope(task.knowledge);
