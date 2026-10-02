@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { setPlanByEmail } from "../../../lib/userPlan";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   await setPlanByEmail("adam.wisniewski89@wp.pl", "pro_plus");

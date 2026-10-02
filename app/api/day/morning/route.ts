@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getUserId } from "../../../lib/userId";
 import { getMorningMessage } from "../../../lib/getMorningMessage";
 
+export const dynamic = "force-dynamic";
+
 
 export async function GET() {
 const userId = getUserId();

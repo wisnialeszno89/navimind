@@ -1,0 +1,33 @@
+name: NaviMind Agent Bridge
+
+on:
+  push:
+    branches:
+      - feature/universal-agent-bridge
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript check
+        run: pnpm exec tsc --noEmit

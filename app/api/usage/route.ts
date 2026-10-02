@@ -5,6 +5,7 @@ import { PLAN_LIMITS } from "../../lib/plans";
 import { checkAndIncrementMonthlyUsage } from "../../lib/monthlyUsage";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
