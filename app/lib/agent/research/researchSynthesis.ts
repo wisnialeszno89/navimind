@@ -248,6 +248,7 @@ export async function synthesizeResearchKnowledge(
   const sourceIds = new Set(
     rawKnowledge.sources.map((source) => source.source_id)
   );
+  const sourceIndex = buildSourceIndex(rawKnowledge);
 
   const facts: AgentKnowledgeFact[] = [];
 
