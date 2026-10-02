@@ -31,3 +31,70 @@ jobs:
 
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
+
+      - name: Tavily production smoke test
+        env:
+          NAVIMIND_URL: https://navimind.vercel.app/api/agent/task
+        run: |
+          cat > payload.json <<'JSON'
+          {
+            "version": "1",
+            "task_id": "tavily-smoke-20261002",
+            "goal": "Sprawdź w internecie aktualne informacje o najnowszym modelu OpenAI i zwróć jedną odpowiedź opartą na świeżym źródle.",
+            "intent": "validate_external_research",
+            "session_id": null,
+            "user_id": null,
+            "capability": null,
+            "skill": null,
+            "world": {
+              "active_application": "smoke_test",
+              "active_window_title": "Tavily Smoke Test",
+              "visible_elements": [],
+              "element_count": 0
+            },
+            "offer_workflow": null,
+            "knowledge": {
+              "version": "1",
+              "local": null,
+              "external": null
+            },
+            "experience": [],
+            "constraints": {
+              "semantic_only": true,
+              "max_actions": 1,
+              "verify_each_action": true,
+              "research_enabled": true,
+              "research_depth": "basic",
+              "research_max_results": 3,
+              "research_topic": "general"
+            },
+            "metadata": {
+              "test": "tavily_smoke"
+            }
+          }
+          JSON
+
+          curl --fail-with-body -sS \
+            --max-time 60 \
+            -H "Content-Type: application/json" \
+            --data @payload.json \
+            "$NAVIMIND_URL" > response.json
+
+          node - <<'NODE'
+          const fs = require("fs");
+          const data = JSON.parse(fs.readFileSync("response.json", "utf8"));
+          console.log("status=", data.status ?? null);
+          console.log("requires_manual_review=", data.requires_manual_review ?? null);
+          console.log("external_knowledge_status=", data.metadata?.external_knowledge_status ?? null);
+          console.log("external_knowledge_sources=", data.metadata?.external_knowledge_sources ?? 0);
+          console.log("external_knowledge_facts=", data.metadata?.external_knowledge_facts ?? 0);
+          console.log("external_knowledge_conflicts=", data.metadata?.external_knowledge_conflicts ?? 0);
+          console.log("research_error=", data.metadata?.error ?? null);
+          if (
+            data.metadata?.external_knowledge_status !== "complete" ||
+            Number(data.metadata?.external_knowledge_sources ?? 0) < 1 ||
+            Number(data.metadata?.external_knowledge_facts ?? 0) < 1
+          ) {
+            process.exit(1);
+          }
+          NODE
