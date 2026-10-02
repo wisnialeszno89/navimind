@@ -209,7 +209,7 @@ export async function synthesizeResearchKnowledge(
     ],
   });
 
-  const raw = response.choices?.[0]?.message?.content?.trim() || "";
+  const raw = result.choices?.[0]?.message?.content?.trim() || "";
 
   let parsed: Record<string, unknown>;
 
