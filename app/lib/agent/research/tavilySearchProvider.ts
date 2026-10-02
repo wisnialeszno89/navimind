@@ -62,6 +62,9 @@ export async function searchTavily(
           include_images: false,
           include_favicon: false,
           auto_parameters: false,
+          ...(options.includeDomains?.length
+            ? { include_domains: options.includeDomains }
+            : {}),
         }),
         signal: controller.signal,
       }
