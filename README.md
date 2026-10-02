@@ -38,3 +38,19 @@ Example local flow:
 
 Coordinates, window handles and provider/runtime identifiers are intentionally
 kept inside the desktop runtime and are not part of the bridge contract.
+
+
+## Structured knowledge context
+
+The desktop-agent bridge accepts a versioned `knowledge` envelope with:
+
+- `local` — application/runtime knowledge supplied by the desktop agent
+- `external` — provenance-aware facts and sources for future research results
+
+External knowledge includes confidence, relevance, provenance, conflicts and
+limitations. It is treated as untrusted model context, not as an execution
+instruction channel. Invalid knowledge is rejected before model reasoning and
+fails closed to `manual_review`.
+
+The current stage defines and validates the contract only. Web research is not
+enabled yet.
