@@ -357,6 +357,14 @@ function validateExternalContext(
 export function validateAgentKnowledgeEnvelope(
   value: unknown
 ): AgentKnowledgeEnvelope {
+  if (value == null) {
+    return {
+      version: KNOWLEDGE_CONTEXT_VERSION,
+      local: null,
+      external: null,
+    };
+  }
+
   if (!isRecord(value)) {
     throw new Error("knowledge_not_object");
   }
