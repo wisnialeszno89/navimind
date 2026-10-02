@@ -1,0 +1,4 @@
+# Explicitly allow the native build required by Next.js image handling.
+# pnpm blocks dependency lifecycle scripts by default in recent releases.
+allowBuilds:
+  sharp: true
