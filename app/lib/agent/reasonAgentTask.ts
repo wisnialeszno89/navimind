@@ -241,10 +241,23 @@ export async function reasonAgentTask(
   if (status === "continue" && action) {
     const allowed = allowedActionNames(task);
 
-    if (
-      allowed.length > 0 &&
-      !allowed.includes(action.name)
-    ) {
+    if (allowed.length === 0) {
+      return {
+        version: task.version,
+        task_id: task.task_id,
+        status: "manual_review",
+        rationale:
+          "The local agent did not provide a semantic action allowlist.",
+        confidence: 0,
+        action: null,
+        requires_manual_review: true,
+        metadata: {
+          error: "missing_allowed_actions",
+        },
+      };
+    }
+
+    if (!allowed.includes(action.name)) {
       return {
         version: task.version,
         task_id: task.task_id,
