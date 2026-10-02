@@ -33,5 +33,7 @@ export type ResearchEngineResult = {
   status: AgentKnowledgeContext["status"];
   knowledge: AgentKnowledgeContext;
   provider: "tavily" | "none";
+  required: boolean;
+  query: string | null;
   error?: string;
 };
