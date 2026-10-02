@@ -14,6 +14,7 @@ export type ResearchOptions = {
   searchDepth: ResearchDepth;
   topic: "general" | "news" | "finance";
   timeoutMs: number;
+  includeDomains?: string[];
 };
 
 export type ResearchSearchResult = {
