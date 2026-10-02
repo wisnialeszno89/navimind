@@ -8,8 +8,10 @@ import type { AgentTaskContract } from "../agentTaskContract";
 import { synthesizeResearchKnowledge } from "./researchSynthesis";
 import { searchTavily } from "./tavilySearchProvider";
 import {
-  buildAuthorityRecoveryQuery,
-  GERMAN_AUTHORITY_RECOVERY_DOMAINS,
+  buildGermanInstitutionalRecoveryQuery,
+  buildGermanLegalRecoveryQuery,
+  GERMAN_INSTITUTIONAL_RECOVERY_DOMAINS,
+  GERMAN_LEGAL_RECOVERY_DOMAINS,
   hasAuthoritativeOrInstitutionalSource,
   isGermanJurisdictionQuery,
   qualityLimitations,
@@ -398,23 +400,43 @@ export async function researchAgentTask(
       isGermanJurisdictionQuery(decision.query) &&
       !hasAuthoritativeOrInstitutionalSource(initialRanked)
     ) {
-      const recoveryQuery = buildAuthorityRecoveryQuery(
-        decision.query
-      );
-
-      const recoveryResponse = await searchTavily(
-        recoveryQuery,
+      const legalRecoveryResponse = await searchTavily(
+        buildGermanLegalRecoveryQuery(decision.query),
         {
           ...searchOptions,
-          includeDomains:
-            GERMAN_AUTHORITY_RECOVERY_DOMAINS,
+          includeDomains: GERMAN_LEGAL_RECOVERY_DOMAINS,
         }
       );
 
       mergedResponse = mergeResearchResults(
-        response,
-        recoveryResponse
+        mergedResponse,
+        legalRecoveryResponse
       );
+
+      const afterLegalRecovery = rankResearchResults(
+        decision.query,
+        mergedResponse.results
+      );
+
+      if (
+        !hasAuthoritativeOrInstitutionalSource(
+          afterLegalRecovery
+        )
+      ) {
+        const institutionalRecoveryResponse = await searchTavily(
+          buildGermanInstitutionalRecoveryQuery(decision.query),
+          {
+            ...searchOptions,
+            includeDomains:
+              GERMAN_INSTITUTIONAL_RECOVERY_DOMAINS,
+          }
+        );
+
+        mergedResponse = mergeResearchResults(
+          mergedResponse,
+          institutionalRecoveryResponse
+        );
+      }
     }
 
     const rawKnowledge = buildKnowledgeFromSearch(mergedResponse);
