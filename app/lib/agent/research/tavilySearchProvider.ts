@@ -62,7 +62,6 @@ export async function searchTavily(
           include_images: false,
           include_favicon: false,
           auto_parameters: false,
-          safe_search: true,
         }),
         signal: controller.signal,
       }
