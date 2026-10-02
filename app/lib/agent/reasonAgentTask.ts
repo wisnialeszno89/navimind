@@ -184,6 +184,7 @@ export async function reasonAgentTask(
             researchResult.error || "external_research_failed",
           research_query: researchResult.query,
         },
+        knowledge,
       };
     }
 
@@ -336,5 +337,6 @@ export async function reasonAgentTask(
           }
         : {}),
     },
+    knowledge,
   };
 }
