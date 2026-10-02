@@ -1,3 +1,5 @@
+// Research Quality Layer 2 is deterministic by design: provider evidence is
+// ranked by authority, temporal fit and topical relevance before synthesis.
 import type { AgentKnowledgeSourceQuality } from "../knowledgeContext";
 import type { ResearchSearchResult } from "./researchTypes";
 
