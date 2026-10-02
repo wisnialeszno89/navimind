@@ -120,9 +120,10 @@ function visibleLabels(task: AgentTaskContract): string[] {
 export async function reasonAgentTask(
   task: AgentTaskContract
 ): Promise<AgentTaskReasoningResponse> {
+  let knowledge;
+
   try {
-    const knowledge = validateAgentKnowledgeEnvelope(task.knowledge);
-    task.knowledge = knowledge;
+    knowledge = validateAgentKnowledgeEnvelope(task.knowledge);
   } catch (error) {
     const message =
       error instanceof Error
@@ -164,7 +165,10 @@ export async function reasonAgentTask(
   }
 
   const enriched = {
-    task,
+    task: {
+      ...task,
+      knowledge,
+    },
     user_context: userContext,
     visible_semantic_labels: visibleLabels(task),
   };
