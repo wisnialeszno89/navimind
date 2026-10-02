@@ -28,13 +28,7 @@ const INSTITUTIONAL_DOMAINS = new Set([
 ]);
 
 const TARGET_YEAR_PATTERN = /\b(20\d{2})\b/;
-export function isGermanJurisdictionQuery(query: string): boolean {
-  return /\b(deutschland|germany|german|niemcy|niemieck|bundesrepublik)\b/i.test(
-    query
-  );
-}
-
-export const GERMAN_AUTHORITY_RECOVERY_DOMAINS = [
+export export const GERMAN_AUTHORITY_RECOVERY_DOMAINS = [
   "gesetze-im-internet.de",
   "dibt.de",
   "bmwsb.bund.de",
@@ -302,12 +296,13 @@ export function assessResearchSource(
 
 
 export function hasAuthoritativeOrInstitutionalSource(
-  results: ResearchSearchResult[]
+  results: RankedResearchSearchResult[]
 ): boolean {
-  return results.some((result) => {
-    const tier = assessResearchSource("", result).tier;
-    return tier === "authoritative" || tier === "institutional";
-  });
+  return results.some(
+    (result) =>
+      result.quality.tier === "authoritative" ||
+      result.quality.tier === "institutional"
+  );
 }
 
 export type RankedResearchSearchResult = ResearchSearchResult & {
