@@ -28,7 +28,7 @@ const INSTITUTIONAL_DOMAINS = new Set([
 ]);
 
 const TARGET_YEAR_PATTERN = /\b(20\d{2})\b/;
-export export const GERMAN_AUTHORITY_RECOVERY_DOMAINS = [
+export const GERMAN_AUTHORITY_RECOVERY_DOMAINS = [
   "gesetze-im-internet.de",
   "dibt.de",
   "bmwsb.bund.de",
@@ -59,7 +59,7 @@ function hostFromUrl(url: string): string {
   }
 }
 
-function isGermanJurisdictionQuery(query: string): boolean {
+export function isGermanJurisdictionQuery(query: string): boolean {
   return /\b(deutschland|germany|german|niemcy|niemieck|bundesrepublik)\b/i.test(
     query
   );
