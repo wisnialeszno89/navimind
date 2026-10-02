@@ -286,8 +286,13 @@ export async function researchAgentTask(
     };
   }
 
+  let decisionRequired = false;
+  let decisionQuery: string | null = null;
+
   try {
     const decision = await decideResearch(task);
+    decisionRequired = decision.required;
+    decisionQuery = decision.query;
 
     if (!decision.required || !decision.query) {
       return {
@@ -341,8 +346,8 @@ export async function researchAgentTask(
         ],
       },
       provider: "tavily",
-      required: false,
-      query: null,
+      required: decisionRequired,
+      query: decisionQuery,
       error:
         error instanceof Error
           ? error.message
