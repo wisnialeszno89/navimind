@@ -8,6 +8,10 @@ import type { AgentTaskContract } from "../agentTaskContract";
 import { synthesizeResearchKnowledge } from "./researchSynthesis";
 import { searchTavily } from "./tavilySearchProvider";
 import {
+  qualityLimitations,
+  rankResearchResults,
+} from "./researchQuality";
+import {
   type ResearchDecision,
   type ResearchEngineResult,
   type ResearchOptions,
@@ -73,8 +77,12 @@ function buildKnowledgeFromSearch(
   const sourceIds = new Set<string>();
   const sourceUrls = new Set<string>();
   const retrievedAt = new Date().toISOString();
+  const rankedResults = rankResearchResults(
+    response.query,
+    response.results
+  );
 
-  response.results.forEach((result, index) => {
+  rankedResults.forEach((result, index) => {
     let url: URL;
 
     try {
@@ -114,6 +122,7 @@ function buildKnowledgeFromSearch(
       source_type: "web_search_result",
       retrieved_at: retrievedAt,
       published_at: result.published_date || undefined,
+      quality: result.quality,
     });
 
     facts.push({
@@ -141,7 +150,11 @@ function buildKnowledgeFromSearch(
       ? [
           "Retrieved evidence is not independently verified.",
           "Search ranking is not a truth guarantee.",
-        ]
+          ...qualityLimitations(
+            response.query,
+            rankedResults
+          ),
+        ].slice(0, 16)
       : [
           "No usable web results were returned.",
         ],
