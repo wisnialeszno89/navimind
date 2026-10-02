@@ -24,6 +24,8 @@ export type AgentKnowledgeFact = {
   confidence: number;
   relevance: number;
   evidence?: string;
+  kind?: "assertion" | "retrieved_evidence";
+  provider_score?: number;
 };
 
 export type AgentKnowledgeConflict = {
@@ -177,6 +179,23 @@ function validateFact(
     }
   }
 
+  const rawKind = value.kind;
+  if (
+    rawKind !== undefined &&
+    rawKind !== "assertion" &&
+    rawKind !== "retrieved_evidence"
+  ) {
+    throw new Error(`knowledge_invalid_fact_${index}_kind`);
+  }
+
+  const providerScore =
+    value.provider_score == null
+      ? undefined
+      : validateScore(
+          value.provider_score,
+          `fact_${index}_provider_score`
+        );
+
   return {
     fact_id: factId,
     claim,
@@ -189,6 +208,10 @@ function validateFact(
       value.relevance,
       `fact_${index}_relevance`
     ),
+    kind: rawKind ?? "assertion",
+    ...(providerScore !== undefined
+      ? { provider_score: providerScore }
+      : {}),
     ...(value.evidence == null
       ? {}
       : {
