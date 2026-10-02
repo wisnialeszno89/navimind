@@ -34,6 +34,16 @@ const SYNTHESIS_PROMPT = [
   "- Wykrywaj sprzeczności między źródłami i zapisz je jako konflikty.",
   "- Uwzględniaj świeżość na podstawie published_at; brak daty oznacza brak",
   "  możliwości oceny świeżości.",
+  "- Uwzględniaj także jakość źródła: authoritative oznacza rozpoznany",
+  "  oficjalny kanał rządowy, regulatora lub UE; institutional oznacza",
+  "  uznaną instytucję; pozostałe poziomy są heurystycznymi sygnałami, a nie",
+  "  dowodem prawdziwości.",
+  "- Przy pytaniach prawnych, regulacyjnych lub normowych preferuj źródła",
+  "  authoritative i institutional. Nie przedstawiaj wtórnego źródła jako",
+  "  równoważnego podstawie prawnej.",
+  "- Jeśli brak źródeł authoritative albo brakuje dat dla żądanego roku,",
+  "  zachowaj ostrożność i odnotuj ograniczenie.",
+  "- Quality score jest sygnałem heurystycznym, nie dowodem prawdy.",
   "- confidence oznacza pewność, że dane twierdzenie jest poprawnie wsparte",
   "  przez przekazane źródła, a NIE gwarancję prawdy w świecie.",
   "- relevance oznacza użyteczność twierdzenia dla celu użytkownika.",
@@ -131,24 +141,33 @@ function rawEvidencePayload(
   response: ResearchProviderResponse,
   knowledge: AgentKnowledgeContext
 ): Array<Record<string, unknown>> {
-  const sources = buildSourceIndex(knowledge);
+  const resultsByUrl = new Map<string, ResearchProviderResponse["results"][number]>();
 
-  return response.results.flatMap((result, index) => {
-    const sourceId = "web-" + String(index + 1);
-    const source = sources.get(sourceId);
+  for (const result of response.results) {
+    try {
+      const normalizedUrl = new URL(result.url).toString();
+      resultsByUrl.set(normalizedUrl, result);
+    } catch {
+      continue;
+    }
+  }
 
-    if (!source) {
+  return knowledge.sources.flatMap((source) => {
+    const result = resultsByUrl.get(source.url);
+
+    if (!result) {
       return [];
     }
 
     return [
       {
-        source_id: sourceId,
+        source_id: source.source_id,
         title: source.title,
         url: source.url,
         domain: source.domain ?? null,
         published_at: source.published_at ?? null,
         relevance: result.score ?? null,
+        quality: source.quality ?? null,
         content: result.content.slice(0, MAX_EVIDENCE_CHARS),
       },
     ];
@@ -229,6 +248,7 @@ export async function synthesizeResearchKnowledge(
   const sourceIds = new Set(
     rawKnowledge.sources.map((source) => source.source_id)
   );
+  const sourceIndex = buildSourceIndex(rawKnowledge);
 
   const facts: AgentKnowledgeFact[] = [];
 
@@ -264,6 +284,13 @@ export async function synthesizeResearchKnowledge(
       validSourceIds,
       rawKnowledge
     );
+    const hasHighAuthoritySource = validSourceIds.some((sourceId) => {
+      const source = sourceIndex.get(sourceId);
+      return (
+        source?.quality?.tier === "authoritative" ||
+        source?.quality?.tier === "institutional"
+      );
+    });
 
     facts.push({
       fact_id: "synth-fact-" + String(facts.length + 1),
@@ -272,7 +299,8 @@ export async function synthesizeResearchKnowledge(
       confidence,
       relevance,
       kind:
-        validSourceIds.length >= 2 && confidence >= 0.65
+        hasHighAuthoritySource &&
+        confidence >= 0.65
           ? "assertion"
           : "retrieved_evidence",
       ...(providerScore !== undefined
@@ -338,10 +366,16 @@ export async function synthesizeResearchKnowledge(
     : [];
 
   const limitations = [
+    ...rawKnowledge.limitations,
     "Synthesized from returned web search evidence; not independently verified.",
     "Source freshness is assessed only when publication dates are available.",
     ...modelLimitations,
-  ].slice(0, 16);
+  ]
+    .filter(
+      (value, index, values) =>
+        values.indexOf(value) === index
+    )
+    .slice(0, 16);
 
   return {
     version: "1",

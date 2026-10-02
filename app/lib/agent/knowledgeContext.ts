@@ -15,6 +15,21 @@ export type AgentKnowledgeSource = {
   source_type: string;
   retrieved_at?: string;
   published_at?: string;
+  quality?: AgentKnowledgeSourceQuality;
+};
+
+export type AgentKnowledgeSourceQuality = {
+  tier:
+    | "authoritative"
+    | "institutional"
+    | "established"
+    | "general"
+    | "low_confidence";
+  score: number;
+  authority_score: number;
+  temporal_fit_score: number;
+  topical_fit_score: number;
+  reasons: string[];
 };
 
 export type AgentKnowledgeFact = {
@@ -55,6 +70,7 @@ const MAX_FACTS = 32;
 const MAX_SOURCES = 32;
 const MAX_CONFLICTS = 16;
 const MAX_LIMITATIONS = 16;
+const MAX_QUALITY_REASONS = 8;
 const MAX_STRING_LENGTH = 4000;
 const MAX_URL_LENGTH = 2000;
 
@@ -137,6 +153,8 @@ function validateSource(
       ? undefined
       : requireString(value.published_at, `source_${index}_published_at`, 64);
 
+  const quality = validateSourceQuality(value.quality, index);
+
   return {
     source_id: sourceId,
     title,
@@ -145,6 +163,58 @@ function validateSource(
     ...(domain ? { domain } : {}),
     ...(retrievedAt ? { retrieved_at: retrievedAt } : {}),
     ...(publishedAt ? { published_at: publishedAt } : {}),
+    ...(quality ? { quality } : {}),
+  };
+}
+
+function validateSourceQuality(
+  value: unknown,
+  index: number
+): AgentKnowledgeSourceQuality | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value)) {
+    throw new Error(`knowledge_invalid_source_${index}_quality`);
+  }
+
+  const tier = value.tier;
+  if (
+    tier !== "authoritative" &&
+    tier !== "institutional" &&
+    tier !== "established" &&
+    tier !== "general" &&
+    tier !== "low_confidence"
+  ) {
+    throw new Error(`knowledge_invalid_source_${index}_quality_tier`);
+  }
+
+  if (!Array.isArray(value.reasons) || value.reasons.length > MAX_QUALITY_REASONS) {
+    throw new Error(`knowledge_invalid_source_${index}_quality_reasons`);
+  }
+
+  const reasons = value.reasons.map((reason, reasonIndex) =>
+    requireString(
+      reason,
+      `source_${index}_quality_reason_${reasonIndex}`,
+      500
+    )
+  );
+
+  return {
+    tier,
+    score: validateScore(value.score, `source_${index}_quality_score`),
+    authority_score: validateScore(
+      value.authority_score,
+      `source_${index}_authority_score`
+    ),
+    temporal_fit_score: validateScore(
+      value.temporal_fit_score,
+      `source_${index}_temporal_fit_score`
+    ),
+    topical_fit_score: validateScore(
+      value.topical_fit_score,
+      `source_${index}_topical_fit_score`
+    ),
+    reasons,
   };
 }
 
