@@ -281,6 +281,8 @@ export async function researchAgentTask(
       status: existing.status,
       knowledge: existing,
       provider: "none",
+      required: false,
+      query: existing.query,
     };
   }
 
@@ -303,6 +305,8 @@ export async function researchAgentTask(
           ],
         },
         provider: "none",
+        required: false,
+        query: null,
       };
     }
 
@@ -317,6 +321,8 @@ export async function researchAgentTask(
       status: knowledge.status,
       knowledge,
       provider: "tavily",
+      required: true,
+      query: decision.query,
     };
   } catch (error) {
     return {
@@ -335,6 +341,8 @@ export async function researchAgentTask(
         ],
       },
       provider: "tavily",
+      required: false,
+      query: null,
       error:
         error instanceof Error
           ? error.message
