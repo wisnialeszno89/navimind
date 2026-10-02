@@ -5,6 +5,7 @@ import {
   type AgentKnowledgeSource,
 } from "../knowledgeContext";
 import type { AgentTaskContract } from "../agentTaskContract";
+import { synthesizeResearchKnowledge } from "./researchSynthesis";
 import { searchTavily } from "./tavilySearchProvider";
 import {
   type ResearchDecision,
@@ -17,30 +18,30 @@ const MAX_QUERY_LENGTH = 1000;
 const DEFAULT_MAX_RESULTS = 5;
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-const DECISION_PROMPT = `
-Jesteś modułem decydującym, czy agent potrzebuje zewnętrznej wiedzy z internetu.
-
-Oceń wyłącznie:
-- cel użytkownika,
-- intencję,
-- lokalną wiedzę aplikacyjną,
-- istniejącą wiedzę zewnętrzną.
-
-Nie wykonujesz żadnej akcji i nie wydajesz instrukcji wykonawczych.
-
-Zwróć wyłącznie JSON:
-{
-  "required": true lub false,
-  "query": "krótkie zapytanie do internetu albo null",
-  "rationale": "krótkie uzasadnienie",
-  "confidence": liczba 0..1
-}
-
-Ustaw required=true tylko wtedy, gdy zewnętrzna informacja jest istotna
-dla poprawnego wykonania celu i nie wynika wystarczająco z dostarczonego kontekstu.
-Jeżeli wiedza jest wystarczająca, ustaw required=false.
-Nie wymyślaj danych.
-`.trim();
+const DECISION_PROMPT = [
+  "Jesteś modułem decydującym, czy agent potrzebuje zewnętrznej wiedzy z internetu.",
+  "",
+  "Oceń wyłącznie:",
+  "- cel użytkownika,",
+  "- intencję,",
+  "- lokalną wiedzę aplikacyjną,",
+  "- istniejącą wiedzę zewnętrzną.",
+  "",
+  "Nie wykonujesz żadnej akcji i nie wydajesz instrukcji wykonawczych.",
+  "",
+  "Zwróć wyłącznie JSON:",
+  "{",
+  '  "required": true lub false,',
+  '  "query": "krótkie zapytanie do internetu albo null",',
+  '  "rationale": "krótkie uzasadnienie",',
+  '  "confidence": liczba 0..1',
+  "}",
+  "",
+  "Ustaw required=true tylko wtedy, gdy zewnętrzna informacja jest istotna",
+  "dla poprawnego wykonania celu i nie wynika wystarczająco z dostarczonego kontekstu.",
+  "Jeżeli wiedza jest wystarczająca, ustaw required=false.",
+  "Nie wymyślaj danych.",
+].join("\n");
 
 function safeQuery(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -70,6 +71,8 @@ function buildKnowledgeFromSearch(
   const sources: AgentKnowledgeSource[] = [];
   const facts: AgentKnowledgeFact[] = [];
   const sourceIds = new Set<string>();
+  const sourceUrls = new Set<string>();
+  const retrievedAt = new Date().toISOString();
 
   response.results.forEach((result, index) => {
     let url: URL;
@@ -87,7 +90,15 @@ function buildKnowledgeFromSearch(
       return;
     }
 
-    const sourceId = `web-${index + 1}`;
+    const normalizedUrl = url.toString();
+
+    if (sourceUrls.has(normalizedUrl)) {
+      return;
+    }
+
+    sourceUrls.add(normalizedUrl);
+
+    const sourceId = "web-" + String(index + 1);
 
     if (sourceIds.has(sourceId)) {
       return;
@@ -98,14 +109,15 @@ function buildKnowledgeFromSearch(
     sources.push({
       source_id: sourceId,
       title: result.title,
-      url: result.url,
+      url: normalizedUrl,
       domain: url.hostname,
       source_type: "web_search_result",
+      retrieved_at: retrievedAt,
       published_at: result.published_date || undefined,
     });
 
     facts.push({
-      fact_id: `evidence-${index + 1}`,
+      fact_id: "evidence-" + String(index + 1),
       claim: result.content,
       source_ids: [sourceId],
       confidence: 0,
@@ -320,7 +332,13 @@ export async function researchAgentTask(
       optionsFromTask(task)
     );
 
-    const knowledge = buildKnowledgeFromSearch(response);
+    const rawKnowledge = buildKnowledgeFromSearch(response);
+
+    const knowledge = await synthesizeResearchKnowledge(
+      task,
+      response,
+      rawKnowledge
+    );
 
     return {
       status: knowledge.status,
