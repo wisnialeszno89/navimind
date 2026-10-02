@@ -173,7 +173,7 @@ function validateSourceQuality(
 ): AgentKnowledgeSourceQuality | undefined {
   if (value == null) return undefined;
   if (!isRecord(value)) {
-    throw new Error(`knowledge_invalid_source_\${index}_quality`);
+    throw new Error(`knowledge_invalid_source_${index}_quality`);
   }
 
   const tier = value.tier;
@@ -184,35 +184,35 @@ function validateSourceQuality(
     tier !== "general" &&
     tier !== "low_confidence"
   ) {
-    throw new Error(`knowledge_invalid_source_\${index}_quality_tier`);
+    throw new Error(`knowledge_invalid_source_${index}_quality_tier`);
   }
 
   if (!Array.isArray(value.reasons) || value.reasons.length > MAX_QUALITY_REASONS) {
-    throw new Error(`knowledge_invalid_source_\${index}_quality_reasons`);
+    throw new Error(`knowledge_invalid_source_${index}_quality_reasons`);
   }
 
   const reasons = value.reasons.map((reason, reasonIndex) =>
     requireString(
       reason,
-      `source_\${index}_quality_reason_\${reasonIndex}`,
+      `source_${index}_quality_reason_${reasonIndex}`,
       500
     )
   );
 
   return {
     tier,
-    score: validateScore(value.score, `source_\${index}_quality_score`),
+    score: validateScore(value.score, `source_${index}_quality_score`),
     authority_score: validateScore(
       value.authority_score,
-      `source_\${index}_authority_score`
+      `source_${index}_authority_score`
     ),
     temporal_fit_score: validateScore(
       value.temporal_fit_score,
-      `source_\${index}_temporal_fit_score`
+      `source_${index}_temporal_fit_score`
     ),
     topical_fit_score: validateScore(
       value.topical_fit_score,
-      `source_\${index}_topical_fit_score`
+      `source_${index}_topical_fit_score`
     ),
     reasons,
   };
