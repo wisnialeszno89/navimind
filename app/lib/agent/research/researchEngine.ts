@@ -8,6 +8,10 @@ import type { AgentTaskContract } from "../agentTaskContract";
 import { synthesizeResearchKnowledge } from "./researchSynthesis";
 import { searchTavily } from "./tavilySearchProvider";
 import {
+  buildAuthorityRecoveryQuery,
+  GERMAN_AUTHORITY_RECOVERY_DOMAINS,
+  hasAuthoritativeOrInstitutionalSource,
+  isGermanJurisdictionQuery,
   qualityLimitations,
   rankResearchResults,
 } from "./researchQuality";
@@ -158,6 +162,42 @@ function buildKnowledgeFromSearch(
       : [
           "No usable web results were returned.",
         ],
+  };
+}
+
+
+function mergeResearchResults(
+  primary: ResearchProviderResponse,
+  recovery?: ResearchProviderResponse
+): ResearchProviderResponse {
+  if (!recovery) {
+    return primary;
+  }
+
+  const byUrl = new Map<string, ResearchProviderResponse["results"][number]>();
+
+  for (const result of primary.results) {
+    try {
+      byUrl.set(new URL(result.url).toString(), result);
+    } catch {
+      continue;
+    }
+  }
+
+  for (const result of recovery.results) {
+    try {
+      const url = new URL(result.url).toString();
+      if (!byUrl.has(url)) {
+        byUrl.set(url, result);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    query: primary.query,
+    results: [...byUrl.values()],
   };
 }
 
@@ -340,16 +380,48 @@ export async function researchAgentTask(
       };
     }
 
+    const searchOptions = optionsFromTask(task);
+
     const response = await searchTavily(
       decision.query,
-      optionsFromTask(task)
+      searchOptions
     );
 
-    const rawKnowledge = buildKnowledgeFromSearch(response);
+    let mergedResponse = response;
+
+    const initialRanked = rankResearchResults(
+      decision.query,
+      response.results
+    );
+
+    if (
+      isGermanJurisdictionQuery(decision.query) &&
+      !hasAuthoritativeOrInstitutionalSource(initialRanked)
+    ) {
+      const recoveryQuery = buildAuthorityRecoveryQuery(
+        decision.query
+      );
+
+      const recoveryResponse = await searchTavily(
+        recoveryQuery,
+        {
+          ...searchOptions,
+          includeDomains:
+            GERMAN_AUTHORITY_RECOVERY_DOMAINS,
+        }
+      );
+
+      mergedResponse = mergeResearchResults(
+        response,
+        recoveryResponse
+      );
+    }
+
+    const rawKnowledge = buildKnowledgeFromSearch(mergedResponse);
 
     const knowledge = await synthesizeResearchKnowledge(
       task,
-      response,
+      mergedResponse,
       rawKnowledge
     );
 

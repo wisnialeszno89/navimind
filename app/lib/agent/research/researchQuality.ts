@@ -28,6 +28,28 @@ const INSTITUTIONAL_DOMAINS = new Set([
 ]);
 
 const TARGET_YEAR_PATTERN = /\b(20\d{2})\b/;
+export const GERMAN_AUTHORITY_RECOVERY_DOMAINS = [
+  "gesetze-im-internet.de",
+  "dibt.de",
+  "bmwsb.bund.de",
+  "bundesregierung.de",
+  "din.de",
+  "ift-rosenheim.de",
+  "dena.de",
+  "eur-lex.europa.eu",
+  "europa.eu",
+];
+
+export function buildAuthorityRecoveryQuery(query: string): string {
+  const suffix = " Fenster Uw Anforderungen GEG Deutschland";
+
+  if (/fenster|okn/i.test(query)) {
+    return query.includes("GEG") ? query : query + " GEG Deutschland";
+  }
+
+  return query + suffix;
+}
+
 
 function hostFromUrl(url: string): string {
   try {
@@ -37,7 +59,7 @@ function hostFromUrl(url: string): string {
   }
 }
 
-function isGermanJurisdictionQuery(query: string): boolean {
+export function isGermanJurisdictionQuery(query: string): boolean {
   return /\b(deutschland|germany|german|niemcy|niemieck|bundesrepublik)\b/i.test(
     query
   );
@@ -270,6 +292,17 @@ export function assessResearchSource(
     topical_fit_score: topical.score,
     reasons,
   };
+}
+
+
+export function hasAuthoritativeOrInstitutionalSource(
+  results: RankedResearchSearchResult[]
+): boolean {
+  return results.some(
+    (result) =>
+      result.quality.tier === "authoritative" ||
+      result.quality.tier === "institutional"
+  );
 }
 
 export type RankedResearchSearchResult = ResearchSearchResult & {
