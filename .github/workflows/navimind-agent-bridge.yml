@@ -34,7 +34,7 @@ jobs:
 
       - name: Tavily production smoke test
         env:
-          NAVIMIND_URL: https://navimind.vercel.app/api/agent/task
+          NAVIMIND_URL: https://navimind-lwmz.vercel.app/api/agent/task
         run: |
           cat > payload.json <<'JSON'
           {
