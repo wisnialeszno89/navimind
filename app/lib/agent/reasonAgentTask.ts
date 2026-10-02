@@ -33,6 +33,8 @@ Zasady bezwzględne:
 - status musi być: "continue", "done" albo "manual_review".
 - "done" wolno zwrócić tylko wtedy, gdy aktualny świat daje dowód ukończenia celu.
 - "continue" wymaga dokładnie jednej bezpiecznej akcji.
+- Jeśli task.constraints.allowed_actions zawiera listę, nazwa akcji MUSI należeć do tej listy.
+- Jeśli żadne działanie z task.constraints.allowed_actions nie pozwala bezpiecznie przybliżyć celu, zwróć "manual_review".
 - "manual_review" oznacza, że brakuje wystarczających dowodów do bezpiecznego działania.
 - Akcja jest semantyczna: nazwa operacji, opis, opcjonalny ludzki target i opcjonalna wartość.
 - Target może być wyłącznie widoczną etykietą semantyczną lub innym oczywistym określeniem widocznym w world.visible_elements.
@@ -111,6 +113,25 @@ function visibleLabels(task: AgentTaskContract): string[] {
       (label): label is string =>
         typeof label === "string" && label.trim().length > 0
     );
+}
+
+function allowedActionNames(
+  task: AgentTaskContract
+): string[] {
+  const raw =
+    task.constraints?.allowed_actions;
+
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter(
+      (value): value is string =>
+        typeof value === "string"
+    )
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 export async function reasonAgentTask(
@@ -215,6 +236,31 @@ export async function reasonAgentTask(
         error: "invalid_or_missing_action",
       },
     };
+  }
+
+  if (status === "continue" && action) {
+    const allowed = allowedActionNames(task);
+
+    if (
+      allowed.length > 0 &&
+      !allowed.includes(action.name)
+    ) {
+      return {
+        version: task.version,
+        task_id: task.task_id,
+        status: "manual_review",
+        rationale:
+          "The proposed semantic action is not allowed by the local agent.",
+        confidence: 0,
+        action: null,
+        requires_manual_review: true,
+        metadata: {
+          error: "action_not_allowed",
+          action: action.name,
+          allowed_actions: allowed,
+        },
+      };
+    }
   }
 
   return {
