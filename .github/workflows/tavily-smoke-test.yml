@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Call NaviMind research bridge
         env:
-          NAVIMIND_URL: https://navimind.vercel.app/api/agent/task
+          NAVIMIND_URL: https://navimind-lwmz.vercel.app/api/agent/task
         run: |
           cat > payload.json <<'JSON'
           {
@@ -54,10 +54,7 @@ jobs:
           }
           JSON
 
-          curl --fail-with-body -sS \
-            -H "Content-Type: application/json" \
-            --data @payload.json \
-            "$NAVIMIND_URL" > response.json
+          curl --fail-with-body -sS             --max-time 60             -H "Content-Type: application/json"             --data @payload.json             "$NAVIMIND_URL" > response.json
 
           node - <<'NODE'
           const fs = require("fs");
