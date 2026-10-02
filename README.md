@@ -54,3 +54,24 @@ fails closed to `manual_review`.
 
 The current stage defines and validates the contract only. Web research is not
 enabled yet.
+
+
+## External research
+
+When the desktop task contains `constraints.research_enabled=true`, NaviMind may
+decide that fresh external evidence is required before final semantic reasoning.
+The current provider is Tavily Search.
+
+Server-side environment:
+
+```text
+TAVILY_API_KEY=...
+NAVIMIND_AGENT_RESEARCH_MODEL=gpt-4.1-mini
+NAVIMIND_RESEARCH_MAX_RESULTS=5
+NAVIMIND_RESEARCH_DEPTH=basic
+NAVIMIND_RESEARCH_TIMEOUT_MS=15000
+```
+
+Retrieved web content is represented as `retrieved_evidence`, with source URLs
+and provider relevance kept separately from epistemic confidence. Search content
+is never treated as an execution instruction.
