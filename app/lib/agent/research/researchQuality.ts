@@ -30,6 +30,7 @@ const INSTITUTIONAL_DOMAINS = new Set([
 const TARGET_YEAR_PATTERN = /\b(20\d{2})\b/;
 export const GERMAN_LEGAL_RECOVERY_DOMAINS = [
   "gesetze-im-internet.de",
+  "www.gesetze-im-internet.de",
 ];
 
 export const GERMAN_INSTITUTIONAL_RECOVERY_DOMAINS = [
@@ -45,13 +46,23 @@ export const GERMAN_INSTITUTIONAL_RECOVERY_DOMAINS = [
 
 export function buildGermanLegalRecoveryQuery(query: string): string {
   return [
-    query,
+    "Gebäudeenergiegesetz",
     "GEG",
-    "§ 48",
     "Anlage 7",
     "Fenster",
     "Uw",
-  ].join(" ");
+    query,
+  ].filter(Boolean).join(" ");
+}
+
+export function buildGermanLegalRecoveryQueryVariants(
+  query: string
+): string[] {
+  return [
+    buildGermanLegalRecoveryQuery(query),
+    "GEG § 48 Anlage 7 Fenster Uw",
+    "Gebäudeenergiegesetz Anlage 7 Fenster Wärmedurchgangskoeffizient Uw",
+  ];
 }
 
 export function buildGermanInstitutionalRecoveryQuery(

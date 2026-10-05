@@ -9,7 +9,7 @@ import { synthesizeResearchKnowledge } from "./researchSynthesis";
 import { searchTavily } from "./tavilySearchProvider";
 import {
   buildGermanInstitutionalRecoveryQuery,
-  buildGermanLegalRecoveryQuery,
+  buildGermanLegalRecoveryQueryVariants,
   GERMAN_INSTITUTIONAL_RECOVERY_DOMAINS,
   GERMAN_LEGAL_RECOVERY_DOMAINS,
   hasAuthoritativeOrInstitutionalSource,
@@ -400,18 +400,38 @@ export async function researchAgentTask(
       isGermanJurisdictionQuery(decision.query) &&
       !hasAuthoritativeOrInstitutionalSource(initialRanked)
     ) {
-      const legalRecoveryResponse = await searchTavily(
-        buildGermanLegalRecoveryQuery(decision.query),
-        {
-          ...searchOptions,
-          includeDomains: GERMAN_LEGAL_RECOVERY_DOMAINS,
-        }
-      );
+      const legalRecoveryQueries =
+        buildGermanLegalRecoveryQueryVariants(decision.query);
 
-      mergedResponse = mergeResearchResults(
-        mergedResponse,
-        legalRecoveryResponse
-      );
+      for (const legalQuery of legalRecoveryQueries) {
+        const legalRecoveryResponse = await searchTavily(
+          legalQuery,
+          {
+            ...searchOptions,
+            searchDepth: "advanced",
+            maxResults: Math.max(searchOptions.maxResults, 5),
+            includeDomains: GERMAN_LEGAL_RECOVERY_DOMAINS,
+          }
+        );
+
+        mergedResponse = mergeResearchResults(
+          mergedResponse,
+          legalRecoveryResponse
+        );
+
+        const afterLegalRecovery = rankResearchResults(
+          decision.query,
+          mergedResponse.results
+        );
+
+        if (
+          hasAuthoritativeOrInstitutionalSource(
+            afterLegalRecovery
+          )
+        ) {
+          break;
+        }
+      }
 
       const afterLegalRecovery = rankResearchResults(
         decision.query,
