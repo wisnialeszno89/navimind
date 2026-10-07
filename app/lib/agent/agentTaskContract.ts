@@ -49,6 +49,16 @@ export type AgentTaskAction = {
   requires_confirmation?: boolean;
 };
 
+export type AgentTaskReasoningUsage = {
+  provider: "openai";
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached_input_tokens: number;
+  reasoning_tokens: number;
+};
+
 export type AgentTaskReasoningResponse = {
   version: string;
   task_id: string;
@@ -59,4 +69,5 @@ export type AgentTaskReasoningResponse = {
   requires_manual_review: boolean;
   metadata?: Record<string, unknown>;
   knowledge?: AgentKnowledgeEnvelope | null;
+  usage?: AgentTaskReasoningUsage;
 };

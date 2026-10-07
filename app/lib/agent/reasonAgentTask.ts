@@ -3,6 +3,7 @@ import type {
   AgentTaskAction,
   AgentTaskContract,
   AgentTaskReasoningResponse,
+  AgentTaskReasoningUsage,
 } from "./agentTaskContract";
 import type { AgentKnowledgeEnvelope } from "./knowledgeContext";
 import { validateAgentKnowledgeEnvelope } from "./knowledgeContext";
@@ -110,6 +111,27 @@ function safeConfidence(value: unknown): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(0, Math.min(1, numeric));
+}
+
+function reasoningUsage(
+  response: OpenAI.Chat.Completions.ChatCompletion,
+  model: string
+): AgentTaskReasoningUsage {
+  const usage = response.usage;
+
+  return {
+    provider: "openai",
+    model,
+    input_tokens: Number(usage?.prompt_tokens ?? 0),
+    output_tokens: Number(usage?.completion_tokens ?? 0),
+    total_tokens: Number(usage?.total_tokens ?? 0),
+    cached_input_tokens: Number(
+      usage?.prompt_tokens_details?.cached_tokens ?? 0
+    ),
+    reasoning_tokens: Number(
+      usage?.completion_tokens_details?.reasoning_tokens ?? 0
+    ),
+  };
 }
 
 function visibleLabels(task: AgentTaskContract): string[] {
@@ -228,10 +250,12 @@ export async function reasonAgentTask(
     visible_semantic_labels: visibleLabels(task),
   };
 
+  const model =
+    process.env.NAVIMIND_AGENT_MODEL ||
+    "gpt-4.1-mini";
+
   const response = await openai.chat.completions.create({
-    model:
-      process.env.NAVIMIND_AGENT_MODEL ||
-      "gpt-4.1-mini",
+    model,
     temperature: 0.1,
     max_tokens: 700,
     response_format: {
@@ -248,6 +272,8 @@ export async function reasonAgentTask(
       },
     ],
   });
+
+  const usage = reasoningUsage(response, model);
 
   const raw =
     response.choices?.[0]?.message?.content?.trim() ||
@@ -269,6 +295,7 @@ export async function reasonAgentTask(
       metadata: {
         error: "invalid_json_response",
       },
+      usage,
     };
   }
 
@@ -301,6 +328,7 @@ export async function reasonAgentTask(
       metadata: {
         error: "invalid_or_missing_action",
       },
+      usage,
     };
   }
 
@@ -338,5 +366,6 @@ export async function reasonAgentTask(
         : {}),
     },
     knowledge,
+    usage,
   };
 }
