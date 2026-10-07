@@ -65,6 +65,7 @@ Zasady bezwzględne:
 - status musi być: "continue", "done" albo "manual_review".
 - "done" wolno zwrócić tylko wtedy, gdy aktualny świat daje dowód ukończenia celu.
 - "continue" wymaga dokładnie jednej bezpiecznej akcji.
+- "continue" requires a numeric confidence greater than 0.
 - "manual_review" oznacza, że brakuje wystarczających dowodów do bezpiecznego działania.
 - Akcja jest semantyczna: nazwa operacji, opis, opcjonalny ludzki target i opcjonalna wartość.
 - Do akcji przeglądarkowych używaj wyłącznie:
@@ -351,6 +352,25 @@ export async function reasonAgentTask(
       ? rawStatus
       : "manual_review";
 
+  const confidence = safeConfidence(parsed.confidence);
+
+  if (status === "continue" && confidence <= 0) {
+    return {
+      version: task.version,
+      task_id: task.task_id,
+      status: "manual_review",
+      rationale:
+        "NaviMind did not provide a positive confidence for the proposed action.",
+      confidence: 0,
+      action: null,
+      requires_manual_review: true,
+      metadata: {
+        error: "invalid_or_missing_confidence",
+      },
+      knowledge,
+    };
+  }
+
   const action =
     status === "continue"
       ? normalizeAction(parsed.action, task)
@@ -380,7 +400,7 @@ export async function reasonAgentTask(
       typeof parsed.rationale === "string"
         ? parsed.rationale
         : "",
-    confidence: safeConfidence(parsed.confidence),
+    confidence,
     action,
     requires_manual_review:
       status === "manual_review" ||
