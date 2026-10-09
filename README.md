@@ -1,73 +1,39 @@
 # NaviMind - Clean Build
 
 This is a minimal clean scaffold for the NaviMind chat app (Next.js).
-Files included: API chat + pdf, minimal chat UI, store, modes.
+Files included: API chat + PDF processing, minimal chat UI, store and modes.
 
 Instructions:
-1. Set environment variable GROQ_API_KEY in Vercel or .env.local locally.
-2. Run `npm install` then `npm run dev`.
-3. If you want full PDF parsing, install `pdf-parse` and update /app/api/pdf/route.ts.
+1. Configure required server-side environment variables for the feature being used.
+2. Run `npm install`, then `npm run dev`.
+3. See the route implementation and feature-specific docs for current supported operations.
 
 ## Universal desktop agent bridge
 
-NaviMind can act as the reasoning/context side of the desktop agent. The
-local `wh-ai-parser` runtime remains responsible for perception, semantic
-action validation, physical execution and verification.
+NaviMind provides reasoning and context for the local `wh-ai-parser` desktop agent. The desktop runtime remains responsible for filesystem access, UI perception, local action validation, physical execution and verification.
 
-The bridge endpoint is:
-- `POST /api/agent/task`
-- request: versioned semantic task/world contract
-- response: at most one semantic action, `done`, or `manual_review`
+Endpoint: `POST /api/agent/task`.
 
-Optional environment variables:
-- `OPENAI_API_KEY` — model access
-- `NAVIMIND_AGENT_MODEL` — reasoning model (defaults to `gpt-4.1-mini`)
-- `NAVIMIND_AGENT_SECRET` — shared secret for the header `x-navimind-agent-secret`
+The endpoint proposes at most one semantic action, `done`, or `manual_review`. Coordinates, window handles, runtime/provider IDs and physical execution remain local.
 
-Example local flow:
-1. Start NaviMind with `npm run dev`.
-2. Configure `NAVIMIND_AGENT_URL=http://localhost:3000/api/agent/task` in the
-   desktop agent environment.
-3. The desktop agent sends its current semantic world and goal to NaviMind.
-4. NaviMind returns one semantic action; the desktop agent validates, executes,
-   verifies, and observes again.
+Relevant environment variables:
+- `OPENAI_API_KEY` — server-side model access.
+- `NAVIMIND_AGENT_MODEL` — optional reasoning model.
+- `NAVIMIND_AGENT_SECRET` — high-entropy server-side shared secret required by the desktop bridge.
+- `NAVIMIND_AGENT_ALLOW_DEV_BYPASS=1` — explicit non-production-only opt-in for local development without the shared secret.
 
-Coordinates, window handles and provider/runtime identifiers remain local.
+**Do not treat the agent route as production-ready until PR #20 is reviewed, built and tested.** It is intended to fail closed when authentication is not configured. Configure the same secret in the deployment and local runtime; never put it in a URL, client bundle, commit or log.
 
-## Structured knowledge context
+## Structured knowledge and external research
 
-The bridge accepts a versioned `knowledge` envelope with `local` application/runtime
-knowledge and `external` provenance-aware facts. Evidence includes confidence,
-relevance, provenance, conflicts and limitations. It is untrusted model context,
-not an execution instruction channel. Invalid knowledge should fail closed to
-`manual_review`. This contract does not itself enable web research.
+The task contract can contain local application/runtime knowledge and external provenance-aware evidence. This content is untrusted model context, not an execution instruction channel. Retrieved web evidence keeps source URLs and provider relevance separate from epistemic confidence. Research is bounded/configuration-driven and does not authorize actions.
 
-## External research
+## Security and full-flow plan
 
-When `constraints.research_enabled=true`, NaviMind may use Tavily Search.
-Server-side environment:
-```text
-TAVILY_API_KEY=...
-NAVIMIND_AGENT_RESEARCH_MODEL=gpt-4.1-mini
-NAVIMIND_RESEARCH_MAX_RESULTS=5
-NAVIMIND_RESEARCH_DEPTH=basic
-NAVIMIND_RESEARCH_TIMEOUT_MS=15000
-```
-Retrieved web content is represented as `retrieved_evidence`; source URLs and
-provider relevance are kept distinct from epistemic confidence. Search content
-is never treated as an execution instruction.
+- Bridge hardening epic: [#17](https://github.com/wisnialeszno89/navimind/issues/17)
+- Endpoint hardening implementation PR: [#20](https://github.com/wisnialeszno89/navimind/pull/20)
+- Integration deployment checklist: [#19](https://github.com/wisnialeszno89/navimind/issues/19)
+- Local task workflow epic: [wh-ai-parser #59](https://github.com/wisnialeszno89/wh-ai-parser/issues/59)
+- [Bridge hardening requirements](docs/UNIVERSAL_AGENT_BRIDGE_HARDENING.md)
 
-## Secure bridge hardening
-
-See the [bridge hardening requirements](docs/UNIVERSAL_AGENT_BRIDGE_HARDENING.md)
-and track the implementation in issues #17–#19.
-
-**Production requirement:** the deployment must reject requests if
-`NAVIMIND_AGENT_SECRET` is missing or invalid. Configure the high-entropy secret
-as a server-side environment variable and in the local runtime. Do not put
-secrets into URLs, client bundles, logs, or GitHub. The current route must be
-hardened before it is treated as production-ready.
-
-The desktop runtime connects to the host via outbound HTTPS. No inbound PC
-port or tunnel is needed. Raw PDFs, customer files and unrestricted local paths
-stay local by default; only minimized, relevant evidence should cross the bridge.
+The desktop connects to the hosted server over outbound HTTPS. **No inbound port, port-forwarding or internet tunnel to the user's PC is required.** Raw PDFs, customer files and unrestricted local paths remain local by default; only minimized, relevant evidence should cross the bridge.
