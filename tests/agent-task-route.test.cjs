@@ -224,6 +224,22 @@ test("invalid JSON, missing fields, and unsupported versions return 400", async 
       assert.equal(response.status, 400);
       assert.deepEqual(await response.json(), { error: "INVALID_AGENT_TASK" });
     }
+
+    for (const field of [
+      "session_id",
+      "user_id",
+      "capability",
+      "skill",
+      "knowledge",
+      "experience",
+      "offer_workflow",
+      "metadata",
+    ]) {
+      const task = validTask();
+      delete task[field];
+      const response = await post(request(JSON.stringify(task)));
+      assert.equal(response.status, 400, `missing required field: ${field}`);
+    }
     assert.equal(calls.length, 0);
   });
 });
