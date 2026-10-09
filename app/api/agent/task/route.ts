@@ -375,7 +375,9 @@ function validateReasoningResponse(
       description,
       target: typeof target === "string" ? target : null,
       value: typeof value === "string" ? value : null,
-      requires_confirmation: requiresConfirmation === true,
+      ...(requiresConfirmation === undefined
+        ? {}
+        : { requires_confirmation: requiresConfirmation }),
     },
     requires_manual_review: false,
   };
