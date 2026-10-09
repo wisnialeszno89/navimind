@@ -18,6 +18,7 @@ The bridge endpoint is:
 - `POST /api/agent/task`
 - request: versioned semantic task/world contract
 - response: at most one semantic action, `done`, or `manual_review`
+- required `constraints.allowed_actions` allowlist enforced by NaviMind before an action is returned; a missing/empty allowlist fails closed to `manual_review`
 
 Optional environment variables:
 - `OPENAI_API_KEY` — model access
