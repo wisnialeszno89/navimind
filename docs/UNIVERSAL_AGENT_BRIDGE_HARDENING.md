@@ -20,6 +20,7 @@ Implemented in the repository and covered by CI:
 - Bounded request fields, knowledge lists, visible elements and client-supplied action allowlist.
 - Model-provider configuration is checked after authentication and reports a structured 503 when `OPENAI_API_KEY` is absent.
 - The response is checked against the task ID/version, the server action allowlist, the caller's narrower allowlist, bounded action fields and `continue`/ `done` / `manual_review` invariants. An invalid model result becomes `manual_review`, never an executable action.
+- The OpenAI reasoning request is capped at 25 seconds and automatic SDK retries are disabled, keeping provider latency below the local runtime's 45-second HTTP timeout when this phase is reached.
 - The local runtime still validates the proposed action again before any physical execution.
 
 Still requiring access to the actual deployment and local machine:
