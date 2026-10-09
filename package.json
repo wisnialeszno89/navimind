@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:agent-bridge": "node --test tests/agent-task-route.test.cjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

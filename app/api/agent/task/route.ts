@@ -1,80 +1,307 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   reasonAgentTask,
 } from "@/lib/agent/reasonAgentTask";
 import type {
   AgentTaskContract,
+  AgentTaskWorldElement,
 } from "@/lib/agent/agentTaskContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const MAX_BODY_BYTES = 256 * 1024;
+const MAX_GOAL_LENGTH = 8_000;
+const MAX_TASK_ID_LENGTH = 256;
+const MAX_WORLD_ELEMENTS = 500;
+const MAX_TEXT_LENGTH = 20_000;
+const MAX_EXPERIENCE_ITEMS = 20;
+const MAX_ALLOWED_ACTIONS = 100;
+const MAX_ALLOWED_ACTION_NAME_LENGTH = 128;
+
+function jsonError(error: string, status: number) {
+  return NextResponse.json({ error }, { status });
+}
+
+function timingSafeSecretMatch(provided: string, configured: string): boolean {
+  const providedBytes = Buffer.from(provided, "utf8");
+  const configuredBytes = Buffer.from(configured, "utf8");
+  if (providedBytes.length === 0 || providedBytes.length !== configuredBytes.length) {
+    return false;
+  }
+  return timingSafeEqual(providedBytes, configuredBytes);
+}
+
+function isJsonContentType(req: Request): boolean {
+  return (req.headers.get("content-type") || "")
+    .toLowerCase()
+    .split(";")[0]
+    .trim() === "application/json";
+}
+
+async function readBoundedBody(req: Request): Promise<unknown | null> {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength !== null) {
+    const parsedLength = Number(contentLength);
+    if (!Number.isFinite(parsedLength) || parsedLength < 0) {
+      throw new Error("INVALID_CONTENT_LENGTH");
+    }
+    if (parsedLength > MAX_BODY_BYTES) {
+      throw new RangeError("BODY_TOO_LARGE");
+    }
+  }
+
+  if (!req.body) {
+    return null;
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        await reader.cancel("PAYLOAD_TOO_LARGE").catch(() => undefined);
+        throw new RangeError("BODY_TOO_LARGE");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(merged)) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function validOptionalText(value: unknown, maxLength = MAX_TEXT_LENGTH): boolean {
+  return value === undefined ||
+    value === null ||
+    (typeof value === "string" && value.length <= maxLength);
+}
+
+function isNullableText(value: unknown, maxLength: number): boolean {
+  return value === null ||
+    (typeof value === "string" && value.length <= maxLength);
+}
+
+function isNullableDescriptor(value: unknown): boolean {
+  if (value === null) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const descriptor = value as Record<string, unknown>;
+  return (
+    isNullableText(descriptor.name, 256) &&
+    isNullableText(descriptor.description, 2_000)
+  );
+}
+
+function isWorldElement(value: unknown): value is AgentTaskWorldElement {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.kind === "string" &&
+    item.kind.length > 0 &&
+    item.kind.length <= 128 &&
+    (item.label === null ||
+      (typeof item.label === "string" && item.label.length <= MAX_TEXT_LENGTH)) &&
+    typeof item.interaction_capability === "string" &&
+    item.interaction_capability.length > 0 &&
+    item.interaction_capability.length <= 128 &&
+    validOptionalText(item.current_value) &&
+    (item.confidence === undefined ||
+      (typeof item.confidence === "number" &&
+        Number.isFinite(item.confidence) &&
+        item.confidence >= 0 &&
+        item.confidence <= 1))
+  );
+}
+
+function isKnowledgeEnvelope(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const envelope = value as Record<string, unknown>;
+  if (envelope.version !== "1") return false;
+  if (
+    envelope.local !== undefined &&
+    envelope.local !== null &&
+    (typeof envelope.local !== "object" || Array.isArray(envelope.local))
+  ) return false;
+
+  if (envelope.external === undefined || envelope.external === null) return true;
+  if (!envelope.external || typeof envelope.external !== "object" || Array.isArray(envelope.external)) {
+    return false;
+  }
+
+  const external = envelope.external as Record<string, unknown>;
+  const listBounds: Array<[string, number]> = [
+    ["sources", 32],
+    ["facts", 32],
+    ["conflicts", 16],
+    ["limitations", 16],
+  ];
+  for (const [key, max] of listBounds) {
+    if (!Array.isArray(external[key]) || (external[key] as unknown[]).length > max) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const body = value as Record<string, unknown>;
+  if (
+    body.version !== "1" ||
+    typeof body.goal !== "string" ||
+    body.goal.trim().length === 0 ||
+    body.goal.length > MAX_GOAL_LENGTH ||
+    typeof body.task_id !== "string" ||
+    body.task_id.trim().length === 0 ||
+    body.task_id.length > MAX_TASK_ID_LENGTH ||
+    typeof body.intent !== "string" ||
+    body.intent.length === 0 ||
+    body.intent.length > 256 ||
+    !isNullableText(body.session_id, 256) ||
+    !isNullableText(body.user_id, 256) ||
+    !isNullableDescriptor(body.capability) ||
+    !isNullableDescriptor(body.skill) ||
+    !body.world ||
+    typeof body.world !== "object" ||
+    Array.isArray(body.world) ||
+    !body.constraints ||
+    typeof body.constraints !== "object" ||
+    Array.isArray(body.constraints) ||
+    !Object.prototype.hasOwnProperty.call(body, "knowledge") ||
+    !(body.knowledge === null || isKnowledgeEnvelope(body.knowledge)) ||
+    !Array.isArray(body.experience) ||
+    body.experience.length > MAX_EXPERIENCE_ITEMS ||
+    !body.experience.every((item) =>
+      item !== null && typeof item === "object" && !Array.isArray(item)
+    ) ||
+    !Object.prototype.hasOwnProperty.call(body, "offer_workflow") ||
+    !(body.offer_workflow === null ||
+      (typeof body.offer_workflow === "object" && !Array.isArray(body.offer_workflow))) ||
+    !body.metadata ||
+    typeof body.metadata !== "object" ||
+    Array.isArray(body.metadata)
+  ) {
+    return false;
+  }
+
+  const world = body.world as Record<string, unknown>;
+  if (
+    !isNullableText(world.active_application, 512) ||
+    !isNullableText(world.active_window_title, 2_000) ||
+    !Array.isArray(world.visible_elements) ||
+    world.visible_elements.length > MAX_WORLD_ELEMENTS ||
+    !world.visible_elements.every(isWorldElement) ||
+    typeof world.element_count !== "number" ||
+    !Number.isInteger(world.element_count) ||
+    world.element_count < 0 ||
+    world.element_count > 100_000 ||
+    world.element_count < world.visible_elements.length
+  ) {
+    return false;
+  }
+
+  const constraints = body.constraints as Record<string, unknown>;
+  if (
+    typeof constraints.semantic_only !== "boolean" ||
+    typeof constraints.verify_each_action !== "boolean" ||
+    typeof constraints.max_actions !== "number" ||
+    !Number.isInteger(constraints.max_actions) ||
+    constraints.max_actions < 1 ||
+    constraints.max_actions > 100
+  ) {
+    return false;
+  }
+
+  const allowedActions = constraints.allowed_actions;
+  if (
+    allowedActions !== undefined &&
+    (!Array.isArray(allowedActions) ||
+      allowedActions.length === 0 ||
+      allowedActions.length > MAX_ALLOWED_ACTIONS ||
+      !allowedActions.every((item) =>
+        typeof item === "string" &&
+        item.length > 0 &&
+        item.length <= MAX_ALLOWED_ACTION_NAME_LENGTH
+      ))
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export async function POST(req: Request) {
   try {
-    const configuredSecret =
-      process.env.NAVIMIND_AGENT_SECRET?.trim();
+    const configuredSecret = process.env.NAVIMIND_AGENT_SECRET?.trim();
+    const allowDevBypass =
+      process.env.NODE_ENV !== "production" &&
+      process.env.NAVIMIND_AGENT_ALLOW_DEV_BYPASS === "1";
 
-    if (configuredSecret) {
-      const providedSecret =
-        req.headers
-          .get("x-navimind-agent-secret")
-          ?.trim() || "";
-
-      if (
-        !providedSecret ||
-        providedSecret !== configuredSecret
-      ) {
-        return NextResponse.json(
-          { error: "UNAUTHORIZED" },
-          { status: 401 }
-        );
+    if (!configuredSecret) {
+      if (!allowDevBypass) {
+        return jsonError("AGENT_AUTH_NOT_CONFIGURED", 503);
+      }
+    } else {
+      const providedSecret = req.headers.get("x-navimind-agent-secret") || "";
+      if (!timingSafeSecretMatch(providedSecret, configuredSecret)) {
+        return jsonError("UNAUTHORIZED", 401);
       }
     }
 
-    const body =
-      (await req.json().catch(() => null)) as
-        | AgentTaskContract
-        | null;
-
-    if (
-      !body ||
-      typeof body !== "object" ||
-      typeof body.goal !== "string" ||
-      typeof body.task_id !== "string" ||
-      !body.world ||
-      typeof body.world !== "object"
-    ) {
-      return NextResponse.json(
-        { error: "INVALID_AGENT_TASK" },
-        { status: 400 }
-      );
+    if (!isJsonContentType(req)) {
+      return jsonError("UNSUPPORTED_CONTENT_TYPE", 415);
     }
 
-    if (
-      body.version !== "1" &&
-      body.version !== undefined
-    ) {
-      return NextResponse.json(
-        { error: "UNSUPPORTED_AGENT_TASK_VERSION" },
-        { status: 400 }
-      );
+    let body: unknown;
+    try {
+      body = await readBoundedBody(req);
+    } catch (error) {
+      if (error instanceof RangeError && error.message === "BODY_TOO_LARGE") {
+        return jsonError("PAYLOAD_TOO_LARGE", 413);
+      }
+      if (error instanceof Error && error.message === "INVALID_CONTENT_LENGTH") {
+        return jsonError("INVALID_CONTENT_LENGTH", 400);
+      }
+      throw error;
     }
 
-    const result =
-      await reasonAgentTask(body);
+    if (!isBoundedAgentTask(body)) {
+      return jsonError("INVALID_AGENT_TASK", 400);
+    }
 
+    const result = await reasonAgentTask(body);
     return NextResponse.json(result);
-  } catch (error) {
-    console.error(
-      "NAVIMIND_AGENT_TASK_ERROR",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error: "AGENT_TASK_FAILED",
-      },
-      { status: 500 }
-    );
+  } catch {
+    // Never log request bodies, auth headers, API keys or provider details.
+    console.error("NAVIMIND_AGENT_TASK_ERROR");
+    return jsonError("AGENT_TASK_FAILED", 500);
   }
 }
