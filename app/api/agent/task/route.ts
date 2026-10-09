@@ -5,6 +5,7 @@ import {
 } from "@/lib/agent/reasonAgentTask";
 import type {
   AgentTaskContract,
+  AgentTaskReasoningResponse,
   AgentTaskWorldElement,
 } from "@/lib/agent/agentTaskContract";
 
@@ -19,6 +20,33 @@ const MAX_TEXT_LENGTH = 20_000;
 const MAX_EXPERIENCE_ITEMS = 20;
 const MAX_ALLOWED_ACTIONS = 100;
 const MAX_ALLOWED_ACTION_NAME_LENGTH = 128;
+const MAX_ACTION_DESCRIPTION_LENGTH = 2_000;
+const MAX_ACTION_TARGET_LENGTH = 2_000;
+const MAX_ACTION_VALUE_LENGTH = 8_000;
+
+// This server-side policy is intentionally aligned with
+// wh-ai-parser/app/agent/reasoning/reasoning_action_policy.py.
+// The local runtime still independently enforces its own allowlist before
+// any physical computer action.
+const SERVER_ALLOWED_ACTIONS = new Set([
+  "analyze_request",
+  "collect_offer_context",
+  "validate_offer",
+  "build_construction",
+  "prepare_quote",
+  "click_screen_element",
+  "click",
+  "click_ui_element",
+  "write_text",
+  "type_text",
+  "open_new_offer",
+  "browser_navigate",
+  "browser_read",
+  "browser_click",
+  "browser_write_text",
+  "browser_select_option",
+  "browser_back",
+]);
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
@@ -249,13 +277,108 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
       !allowedActions.every((item) =>
         typeof item === "string" &&
         item.length > 0 &&
-        item.length <= MAX_ALLOWED_ACTION_NAME_LENGTH
+        item.length <= MAX_ALLOWED_ACTION_NAME_LENGTH &&
+        SERVER_ALLOWED_ACTIONS.has(item)
       ))
   ) {
     return false;
   }
 
   return true;
+}
+
+
+function invalidReasoningResponse(task: AgentTaskContract): AgentTaskReasoningResponse {
+  return {
+    version: task.version,
+    task_id: task.task_id,
+    status: "manual_review",
+    rationale: "NaviMind response did not satisfy the semantic action contract.",
+    confidence: 0,
+    action: null,
+    requires_manual_review: true,
+    metadata: { error: "INVALID_AGENT_TASK_RESPONSE" },
+  };
+}
+
+function validateReasoningResponse(
+  task: AgentTaskContract,
+  candidate: unknown,
+): AgentTaskReasoningResponse {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return invalidReasoningResponse(task);
+  }
+
+  const result = candidate as Record<string, unknown>;
+  const status = result.status;
+  if (
+    result.version !== task.version ||
+    result.task_id !== task.task_id ||
+    (status !== "continue" && status !== "done" && status !== "manual_review") ||
+    typeof result.rationale !== "string" ||
+    result.rationale.length > MAX_TEXT_LENGTH ||
+    typeof result.confidence !== "number" ||
+    !Number.isFinite(result.confidence) ||
+    result.confidence < 0 ||
+    result.confidence > 1 ||
+    typeof result.requires_manual_review !== "boolean" ||
+    (result.metadata !== undefined &&
+      (!result.metadata || typeof result.metadata !== "object" || Array.isArray(result.metadata)))
+  ) {
+    return invalidReasoningResponse(task);
+  }
+
+  if (status !== "continue") {
+    if (result.action !== null) return invalidReasoningResponse(task);
+    return {
+      ...(result as unknown as AgentTaskReasoningResponse),
+      requires_manual_review: status === "manual_review" || result.requires_manual_review,
+    };
+  }
+
+  if (result.requires_manual_review) return invalidReasoningResponse(task);
+  const action = result.action;
+  if (!action || typeof action !== "object" || Array.isArray(action)) {
+    return invalidReasoningResponse(task);
+  }
+
+  const proposed = action as Record<string, unknown>;
+  const actionName = typeof proposed.name === "string" ? proposed.name.trim() : "";
+  const description = typeof proposed.description === "string" ? proposed.description.trim() : "";
+  const target = proposed.target === undefined || proposed.target === null
+    ? null
+    : proposed.target;
+  const value = proposed.value === undefined || proposed.value === null
+    ? null
+    : proposed.value;
+  const requiresConfirmation = proposed.requires_confirmation;
+
+  const requestedActions = task.constraints.allowed_actions;
+  if (
+    !actionName ||
+    actionName.length > MAX_ALLOWED_ACTION_NAME_LENGTH ||
+    !SERVER_ALLOWED_ACTIONS.has(actionName) ||
+    (Array.isArray(requestedActions) && !requestedActions.includes(actionName)) ||
+    !description ||
+    description.length > MAX_ACTION_DESCRIPTION_LENGTH ||
+    !(target === null || (typeof target === "string" && target.length <= MAX_ACTION_TARGET_LENGTH)) ||
+    !(value === null || (typeof value === "string" && value.length <= MAX_ACTION_VALUE_LENGTH)) ||
+    (requiresConfirmation !== undefined && typeof requiresConfirmation !== "boolean")
+  ) {
+    return invalidReasoningResponse(task);
+  }
+
+  return {
+    ...(result as unknown as AgentTaskReasoningResponse),
+    action: {
+      name: actionName,
+      description,
+      target: typeof target === "string" ? target : null,
+      value: typeof value === "string" ? value : null,
+      requires_confirmation: requiresConfirmation === true,
+    },
+    requires_manual_review: false,
+  };
 }
 
 export async function POST(req: Request) {
@@ -280,6 +403,12 @@ export async function POST(req: Request) {
       return jsonError("UNSUPPORTED_CONTENT_TYPE", 415);
     }
 
+    // The endpoint cannot provide meaningful reasoning without server-side model access.
+    // Check this only after authentication so unauthenticated callers cannot inspect config.
+    if (!process.env.OPENAI_API_KEY?.trim()) {
+      return jsonError("AGENT_PROVIDER_NOT_CONFIGURED", 503);
+    }
+
     let body: unknown;
     try {
       body = await readBoundedBody(req);
@@ -298,7 +427,7 @@ export async function POST(req: Request) {
     }
 
     const result = await reasonAgentTask(body);
-    return NextResponse.json(result);
+    return NextResponse.json(validateReasoningResponse(body, result));
   } catch {
     // Never log request bodies, auth headers, API keys or provider details.
     console.error("NAVIMIND_AGENT_TASK_ERROR");
