@@ -39,7 +39,6 @@ Example local flow:
 Coordinates, window handles and provider/runtime identifiers are intentionally
 kept inside the desktop runtime and are not part of the bridge contract.
 
-
 ## Structured knowledge context
 
 The desktop-agent bridge accepts a versioned `knowledge` envelope with:
@@ -54,7 +53,6 @@ fails closed to `manual_review`.
 
 The current stage defines and validates the contract only. Web research is not
 enabled yet.
-
 
 ## External research
 
@@ -75,3 +73,14 @@ NAVIMIND_RESEARCH_TIMEOUT_MS=15000
 Retrieved web content is represented as `retrieved_evidence`, with source URLs
 and provider relevance kept separately from epistemic confidence. Search content
 is never treated as an execution instruction.
+
+## Secure bridge hardening
+
+See [the hardening requirements](docs/UNIVERSAL_AGENT_BRIDGE_HARDENING.md)
+and track work in issues #17–#19.
+
+**Production requirement:** configure `NAVIMIND_AGENT_SECRET` on the server and
+in the local desktop runtime. The production endpoint must reject requests if
+the secret is missing or invalid. The current route must be hardened before
+being treated as production-ready. The desktop connects to the host over
+outbound HTTPS; no inbound PC port or tunnel is needed.
