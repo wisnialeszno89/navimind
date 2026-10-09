@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   reasonAgentTask,
@@ -16,9 +17,20 @@ const MAX_TASK_ID_LENGTH = 256;
 const MAX_WORLD_ELEMENTS = 500;
 const MAX_TEXT_LENGTH = 20_000;
 const MAX_EXPERIENCE_ITEMS = 20;
+const MAX_ALLOWED_ACTIONS = 100;
+const MAX_ALLOWED_ACTION_NAME_LENGTH = 128;
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
+}
+
+function timingSafeSecretMatch(provided: string, configured: string): boolean {
+  const providedBytes = Buffer.from(provided, "utf8");
+  const configuredBytes = Buffer.from(configured, "utf8");
+  if (providedBytes.length === 0 || providedBytes.length !== configuredBytes.length) {
+    return false;
+  }
+  return timingSafeEqual(providedBytes, configuredBytes);
 }
 
 function isJsonContentType(req: Request): boolean {
@@ -40,13 +52,39 @@ async function readBoundedBody(req: Request): Promise<unknown | null> {
     }
   }
 
-  const raw = await req.text();
-  if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) {
-    throw new RangeError("BODY_TOO_LARGE");
+  if (!req.body) {
+    return null;
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        await reader.cancel("PAYLOAD_TOO_LARGE").catch(() => undefined);
+        throw new RangeError("BODY_TOO_LARGE");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
   }
 
   try {
-    return JSON.parse(raw) as unknown;
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(merged)) as unknown;
   } catch {
     return null;
   }
@@ -71,6 +109,7 @@ function isWorldElement(value: unknown): value is AgentTaskWorldElement {
     (item.label === null ||
       (typeof item.label === "string" && item.label.length <= MAX_TEXT_LENGTH)) &&
     typeof item.interaction_capability === "string" &&
+    item.interaction_capability.length > 0 &&
     item.interaction_capability.length <= 128 &&
     validOptionalText(item.current_value) &&
     (item.confidence === undefined ||
@@ -79,6 +118,38 @@ function isWorldElement(value: unknown): value is AgentTaskWorldElement {
         item.confidence >= 0 &&
         item.confidence <= 1))
   );
+}
+
+function isKnowledgeEnvelope(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const envelope = value as Record<string, unknown>;
+  if (envelope.version !== "1") return false;
+  if (
+    envelope.local !== undefined &&
+    envelope.local !== null &&
+    (typeof envelope.local !== "object" || Array.isArray(envelope.local))
+  ) return false;
+
+  if (envelope.external === undefined || envelope.external === null) return true;
+  if (!envelope.external || typeof envelope.external !== "object" || Array.isArray(envelope.external)) {
+    return false;
+  }
+
+  const external = envelope.external as Record<string, unknown>;
+  const listBounds: Array<[string, number]> = [
+    ["sources", 32],
+    ["facts", 32],
+    ["conflicts", 16],
+    ["limitations", 16],
+  ];
+  for (const [key, max] of listBounds) {
+    if (!Array.isArray(external[key]) || (external[key] as unknown[]).length > max) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
@@ -96,13 +167,15 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
     body.task_id.trim().length === 0 ||
     body.task_id.length > MAX_TASK_ID_LENGTH ||
     typeof body.intent !== "string" ||
+    body.intent.length === 0 ||
     body.intent.length > 256 ||
     !body.world ||
     typeof body.world !== "object" ||
     Array.isArray(body.world) ||
     !body.constraints ||
     typeof body.constraints !== "object" ||
-    Array.isArray(body.constraints)
+    Array.isArray(body.constraints) ||
+    !isKnowledgeEnvelope(body.knowledge)
   ) {
     return false;
   }
@@ -126,7 +199,18 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
   if (
     body.experience !== undefined &&
     (!Array.isArray(body.experience) ||
-      body.experience.length > MAX_EXPERIENCE_ITEMS)
+      body.experience.length > MAX_EXPERIENCE_ITEMS ||
+      !body.experience.every((item) =>
+        item !== null && typeof item === "object" && !Array.isArray(item)
+      ))
+  ) {
+    return false;
+  }
+
+  if (
+    body.offer_workflow !== undefined &&
+    body.offer_workflow !== null &&
+    (typeof body.offer_workflow !== "object" || Array.isArray(body.offer_workflow))
   ) {
     return false;
   }
@@ -139,6 +223,21 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
     !Number.isInteger(constraints.max_actions) ||
     constraints.max_actions < 1 ||
     constraints.max_actions > 100
+  ) {
+    return false;
+  }
+
+  const allowedActions = constraints.allowed_actions;
+  if (
+    allowedActions !== undefined &&
+    (!Array.isArray(allowedActions) ||
+      allowedActions.length === 0 ||
+      allowedActions.length > MAX_ALLOWED_ACTIONS ||
+      !allowedActions.every((item) =>
+        typeof item === "string" &&
+        item.length > 0 &&
+        item.length <= MAX_ALLOWED_ACTION_NAME_LENGTH
+      ))
   ) {
     return false;
   }
@@ -166,7 +265,7 @@ export async function POST(req: Request) {
       }
     } else {
       const providedSecret = req.headers.get("x-navimind-agent-secret") || "";
-      if (!providedSecret || providedSecret.trim() !== configuredSecret) {
+      if (!timingSafeSecretMatch(providedSecret, configuredSecret)) {
         return jsonError("UNAUTHORIZED", 401);
       }
     }
