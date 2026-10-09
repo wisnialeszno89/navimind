@@ -28,6 +28,7 @@ export type AgentTaskContract = {
     active_window_title: string | null;
     visible_elements: AgentTaskWorldElement[];
     element_count: number;
+    metadata: Record<string, unknown>;
   };
   offer_workflow: Record<string, unknown> | null;
   knowledge: AgentKnowledgeEnvelope | null;
