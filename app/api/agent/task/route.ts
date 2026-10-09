@@ -96,6 +96,22 @@ function validOptionalText(value: unknown, maxLength = MAX_TEXT_LENGTH): boolean
     (typeof value === "string" && value.length <= maxLength);
 }
 
+function isNullableText(value: unknown, maxLength: number): boolean {
+  return value === null ||
+    (typeof value === "string" && value.length <= maxLength);
+}
+
+function isNullableDescriptor(value: unknown): boolean {
+  if (value === null) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const descriptor = value as Record<string, unknown>;
+  return (
+    isNullableText(descriptor.name, 256) &&
+    isNullableText(descriptor.description, 2_000)
+  );
+}
+
 function isWorldElement(value: unknown): value is AgentTaskWorldElement {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -169,21 +185,37 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
     typeof body.intent !== "string" ||
     body.intent.length === 0 ||
     body.intent.length > 256 ||
+    !isNullableText(body.session_id, 256) ||
+    !isNullableText(body.user_id, 256) ||
+    !isNullableDescriptor(body.capability) ||
+    !isNullableDescriptor(body.skill) ||
     !body.world ||
     typeof body.world !== "object" ||
     Array.isArray(body.world) ||
     !body.constraints ||
     typeof body.constraints !== "object" ||
     Array.isArray(body.constraints) ||
-    !isKnowledgeEnvelope(body.knowledge)
+    !Object.prototype.hasOwnProperty.call(body, "knowledge") ||
+    !(body.knowledge === null || isKnowledgeEnvelope(body.knowledge)) ||
+    !Array.isArray(body.experience) ||
+    body.experience.length > MAX_EXPERIENCE_ITEMS ||
+    !body.experience.every((item) =>
+      item !== null && typeof item === "object" && !Array.isArray(item)
+    ) ||
+    !Object.prototype.hasOwnProperty.call(body, "offer_workflow") ||
+    !(body.offer_workflow === null ||
+      (typeof body.offer_workflow === "object" && !Array.isArray(body.offer_workflow))) ||
+    !body.metadata ||
+    typeof body.metadata !== "object" ||
+    Array.isArray(body.metadata)
   ) {
     return false;
   }
 
   const world = body.world as Record<string, unknown>;
   if (
-    !validOptionalText(world.active_application, 512) ||
-    !validOptionalText(world.active_window_title, 2_000) ||
+    !isNullableText(world.active_application, 512) ||
+    !isNullableText(world.active_window_title, 2_000) ||
     !Array.isArray(world.visible_elements) ||
     world.visible_elements.length > MAX_WORLD_ELEMENTS ||
     !world.visible_elements.every(isWorldElement) ||
@@ -192,25 +224,6 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
     world.element_count < 0 ||
     world.element_count > 100_000 ||
     world.element_count < world.visible_elements.length
-  ) {
-    return false;
-  }
-
-  if (
-    body.experience !== undefined &&
-    (!Array.isArray(body.experience) ||
-      body.experience.length > MAX_EXPERIENCE_ITEMS ||
-      !body.experience.every((item) =>
-        item !== null && typeof item === "object" && !Array.isArray(item)
-      ))
-  ) {
-    return false;
-  }
-
-  if (
-    body.offer_workflow !== undefined &&
-    body.offer_workflow !== null &&
-    (typeof body.offer_workflow !== "object" || Array.isArray(body.offer_workflow))
   ) {
     return false;
   }
@@ -238,13 +251,6 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
         item.length > 0 &&
         item.length <= MAX_ALLOWED_ACTION_NAME_LENGTH
       ))
-  ) {
-    return false;
-  }
-
-  if (
-    body.metadata !== undefined &&
-    (!body.metadata || typeof body.metadata !== "object" || Array.isArray(body.metadata))
   ) {
     return false;
   }
