@@ -44,5 +44,6 @@ The desktop connects to the hosted server over outbound HTTPS. **No inbound port
 1. In the Vercel project for this repository, set `OPENAI_API_KEY` and `NAVIMIND_AGENT_SECRET` for **Production** (not only Preview). Keep both server-side.
 2. Copy the canonical HTTPS deployment origin from Vercel. Set the local `NAVIMIND_AGENT_URL` to `https://YOUR-DEPLOYMENT/api/agent/task` and set the same secret in the local `.env` file. Never paste the secret into chat or a GitHub file.
 3. Run `python tools/smoke_windows_desktop_navimind.py` from the local `wh-ai-parser` repository root. It uses a synthetic scene and does not click, type or otherwise act on the computer.
-4. A successful Vercel build or unit test alone does not confirm that Production secrets are present. Keep the bridge marked unverified until the authenticated smoke test succeeds.
+4. The reasoning API call is capped at 25 seconds with automatic OpenAI SDK retries disabled, below the local runtime's 45-second HTTP timeout.
+5. A successful Vercel build or unit test alone does not confirm that Production secrets are present. Keep the bridge marked unverified until the authenticated smoke test succeeds.
 
