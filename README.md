@@ -32,6 +32,7 @@ The task contract can contain local application/runtime knowledge and external p
 
 - Bridge hardening epic: [#17](https://github.com/wisnialeszno89/navimind/issues/17)
 - Endpoint hardening implementation PR: [#20](https://github.com/wisnialeszno89/navimind/pull/20)
+- Automated route tests: [#22](https://github.com/wisnialeszno89/navimind/issues/22)
 - Integration deployment checklist: [#19](https://github.com/wisnialeszno89/navimind/issues/19)
 - Local task workflow epic: [wh-ai-parser #59](https://github.com/wisnialeszno89/wh-ai-parser/issues/59)
 - [Bridge hardening requirements](docs/UNIVERSAL_AGENT_BRIDGE_HARDENING.md)
