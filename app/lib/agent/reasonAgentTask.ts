@@ -222,8 +222,13 @@ export async function reasonAgentTask(
     }
   }
 
+  // The desktop caller uses a 45-second HTTP timeout. Keep the provider
+  // request safely below that budget and disable automatic retries so an
+  // overloaded provider fails closed promptly instead of multiplying latency.
   const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
+    timeout: 25_000,
+    maxRetries: 0,
   });
 
   let userContext: unknown = null;

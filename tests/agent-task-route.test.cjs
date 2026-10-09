@@ -55,11 +55,12 @@ function validTask(overrides = {}) {
   };
 }
 
-function loadPost({ nodeEnv = "test", secret, bypass } = {}) {
+function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-test-openai-key" } = {}) {
   const keys = [
     "NODE_ENV",
     "NAVIMIND_AGENT_SECRET",
     "NAVIMIND_AGENT_ALLOW_DEV_BYPASS",
+    "OPENAI_API_KEY",
   ];
   const previous = Object.fromEntries(
     keys.map((key) => [key, process.env[key]])
@@ -71,6 +72,8 @@ function loadPost({ nodeEnv = "test", secret, bypass } = {}) {
   else process.env.NAVIMIND_AGENT_SECRET = secret;
   if (bypass === undefined) delete process.env.NAVIMIND_AGENT_ALLOW_DEV_BYPASS;
   else process.env.NAVIMIND_AGENT_ALLOW_DEV_BYPASS = bypass;
+  if (typeof openaiApiKey === "string") process.env.OPENAI_API_KEY = openaiApiKey;
+  else delete process.env.OPENAI_API_KEY;
 
   const calls = [];
   const semanticResult = {
@@ -377,6 +380,48 @@ test("invalid knowledge envelope and action allowlist are rejected", async () =>
   });
 });
 
+test("authenticated requests fail clearly when the model provider is not configured", async () => {
+  await withRoute(
+    { nodeEnv: "production", secret: "test-secret", openaiApiKey: "" },
+    async ({ post, calls }) => {
+      const response = await post(request(JSON.stringify(validTask())));
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "AGENT_PROVIDER_NOT_CONFIGURED" });
+      assert.equal(calls.length, 0);
+    },
+  );
+});
+
+test("unknown provider actions become manual review instead of an executable proposal", async () => {
+  await withRoute(
+    { nodeEnv: "test", secret: "test-secret" },
+    async ({ post, semanticResult }) => {
+      semanticResult.action.name = "delete_file";
+      const response = await post(request(JSON.stringify(validTask())));
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.status, "manual_review");
+      assert.equal(payload.action, null);
+      assert.equal(payload.requires_manual_review, true);
+      assert.equal(payload.metadata.error, "INVALID_AGENT_TASK_RESPONSE");
+    },
+  );
+});
+
+test("reasoning response task IDs and completion/action invariants are enforced", async () => {
+  await withRoute(
+    { nodeEnv: "test", secret: "test-secret" },
+    async ({ post, semanticResult }) => {
+      semanticResult.task_id = "different-task";
+      const response = await post(request(JSON.stringify(validTask())));
+      const payload = await response.json();
+      assert.equal(payload.status, "manual_review");
+      assert.equal(payload.action, null);
+      assert.equal(payload.requires_manual_review, true);
+    },
+  );
+});
+
 test("provider failures return a generic error and do not log exception contents", async () => {
   const route = loadPost({ nodeEnv: "production", secret: "test-secret" });
   const oldError = console.error;
@@ -385,6 +430,7 @@ test("provider failures return a generic error and do not log exception contents
   route.restore();
   process.env.NODE_ENV = "production";
   process.env.NAVIMIND_AGENT_SECRET = "test-secret";
+  process.env.OPENAI_API_KEY = "synthetic-test-openai-key";
 
   try {
     const source = fs.readFileSync(routePath, "utf8");

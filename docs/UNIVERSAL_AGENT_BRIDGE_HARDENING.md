@@ -10,7 +10,24 @@ NaviMind is the hosted reasoning side of the desktop agent. The local runtime re
 
 The desktop runtime calls `POST /api/agent/task` over outbound HTTPS. No inbound port, port forwarding or public endpoint on the user's PC is required.
 
-The handler currently verifies `x-navimind-agent-secret` only when `NAVIMIND_AGENT_SECRET` is configured. This must be changed to fail closed in production when the secret is absent; a missing secret must never silently disable authentication.
+The merged PR #20 makes the handler fail closed if `NAVIMIND_AGENT_SECRET` is absent, validates the bounded request contract, and compares the shared secret in constant time. The code has CI coverage; the deployed Production environment and authenticated network smoke test remain separate checks.
+
+## Verified in code vs. still requiring deployment verification
+
+Implemented in the repository and covered by CI:
+- Missing configured secret fails closed; invalid secret is rejected.
+- JSON content type and streamed 256 KiB request-body cap.
+- Bounded request fields, knowledge lists, visible elements and client-supplied action allowlist.
+- Model-provider configuration is checked after authentication and reports a structured 503 when `OPENAI_API_KEY` is absent.
+- The response is checked against the task ID/version, the server action allowlist, the caller's narrower allowlist, bounded action fields and `continue`/ `done` / `manual_review` invariants. An invalid model result becomes `manual_review`, never an executable action.
+- The OpenAI reasoning request is capped at 25 seconds and automatic SDK retries are disabled, keeping provider latency below the local runtime's 45-second HTTP timeout when this phase is reached.
+- The local runtime still validates the proposed action again before any physical execution.
+
+Still requiring access to the actual deployment and local machine:
+- Confirm Production-scoped `OPENAI_API_KEY` and `NAVIMIND_AGENT_SECRET` are configured in Vercel.
+- Confirm the exact canonical HTTPS endpoint URL.
+- Run the authenticated synthetic smoke command from the Windows workstation.
+- Add cross-repository allowlist parity CI and deployment-side rate limiting before treating the bridge as fully production hardened.
 
 ## Required request safeguards
 
