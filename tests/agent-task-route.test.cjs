@@ -430,6 +430,7 @@ test("provider failures return a generic error and do not log exception contents
   route.restore();
   process.env.NODE_ENV = "production";
   process.env.NAVIMIND_AGENT_SECRET = "test-secret";
+  process.env.OPENAI_API_KEY = "synthetic-test-openai-key";
 
   try {
     const source = fs.readFileSync(routePath, "utf8");
