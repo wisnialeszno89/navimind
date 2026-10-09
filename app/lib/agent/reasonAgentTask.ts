@@ -25,6 +25,76 @@ const FORBIDDEN_TERMS = [
   "uia:",
 ];
 
+const AGENT_TASK_RESPONSE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    status: {
+      type: "string",
+      enum: ["continue", "done", "manual_review"],
+    },
+    rationale: {
+      type: "string",
+    },
+    confidence: {
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+    },
+    action: {
+      anyOf: [
+        {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            name: {
+              type: "string",
+            },
+            description: {
+              type: "string",
+            },
+            target: {
+              anyOf: [
+                { type: "string" },
+                { type: "null" },
+              ],
+            },
+            value: {
+              anyOf: [
+                { type: "string" },
+                { type: "null" },
+              ],
+            },
+            requires_confirmation: {
+              type: "boolean",
+            },
+          },
+          required: [
+            "name",
+            "description",
+            "target",
+            "value",
+            "requires_confirmation",
+          ],
+        },
+        {
+          type: "null",
+        },
+      ],
+    },
+    requires_manual_review: {
+      type: "boolean",
+    },
+  },
+  required: [
+    "status",
+    "rationale",
+    "confidence",
+    "action",
+    "requires_manual_review",
+  ],
+} as const;
+
 const SYSTEM_PROMPT = `
 Jesteś warstwą rozumowania NaviMind dla uniwersalnego agenta komputerowego.
 
@@ -33,11 +103,17 @@ przez lokalnego agenta, a następnie zaproponować najwyżej JEDNĄ następną
 akcję semantyczną albo stwierdzić, że cel jest zakończony.
 
 Zasady bezwzględne:
-- Zwracaj wyłącznie JSON.
+- Zwracaj wyłącznie JSON zgodny z przekazanym schematem odpowiedzi.
+- Musisz zawsze zwrócić wszystkie pola odpowiedzi: status, rationale, confidence,
+  action i requires_manual_review. ŻADNEGO pola nie wolno pomijać.
 - status musi być: "continue", "done" albo "manual_review".
+- confidence MUSI być liczbą od 0 do 1.
 - "done" wolno zwrócić tylko wtedy, gdy aktualny świat daje dowód ukończenia celu.
-- "continue" wymaga dokładnie jednej bezpiecznej akcji.
+  Dla "done" action musi być null.
+- "continue" wymaga dokładnie jednej bezpiecznej akcji oraz dodatniej confidence.
 - "manual_review" oznacza, że brakuje wystarczających dowodów do bezpiecznego działania.
+  Dla "manual_review" action musi być null i requires_manual_review musi być true.
+- Dla zwykłego, bezpiecznego "continue" requires_manual_review powinno być false.
 - Akcja jest semantyczna: nazwa operacji, opis, opcjonalny ludzki target i opcjonalna wartość.
 - Target może być wyłącznie widoczną etykietą semantyczną lub innym oczywistym określeniem widocznym w world.visible_elements.
 - Nie wolno zwracać współrzędnych, identyfikatorów AutomationId/runtime_id, uchwytów okien,
@@ -259,7 +335,12 @@ export async function reasonAgentTask(
     temperature: 0.1,
     max_tokens: 700,
     response_format: {
-      type: "json_object",
+      type: "json_schema",
+      json_schema: {
+        name: "agent_task_reasoning",
+        strict: true,
+        schema: AGENT_TASK_RESPONSE_SCHEMA,
+      },
     },
     messages: [
       {
