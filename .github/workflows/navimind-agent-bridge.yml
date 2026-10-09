@@ -31,3 +31,6 @@ jobs:
 
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
+
+      - name: Agent task route tests
+        run: pnpm test:agent-bridge
