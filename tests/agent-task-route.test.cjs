@@ -177,6 +177,15 @@ test("development bypass works only with explicit non-production opt-in", async 
   });
 });
 
+test("development bypass remains disabled unless explicitly enabled", async () => {
+  await withRoute({ nodeEnv: "test", secret: undefined, bypass: undefined }, async ({ post, calls }) => {
+    const response = await post(request(JSON.stringify(validTask()), { secret: null }));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "AGENT_AUTH_NOT_CONFIGURED" });
+    assert.equal(calls.length, 0);
+  });
+});
+
 test("missing and incorrect secrets are rejected", async () => {
   await withRoute({ nodeEnv: "production", secret: "test-secret" }, async ({ post, calls }) => {
     const missing = await post(request(JSON.stringify(validTask()), { secret: null }));
@@ -233,6 +242,59 @@ test("invalid visible elements and confidence are rejected", async () => {
     for (const task of [wrongElements, wrongConfidence]) {
       const response = await post(request(JSON.stringify(task)));
       assert.equal(response.status, 400);
+    }
+    assert.equal(calls.length, 0);
+  });
+});
+
+test("over-limit task text, visible elements, action budgets, and knowledge lists are rejected", async () => {
+  await withRoute({ nodeEnv: "production", secret: "test-secret" }, async ({ post, calls }) => {
+    const tooManyElements = validTask({
+      world: {
+        ...validTask().world,
+        visible_elements: Array.from({ length: 501 }, (_, index) => ({
+          kind: "button",
+          label: "Synthetic " + index,
+          interaction_capability: "click",
+        })),
+        element_count: 501,
+      },
+    });
+    const tooLongGoal = validTask({ goal: "x".repeat(8001) });
+    const invalidBudget = validTask({
+      constraints: { ...validTask().constraints, max_actions: 101 },
+    });
+    const badKnowledgeVersion = validTask({
+      knowledge: { version: "2", local: null, external: null },
+    });
+    const overLimitKnowledgeLists = [
+      ["sources", 33],
+      ["facts", 33],
+      ["conflicts", 17],
+      ["limitations", 17],
+    ].map(([key, count]) => {
+      const external = {
+        sources: [],
+        facts: [],
+        conflicts: [],
+        limitations: [],
+      };
+      external[key] = Array.from({ length: count }, () => ({}));
+      return validTask({
+        knowledge: { version: "1", local: null, external },
+      });
+    });
+
+    for (const task of [
+      tooManyElements,
+      tooLongGoal,
+      invalidBudget,
+      badKnowledgeVersion,
+      ...overLimitKnowledgeLists,
+    ]) {
+      const response = await post(request(JSON.stringify(task)));
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: "INVALID_AGENT_TASK" });
     }
     assert.equal(calls.length, 0);
   });
