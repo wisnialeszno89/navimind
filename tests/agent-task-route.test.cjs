@@ -260,6 +260,72 @@ test("structured WindowHub table metadata is preserved for reasoning", async () 
   );
 });
 
+test("malformed WindowHub OCR table metadata is rejected before reasoning", async () => {
+  const completeRow = {
+    row_index: 1,
+    lp: 1,
+    lp_source: "ocr_column",
+    quantity: 1,
+    article: "Okno",
+    total_value: "826.29",
+    unit_value: "826.29",
+    dimensions: "800 x 1220",
+    complete: true,
+    missing_fields: [],
+  };
+  const partialRow = {
+    row_index: 2,
+    lp: null,
+    lp_source: "missing",
+    quantity: null,
+    article: "Okno",
+    total_value: "2275.50",
+    unit_value: "2275.50",
+    dimensions: "800 x 1190",
+    complete: false,
+    missing_fields: ["lp", "quantity"],
+  };
+  const validTable = {
+    source: "windowhub_ocr_table_reconstruction",
+    status: "partial",
+    row_count: 2,
+    complete_row_count: 1,
+    rows: [completeRow, partialRow],
+    field_refinements: [],
+    lp_refinements: [],
+    limitations: [],
+  };
+  const invalidTables = [
+    { ...validTable, row_count: 1 },
+    { ...validTable, complete_row_count: 2 },
+    { ...validTable, status: "complete" },
+    {
+      ...validTable,
+      rows: [{ ...partialRow, missing_fields: ["unknown_field"] }, completeRow],
+    },
+    {
+      ...validTable,
+      rows: [{ ...completeRow, complete: false, missing_fields: ["quantity"] }, partialRow],
+    },
+  ];
+
+  await withRoute(
+    { nodeEnv: "production", secret: "test-secret" },
+    async ({ post, calls }) => {
+      for (const table of invalidTables) {
+        const world = {
+          ...validTask().world,
+          metadata: { windowhub_ocr_table: table },
+        };
+        const response = await post(request(JSON.stringify(validTask({ world }))));
+        assert.equal(response.status, 400);
+        assert.deepEqual(await response.json(), { error: "INVALID_AGENT_TASK" });
+      }
+      assert.equal(calls.length, 0);
+    },
+  );
+});
+
 test("legacy task without world metadata remains accepted", async () => {
   const task = validTask();
   delete task.world.metadata;
