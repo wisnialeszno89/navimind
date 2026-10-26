@@ -31,6 +31,7 @@ function validTask(overrides = {}) {
         },
       ],
       element_count: 1,
+      metadata: {},
     },
     offer_workflow: null,
     knowledge: {
