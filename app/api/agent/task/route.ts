@@ -7,6 +7,9 @@ import type {
   AgentTaskContract,
   AgentTaskReasoningResponse,
   AgentTaskWorldElement,
+  AgentTaskWindowHubOCRRow,
+  AgentTaskWindowHubOCRTable,
+  AgentTaskWorldMetadata,
 } from "@/lib/agent/agentTaskContract";
 
 export const runtime = "nodejs";
@@ -164,6 +167,99 @@ function isWorldElement(value: unknown): value is AgentTaskWorldElement {
   );
 }
 
+function isBoundedInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is number {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= minimum &&
+    value <= maximum;
+}
+
+function isWindowHubOCRRow(value: unknown): value is AgentTaskWindowHubOCRRow {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  const knownFields = new Set([
+    "lp", "quantity", "article", "total_value", "unit_value", "dimensions",
+  ]);
+  if (
+    !isBoundedInteger(row.row_index, 1, 100_000) ||
+    !(row.lp === null || isBoundedInteger(row.lp, 1, 100_000)) ||
+    !isNullableText(row.lp_source, 128) ||
+    !(row.quantity === null || isBoundedInteger(row.quantity, 1, 100_000)) ||
+    !isNullableText(row.article, 2_000) ||
+    !isNullableText(row.total_value, 256) ||
+    !isNullableText(row.unit_value, 256) ||
+    !isNullableText(row.dimensions, 256) ||
+    typeof row.complete !== "boolean" ||
+    !Array.isArray(row.missing_fields) ||
+    row.missing_fields.length > knownFields.size ||
+    !row.missing_fields.every((field) =>
+      typeof field === "string" && knownFields.has(field)
+    )
+  ) {
+    return false;
+  }
+  return row.complete === (row.missing_fields.length === 0);
+}
+
+function isBoundedObjectArray(value: unknown, maximum: number): boolean {
+  return value === undefined ||
+    (Array.isArray(value) &&
+      value.length <= maximum &&
+      value.every((item) =>
+        item !== null && typeof item === "object" && !Array.isArray(item)
+      ));
+}
+
+function isWindowHubOCRTable(value: unknown): value is AgentTaskWindowHubOCRTable {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const table = value as Record<string, unknown>;
+  if (
+    typeof table.source !== "string" ||
+    table.source.length === 0 ||
+    table.source.length > 128 ||
+    (table.status !== "empty" &&
+      table.status !== "complete" &&
+      table.status !== "partial") ||
+    !Array.isArray(table.rows) ||
+    table.rows.length > 100 ||
+    !table.rows.every(isWindowHubOCRRow) ||
+    !isBoundedInteger(table.row_count, 0, 100) ||
+    table.row_count !== table.rows.length ||
+    !isBoundedInteger(table.complete_row_count, 0, table.row_count) ||
+    table.complete_row_count !== table.rows.filter(
+      (row) => (row as AgentTaskWindowHubOCRRow).complete
+    ).length ||
+    !isBoundedObjectArray(table.field_refinements, 500) ||
+    !isBoundedObjectArray(table.lp_refinements, 500) ||
+    (table.limitations !== undefined &&
+      (!Array.isArray(table.limitations) ||
+        table.limitations.length > 16 ||
+        !table.limitations.every((item) =>
+          typeof item === "string" && item.length <= 2_000
+        )))
+  ) {
+    return false;
+  }
+
+  const expectedStatus = table.rows.length === 0
+    ? "empty"
+    : table.complete_row_count === table.row_count
+      ? "complete"
+      : "partial";
+  return table.status === expectedStatus;
+}
+
+function isWorldMetadata(value: unknown): value is AgentTaskWorldMetadata {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const metadata = value as Record<string, unknown>;
+  return metadata.windowhub_ocr_table === undefined ||
+    isWindowHubOCRTable(metadata.windowhub_ocr_table);
+}
+
 function isKnowledgeEnvelope(value: unknown): boolean {
   if (value === undefined || value === null) return true;
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -247,6 +343,7 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
     !Array.isArray(world.visible_elements) ||
     world.visible_elements.length > MAX_WORLD_ELEMENTS ||
     !world.visible_elements.every(isWorldElement) ||
+    (world.metadata !== undefined && !isWorldMetadata(world.metadata)) ||
     typeof world.element_count !== "number" ||
     !Number.isInteger(world.element_count) ||
     world.element_count < 0 ||
