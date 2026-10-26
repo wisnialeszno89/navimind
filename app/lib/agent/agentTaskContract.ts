@@ -8,6 +8,43 @@ export type AgentTaskWorldElement = {
   confidence?: number;
 };
 
+export type AgentTaskOCRMissingField =
+  | "lp"
+  | "quantity"
+  | "article"
+  | "total_value"
+  | "unit_value"
+  | "dimensions";
+
+export type AgentTaskWindowHubOCRRow = {
+  row_index: number;
+  lp: number | null;
+  lp_source: string | null;
+  quantity: number | null;
+  article: string | null;
+  total_value: string | null;
+  unit_value: string | null;
+  dimensions: string | null;
+  complete: boolean;
+  missing_fields: AgentTaskOCRMissingField[];
+};
+
+export type AgentTaskWindowHubOCRTable = {
+  source: string;
+  status: "empty" | "complete" | "partial";
+  row_count: number;
+  complete_row_count: number;
+  rows: AgentTaskWindowHubOCRRow[];
+  field_refinements?: Record<string, unknown>[];
+  lp_refinements?: Record<string, unknown>[];
+  limitations?: string[];
+};
+
+export type AgentTaskWorldMetadata = {
+  windowhub_ocr_table?: AgentTaskWindowHubOCRTable;
+  [key: string]: unknown;
+};
+
 export type AgentTaskContract = {
   version: string;
   task_id: string;
@@ -28,7 +65,7 @@ export type AgentTaskContract = {
     active_window_title: string | null;
     visible_elements: AgentTaskWorldElement[];
     element_count: number;
-    metadata?: Record<string, unknown>;
+    metadata?: AgentTaskWorldMetadata;
   };
   offer_workflow: Record<string, unknown> | null;
   knowledge: AgentKnowledgeEnvelope | null;
