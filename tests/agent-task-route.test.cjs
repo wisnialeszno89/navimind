@@ -260,6 +260,21 @@ test("structured WindowHub table metadata is preserved for reasoning", async () 
   );
 });
 
+test("legacy task without world metadata remains accepted", async () => {
+  const task = validTask();
+  delete task.world.metadata;
+
+  await withRoute(
+    { nodeEnv: "production", secret: "test-secret" },
+    async ({ post, calls }) => {
+      const response = await post(request(JSON.stringify(task)));
+      assert.equal(response.status, 200);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].world.metadata, undefined);
+    },
+  );
+});
+
 test("wrong content type is rejected before reasoning", async () => {
   await withRoute({ nodeEnv: "production", secret: "test-secret" }, async ({ post, calls }) => {
     const response = await post(request(JSON.stringify(validTask()), { contentType: "text/plain" }));
@@ -309,7 +324,14 @@ test("invalid visible elements and confidence are rejected", async () => {
         visible_elements: [{ kind: "button", label: "Continue", interaction_capability: "click", confidence: 2 }],
       },
     });
-    for (const task of [wrongElements, wrongConfidence]) {
+    const wrongWorldMetadata = [
+      null,
+      [],
+      "not-an-object",
+    ].map((metadata) => validTask({
+      world: { ...validTask().world, metadata },
+    }));
+    for (const task of [wrongElements, wrongConfidence, ...wrongWorldMetadata]) {
       const response = await post(request(JSON.stringify(task)));
       assert.equal(response.status, 400);
     }
