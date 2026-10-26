@@ -210,6 +210,56 @@ test("correct secret accepts a realistic contract and returns semantic reasoning
   });
 });
 
+test("structured WindowHub table metadata is preserved for reasoning", async () => {
+  const table = {
+    source: "windowhub_ocr_table_reconstruction",
+    status: "partial",
+    row_count: 2,
+    complete_row_count: 1,
+    rows: [
+      {
+        row_index: 1,
+        lp: 1,
+        quantity: 1,
+        article: "Okno",
+        total_value: "826.29",
+        unit_value: "826.29",
+        dimensions: "800 x 1220",
+        complete: true,
+        missing_fields: [],
+      },
+      {
+        row_index: 2,
+        lp: null,
+        quantity: null,
+        article: "Okno",
+        total_value: "2275.50",
+        unit_value: "2275.50",
+        dimensions: "800 x 1190",
+        complete: false,
+        missing_fields: ["lp", "quantity"],
+      },
+    ],
+  };
+  const world = {
+    ...validTask().world,
+    metadata: { windowhub_ocr_table: table },
+  };
+
+  await withRoute(
+    { nodeEnv: "production", secret: "test-secret" },
+    async ({ post, calls }) => {
+      const response = await post(request(JSON.stringify(validTask({ world }))));
+      assert.equal(response.status, 200);
+      assert.equal(calls.length, 1);
+      assert.deepEqual(
+        calls[0].world.metadata.windowhub_ocr_table,
+        table,
+      );
+    },
+  );
+});
+
 test("wrong content type is rejected before reasoning", async () => {
   await withRoute({ nodeEnv: "production", secret: "test-secret" }, async ({ post, calls }) => {
     const response = await post(request(JSON.stringify(validTask()), { contentType: "text/plain" }));
