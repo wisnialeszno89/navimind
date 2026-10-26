@@ -247,6 +247,9 @@ function isBoundedAgentTask(value: unknown): value is AgentTaskContract {
     !Array.isArray(world.visible_elements) ||
     world.visible_elements.length > MAX_WORLD_ELEMENTS ||
     !world.visible_elements.every(isWorldElement) ||
+    !world.metadata ||
+    typeof world.metadata !== "object" ||
+    Array.isArray(world.metadata) ||
     typeof world.element_count !== "number" ||
     !Number.isInteger(world.element_count) ||
     world.element_count < 0 ||
