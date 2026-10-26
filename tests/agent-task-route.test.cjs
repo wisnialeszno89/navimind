@@ -220,6 +220,7 @@ test("structured WindowHub table metadata is preserved for reasoning", async () 
       {
         row_index: 1,
         lp: 1,
+        lp_source: "ocr_column",
         quantity: 1,
         article: "Okno",
         total_value: "826.29",
@@ -231,6 +232,7 @@ test("structured WindowHub table metadata is preserved for reasoning", async () 
       {
         row_index: 2,
         lp: null,
+        lp_source: "missing",
         quantity: null,
         article: "Okno",
         total_value: "2275.50",
