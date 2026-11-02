@@ -718,3 +718,216 @@ test("provider failures return a generic error and do not log exception contents
     route.restore();
   }
 });
+
+
+test("V2 payload validator accepts the local runtime contract fixture", () => {
+  const task = validTaskV2();
+  assert.doesNotThrow(() => v2Contract.validateAgentTaskV2Payload(task));
+});
+
+test("V2 request validator rejects unknown fields and provider-native identifiers", () => {
+  const extraField = validTaskV2();
+  extraField.untrusted_extra = true;
+
+  const providerIdentifier = validTaskV2();
+  providerIdentifier.world.evidence[0].content.runtime_id = [1, 2, 3];
+
+  const badCapability = validTaskV2();
+  badCapability.capabilities.observations[0].input_contract = "arbitrary_query_v1";
+
+  const notReadOnly = validTaskV2();
+  notReadOnly.capabilities.observations[0].read_only = false;
+
+  for (const task of [extraField, providerIdentifier, badCapability, notReadOnly]) {
+    assert.throws(() => v2Contract.validateAgentTaskV2Payload(task));
+  }
+});
+
+test("V2 request validator rejects references outside the current world", () => {
+  const task = validTaskV2();
+  task.capabilities.observations[0].target_ref = "ent_not_in_world";
+  assert.throws(() => v2Contract.validateAgentTaskV2Payload(task));
+});
+
+test("V2 request validator enforces observation and body budgets", () => {
+  const tooManyItems = validTaskV2();
+  tooManyItems.capabilities.observations[0].max_items = 11;
+  assert.throws(() => v2Contract.validateAgentTaskV2Payload(tooManyItems));
+
+  const invalidTaskState = validTaskV2();
+  invalidTaskState.task_state.cycle = 31;
+  assert.throws(() => v2Contract.validateAgentTaskV2Payload(invalidTaskState));
+
+  const oversized = validTaskV2({ goal: "x".repeat(8_001) });
+  assert.throws(() => v2Contract.validateAgentTaskV2Payload(oversized));
+});
+
+test("V2 observe decision accepts only an exposed capability, exact target and current revision", () => {
+  const task = validTaskV2();
+  assert.doesNotThrow(() =>
+    v2Contract.validateAgentTaskV2Response(validObserveDecision(task), task)
+  );
+
+  const unknownCapability = validObserveDecision(task);
+  unknownCapability.observation_request.capability_id = "cap_not_exposed";
+  assert.throws(() =>
+    v2Contract.validateAgentTaskV2Response(unknownCapability, task)
+  );
+
+  const wrongTarget = validObserveDecision(task);
+  wrongTarget.observation_request.target_ref = "ent_other";
+  assert.throws(() =>
+    v2Contract.validateAgentTaskV2Response(wrongTarget, task)
+  );
+
+  const staleRevision = validObserveDecision(task);
+  staleRevision.observation_request.based_on_world_revision = 6;
+  assert.throws(() =>
+    v2Contract.validateAgentTaskV2Response(staleRevision, task)
+  );
+
+  const excessiveLimit = validObserveDecision(task);
+  excessiveLimit.observation_request.parameters.limit = 11;
+  assert.throws(() =>
+    v2Contract.validateAgentTaskV2Response(excessiveLimit, task)
+  );
+});
+
+test("V2 action decision requires an action capability and a typed postcondition", () => {
+  const task = validTaskV2();
+  task.capabilities.actions = [{
+    name: "activate_tab",
+    description: "Activate the selected tab",
+    target_ref: "ent_0001",
+    requires_confirmation: true,
+  }];
+  const response = {
+    version: "2",
+    task_id: task.task_id,
+    decision: "act",
+    rationale: "The local runtime exposed this action.",
+    confidence: 0.9,
+    observation_request: null,
+    action: {
+      name: "activate_tab",
+      target_ref: "ent_0001",
+      value: null,
+      expected_postcondition: {
+        kind: "entity_state_equals",
+        target_ref: "ent_0001",
+        state: "active",
+        expected_value: true,
+      },
+      requires_confirmation: true,
+    },
+    completion: null,
+    requires_manual_review: false,
+  };
+  assert.doesNotThrow(() => v2Contract.validateAgentTaskV2Response(response, task));
+
+  const unexposed = JSON.parse(JSON.stringify(response));
+  unexposed.action.name = "delete_file";
+  assert.throws(() => v2Contract.validateAgentTaskV2Response(unexposed, task));
+
+  const downgraded = JSON.parse(JSON.stringify(response));
+  downgraded.action.requires_confirmation = false;
+  assert.throws(() => v2Contract.validateAgentTaskV2Response(downgraded, task));
+
+  const missingPostcondition = JSON.parse(JSON.stringify(response));
+  missingPostcondition.action.expected_postcondition = { kind: "free_form_success" };
+  assert.throws(() => v2Contract.validateAgentTaskV2Response(missingPostcondition, task));
+});
+
+test("V2 done decision requires evidence from the current request", () => {
+  const task = validTaskV2();
+  const response = {
+    version: "2",
+    task_id: task.task_id,
+    decision: "done",
+    rationale: "The required evidence confirms completion.",
+    confidence: 0.95,
+    observation_request: null,
+    action: null,
+    completion: { evidence_refs: ["ev_0001"] },
+    requires_manual_review: false,
+  };
+  assert.doesNotThrow(() => v2Contract.validateAgentTaskV2Response(response, task));
+
+  response.completion.evidence_refs = ["ev_unknown"];
+  assert.throws(() => v2Contract.validateAgentTaskV2Response(response, task));
+});
+
+test("V2 manual review decision must stop without action or observation payloads", () => {
+  const task = validTaskV2();
+  const response = {
+    version: "2",
+    task_id: task.task_id,
+    decision: "manual_review",
+    rationale: "No approved capability is available.",
+    confidence: 0,
+    observation_request: null,
+    action: null,
+    completion: null,
+    requires_manual_review: true,
+  };
+  assert.doesNotThrow(() => v2Contract.validateAgentTaskV2Response(response, task));
+
+  response.requires_manual_review = false;
+  assert.throws(() => v2Contract.validateAgentTaskV2Response(response, task));
+});
+
+test("V2 route dispatches to the dedicated reasoner and leaves V1 untouched", async () => {
+  await withRoute(
+    { nodeEnv: "production", secret: "test-secret" },
+    async ({ post, calls, v2Calls }) => {
+      const v2 = validTaskV2();
+      const response = await post(request(JSON.stringify(v2)));
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.version, "2");
+      assert.equal(payload.decision, "observe");
+      assert.equal(calls.length, 0);
+      assert.equal(v2Calls.length, 1);
+      assert.equal(v2Calls[0].task_id, v2.task_id);
+
+      const v1 = await post(request(JSON.stringify(validTask())));
+      assert.equal(v1.status, 200);
+      assert.equal(calls.length, 1);
+      assert.equal(v2Calls.length, 1);
+    },
+  );
+});
+
+test("V2 route rejects malformed V2 requests before invoking the reasoner", async () => {
+  await withRoute(
+    { nodeEnv: "production", secret: "test-secret" },
+    async ({ post, v2Calls }) => {
+      const task = validTaskV2();
+      task.capabilities.observations[0].target_ref = "ent_missing";
+      const response = await post(request(JSON.stringify(task)));
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: "INVALID_AGENT_TASK_V2" });
+      assert.equal(v2Calls.length, 0);
+    },
+  );
+});
+
+test("V2 route converts an invalid model decision to manual review", async () => {
+  await withRoute(
+    { nodeEnv: "production", secret: "test-secret" },
+    async ({ post, setV2Result }) => {
+      const invalid = validObserveDecision();
+      invalid.observation_request.capability_id = "not_exposed";
+      setV2Result(invalid);
+
+      const response = await post(request(JSON.stringify(validTaskV2())));
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.decision, "manual_review");
+      assert.equal(payload.observation_request, null);
+      assert.equal(payload.action, null);
+      assert.equal(payload.completion, null);
+      assert.equal(payload.requires_manual_review, true);
+    },
+  );
+});
