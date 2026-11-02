@@ -56,6 +56,106 @@ function validTask(overrides = {}) {
   };
 }
 
+function loadV2ContractModule() {
+  const contractPath = path.resolve(__dirname, "../app/lib/agent/agentTaskContractV2.ts");
+  const source = fs.readFileSync(contractPath, "utf8");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  const contractModule = new Module(contractPath, module);
+  contractModule.filename = contractPath;
+  contractModule.paths = Module._nodeModulePaths(path.dirname(contractPath));
+  contractModule._compile(compiled, contractPath);
+  return contractModule.exports;
+}
+
+const v2Contract = loadV2ContractModule();
+
+function validTaskV2(overrides = {}) {
+  const evidence = {
+    ref: "ev_0001",
+    source: "uia",
+    observed_at: "2026-11-02T09:00:00Z",
+    world_revision: 7,
+    scope: "Table structure",
+    confidence: 0.99,
+    content: { kind: "grid_structure", row_count: 8, column_count: 4 },
+    limitations: [],
+  };
+  return {
+    version: "2",
+    task_id: "synthetic-v2-task",
+    goal: "Inspect the visible lookup table structure",
+    intent: "computer_use",
+    session_id: "synthetic-session",
+    task_state: { cycle: 0, max_cycles: 30, reasoning_calls_remaining: 5 },
+    world: {
+      revision: 7,
+      observed_at: "2026-11-02T09:00:00Z",
+      application: "WindowHub",
+      window_title: "Nowa oferta",
+      entities: [{
+        ref: "ent_0001",
+        type: "table",
+        label: "Tabela",
+        state: { visible: true, enabled: true },
+        attributes: [],
+        confidence: 0.99,
+        evidence_refs: ["ev_0001"],
+      }],
+      relationships: [],
+      affordances: [],
+      evidence: [evidence],
+    },
+    capabilities: {
+      observations: [{
+        id: "cap_grid_structure",
+        description: "Inspect bounded table structure",
+        target_ref: "ent_0001",
+        input_contract: "table_page_v1",
+        max_items: 10,
+        data_classification: "ui_structure",
+        read_only: true,
+      }],
+      actions: [],
+    },
+    knowledge: null,
+    experience: [],
+    constraints: {
+      max_observations_per_cycle: 1,
+      max_observation_items: 10,
+      max_evidence_bytes: 2048,
+      semantic_only: true,
+      verify_each_action: true,
+    },
+    metadata: {},
+    ...overrides,
+  };
+}
+
+function validObserveDecision(task = validTaskV2()) {
+  return {
+    version: "2",
+    task_id: task.task_id,
+    decision: "observe",
+    rationale: "The table structure is the next missing evidence.",
+    confidence: 0.9,
+    observation_request: {
+      capability_id: "cap_grid_structure",
+      target_ref: "ent_0001",
+      parameters: { offset: 0, limit: 10 },
+      based_on_world_revision: 7,
+    },
+    action: null,
+    completion: null,
+    requires_manual_review: false,
+  };
+}
+
 function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-test-openai-key" } = {}) {
   const keys = [
     "NODE_ENV",
@@ -77,6 +177,8 @@ function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-
   else delete process.env.OPENAI_API_KEY;
 
   const calls = [];
+  const v2Calls = [];
+  let v2Result = null;
   const semanticResult = {
     version: "1",
     task_id: "synthetic-task-1",
@@ -118,6 +220,17 @@ function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-
         },
       };
     }
+    if (id === "@/lib/agent/agentTaskContractV2") {
+      return v2Contract;
+    }
+    if (id === "@/lib/agent/reasonAgentTaskV2") {
+      return {
+        reasonAgentTaskV2: async (task) => {
+          v2Calls.push(task);
+          return v2Result || validObserveDecision(task);
+        },
+      };
+    }
     if (id === "@/lib/agent/reasonAgentTask") {
       return {
         reasonAgentTask: async (task) => {
@@ -133,7 +246,9 @@ function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-
   return {
     post: routeModule.exports.POST,
     calls,
+    v2Calls,
     semanticResult,
+    setV2Result(value) { v2Result = value; },
     restore() {
       for (const key of keys) {
         if (previous[key] === undefined) delete process.env[key];
