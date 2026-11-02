@@ -704,6 +704,12 @@ test("provider failures return a generic error and do not log exception contents
       if (id === "next/server") {
         return { NextResponse: { json(body, init = {}) { return new Response(JSON.stringify(body), { status: init.status ?? 200 }); } } };
       }
+      if (id === "@/lib/agent/agentTaskContractV2") {
+        return v2Contract;
+      }
+      if (id === "@/lib/agent/reasonAgentTaskV2") {
+        return { reasonAgentTaskV2: async () => validObserveDecision() };
+      }
       if (id === "@/lib/agent/reasonAgentTask") {
         return { reasonAgentTask: async () => { throw new Error("synthetic-secret-and-document-content"); } };
       }
