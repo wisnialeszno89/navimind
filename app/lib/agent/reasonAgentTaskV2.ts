@@ -7,9 +7,8 @@ const tableParameters = {
   properties: {
     offset: { type: "integer", minimum: 0 },
     limit: { type: "integer", minimum: 1 },
-    text_query: textOrNull,
   },
-  required: ["offset", "limit", "text_query"],
+  required: ["offset", "limit"],
 } as const;
 const entityParameters = {
   type: "object", additionalProperties: false,
@@ -46,7 +45,7 @@ const postconditions = [
     properties: {
       kind: { type: "string", enum: ["entity_value_equals"] },
       target_ref: { type: "string" },
-      expected_value: {},
+      expected_value: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }] },
     },
     required: ["kind", "target_ref", "expected_value"],
   },
@@ -65,7 +64,7 @@ const postconditions = [
       kind: { type: "string", enum: ["entity_state_equals"] },
       target_ref: { type: "string" },
       state: { type: "string" },
-      expected_value: {},
+      expected_value: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }] },
     },
     required: ["kind", "target_ref", "state", "expected_value"],
   },
@@ -84,7 +83,7 @@ const postconditions = [
     properties: {
       kind: { type: "string", enum: ["application_state_equals"] },
       application: { type: "string" },
-      expected_value: {},
+      expected_value: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }] },
     },
     required: ["kind", "application", "expected_value"],
   },
