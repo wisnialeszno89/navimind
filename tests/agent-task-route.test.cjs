@@ -471,11 +471,14 @@ test("invalid JSON, missing fields, and unsupported versions return 400", async 
   await withRoute({ nodeEnv: "production", secret: "test-secret" }, async ({ post, calls }) => {
     const invalidJson = await post(request("{"));
     const missingFields = await post(request(JSON.stringify({ goal: "test", task_id: "x", world: {} })));
-    const wrongVersion = await post(request(JSON.stringify(validTask({ version: "2" }))));
-    for (const response of [invalidJson, missingFields, wrongVersion]) {
+    const unsupportedVersion = await post(request(JSON.stringify(validTask({ version: "3" }))));
+    const malformedV2 = await post(request(JSON.stringify(validTask({ version: "2" }))));
+    for (const response of [invalidJson, missingFields, unsupportedVersion]) {
       assert.equal(response.status, 400);
       assert.deepEqual(await response.json(), { error: "INVALID_AGENT_TASK" });
     }
+    assert.equal(malformedV2.status, 400);
+    assert.deepEqual(await malformedV2.json(), { error: "INVALID_AGENT_TASK_V2" });
 
     for (const field of [
       "session_id",
