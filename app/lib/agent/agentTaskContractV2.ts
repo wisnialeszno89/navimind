@@ -104,8 +104,20 @@ function text(
   value: unknown,
   name: string,
   maximum: number,
+  options?: { nullable?: false; nonempty?: boolean },
+): asserts value is string;
+function text(
+  value: unknown,
+  name: string,
+  maximum: number,
+  options: { nullable: true; nonempty?: boolean },
+): asserts value is string | null;
+function text(
+  value: unknown,
+  name: string,
+  maximum: number,
   options: { nullable?: boolean; nonempty?: boolean } = {},
-): asserts value is string | null {
+): void {
   if (options.nullable && value === null) return;
   if (typeof value !== "string") fail(name + "_must_be_text");
   if (value.length > maximum) fail(name + "_too_long");
@@ -417,7 +429,7 @@ export function validateAgentTaskV2Payload(value: unknown): asserts value is Age
 
   let bodySize: number;
   try {
-    bodySize = Buffer.byteLength(JSON.stringify(payload), "utf8");
+    bodySize = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
   } catch {
     fail("request_not_serializable");
   }
