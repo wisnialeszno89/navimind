@@ -37,6 +37,11 @@ const observationSchema = {
 const postconditions = [
   {
     type: "object", additionalProperties: false,
+    properties: { kind: { type: "string", enum: ["scene_changed"] } },
+    required: ["kind"],
+  },
+  {
+    type: "object", additionalProperties: false,
     properties: { kind: { type: "string", enum: ["entity_present"] }, target_ref: { type: "string" } },
     required: ["kind", "target_ref"],
   },
