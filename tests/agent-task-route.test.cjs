@@ -940,3 +940,35 @@ test("V2 route converts an invalid model decision to manual review", async () =>
     },
   );
 });
+
+
+test("V2 scene_changed postcondition is consistent with the Python desktop verifier", () => {
+  const task = validTaskV2();
+  task.capabilities.actions = [{
+    name: "click_ent_0001",
+    description: "Click a visible semantic control and verify navigation",
+    target_ref: "ent_0001",
+    requires_confirmation: false,
+  }];
+  const response = {
+    version: "2",
+    task_id: task.task_id,
+    decision: "act",
+    rationale: "A uniquely observed control can change the active scene.",
+    confidence: 0.94,
+    observation_request: null,
+    action: {
+      name: "click_ent_0001",
+      target_ref: "ent_0001",
+      value: null,
+      expected_postcondition: { kind: "scene_changed" },
+      requires_confirmation: false,
+    },
+    completion: null,
+    requires_manual_review: false,
+  };
+  assert.doesNotThrow(() => v2Contract.validateAgentTaskV2Response(response, task));
+  const unsafe = JSON.parse(JSON.stringify(response));
+  unsafe.action.expected_postcondition = { kind: "scene_changed", automation_id: "IDC_NEW" };
+  assert.throws(() => v2Contract.validateAgentTaskV2Response(unsafe, task));
+});
