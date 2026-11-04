@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Link from "next/link";
@@ -18,15 +18,7 @@ import CrisisHelp from "./CrisisHelp";
 
 type Level = "none" | "low" | "medium" | "high";
 
-type Props = {
-  initialContext?: {
-    tryb?: string;
-    sciezka?: string;
-    from?: string;
-  };
-};
-
-export default function ChatWindow({ initialContext }: Props) {
+export default function ChatWindow() {
   const { lang } = useLanguage();
 
   const messages = useChatStore((s) => s.messages);
@@ -59,29 +51,12 @@ export default function ChatWindow({ initialContext }: Props) {
       .catch(() => setPlan("free"));
   }, []);
 
-  /* CONTEXT */
-  const contextMessage = useMemo(() => {
-    if (!initialContext) return null;
-    if (initialContext.from !== "menmind") return null;
-    if (messages.length > 0) return null;
-
-    if (initialContext.sciezka === "rozstanie") {
-      return "Widzę, że jesteś na ścieżce rozstania. Ułóżmy plan 7 dni stabilizacji.";
-    }
-
-    if (initialContext.tryb === "kryzys") {
-      return "Jesteś w trybie kryzysu. Skupiamy się na małych krokach.";
-    }
-
-    return null;
-  }, [initialContext, messages.length]);
-
   /* ENTRY */
   useEffect(() => {
-    if (messages.length > 0 || contextMessage) return;
+    if (messages.length > 0) return;
     const t = setTimeout(() => setShowWelcome(true), 600);
     return () => clearTimeout(t);
-  }, [messages.length, contextMessage]);
+  }, [messages.length]);
 
   /* SCROLL */
   useEffect(() => {
@@ -116,13 +91,7 @@ export default function ChatWindow({ initialContext }: Props) {
       {/* CHAT */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
 
-        {contextMessage && (
-          <div className="bg-white/10 p-3 rounded-xl">
-            {contextMessage}
-          </div>
-        )}
-
-        {messages.length === 0 && showWelcome && !contextMessage && (
+        {messages.length === 0 && showWelcome && (
           <div className="bg-white/10 p-3 rounded-xl">
             {getWelcomeMessage(lang)}
           </div>
