@@ -72,7 +72,7 @@ const OBSERVATION_CONTRACTS = new Set([
 ]);
 const POSTCONDITIONS = new Set([
   "entity_present", "entity_value_equals", "entity_state_equals",
-  "relationship_exists", "application_state_equals",
+  "relationship_exists", "application_state_equals", "scene_changed",
 ]);
 
 function fail(message: string): never {
