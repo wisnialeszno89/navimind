@@ -11,6 +11,13 @@ import type {
   AgentTaskWindowHubOCRTable,
   AgentTaskWorldMetadata,
 } from "@/lib/agent/agentTaskContract";
+import {
+  invalidAgentTaskV2Response,
+  validateAgentTaskV2Payload,
+  validateAgentTaskV2Response,
+  type AgentTaskV2Request,
+} from "@/lib/agent/agentTaskContractV2";
+import { reasonAgentTaskV2 } from "@/lib/agent/reasonAgentTaskV2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -521,6 +528,30 @@ export async function POST(req: Request) {
       throw error;
     }
 
+    if (
+      body !== null &&
+      typeof body === "object" &&
+      !Array.isArray(body) &&
+      (body as Record<string, unknown>).version === "2"
+    ) {
+      try {
+        validateAgentTaskV2Payload(body);
+      } catch {
+        return jsonError("INVALID_AGENT_TASK_V2", 400);
+      }
+
+      const v2Request = body as AgentTaskV2Request;
+      const v2Result = await reasonAgentTaskV2(v2Request);
+      try {
+        validateAgentTaskV2Response(v2Result, v2Request);
+        return NextResponse.json(v2Result);
+      } catch {
+        return NextResponse.json(invalidAgentTaskV2Response(v2Request));
+      }
+    }
+
+    // V1 remains deliberately isolated and unchanged. V2 requests are
+    // dispatched above only after their own strict contract validation.
     if (!isBoundedAgentTask(body)) {
       return jsonError("INVALID_AGENT_TASK", 400);
     }
