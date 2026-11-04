@@ -374,6 +374,9 @@ function validatePostcondition(value: unknown, entityRefs: Set<string>): void {
     ["kind", "target_ref", "expected_value", "expected_value_ref", "state", "from_ref", "relationship", "to_ref", "application"],
     ["kind"]);
   if (typeof item.kind !== "string" || !POSTCONDITIONS.has(item.kind)) fail("action.unsupported_postcondition");
+  if (item.kind === "scene_changed" && Object.keys(item).length !== 1) {
+    fail("scene_changed_has_unexpected_fields");
+  }
   if (["entity_present", "entity_value_equals", "entity_state_equals"].includes(item.kind as string)) {
     const targetRef = ref(item.target_ref, "postcondition.target_ref");
     if (!entityRefs.has(targetRef)) fail("postcondition.references_unknown_entity");
