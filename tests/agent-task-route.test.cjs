@@ -972,3 +972,16 @@ test("V2 scene_changed postcondition is consistent with the Python desktop verif
   unsafe.action.expected_postcondition = { kind: "scene_changed", automation_id: "IDC_NEW" };
   assert.throws(() => v2Contract.validateAgentTaskV2Response(unsafe, task));
 });
+
+
+test("NaviMind chat is independent of MenMind source and forwarded context", () => {
+  const chat = fs.readFileSync(
+    path.resolve(__dirname, "../app/components/ChatWindow.tsx"), "utf8"
+  );
+  const page = fs.readFileSync(
+    path.resolve(__dirname, "../app/chat/page.tsx"), "utf8"
+  );
+  assert.doesNotMatch(chat.toLowerCase(), /menmind|initialcontext|contextmessage/);
+  assert.doesNotMatch(page.toLowerCase(), /menmind|initialcontext|searchparams/);
+  assert.match(page, /<ChatWindow\s*\/>/);
+});
