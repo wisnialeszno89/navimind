@@ -34,3 +34,6 @@ jobs:
 
       - name: Agent task route tests
         run: pnpm test:agent-bridge
+
+      - name: Chat task handoff tests
+        run: pnpm test:chat-task

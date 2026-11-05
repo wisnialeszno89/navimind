@@ -5,10 +5,12 @@ import { useChatStore } from "../lib/chatStore";
 import ProNotice from "./ProNotice";
 import { Plus } from "lucide-react";
 import { imageToBase64 } from "../lib/imageToBase64";
+import type { ChatInteractionMode } from "../lib/chat/agentTaskHandoff";
 
 
 export default function SendForm({ setIsTyping, chatId }: any) {
   const [text, setText] = useState("");
+  const [interactionMode, setInteractionMode] = useState<ChatInteractionMode>("conversation");
 
   const [plan, setPlan] = useState<
     "free" | "pro" | "pro_plus"
@@ -301,6 +303,7 @@ async function send() {
       body: JSON.stringify({
         chatId,
         message: raw,
+        interactionMode,
       }),
     });
 
@@ -318,6 +321,8 @@ async function send() {
       role: "assistant",
       content: reply,
       highlight: data.highlight || null,
+      taskHandoff: data?.taskHandoff?.status === "prepared_not_executed"
+        ? data.taskHandoff : null,
     };
 
     state.setMessages(messages);
@@ -418,6 +423,30 @@ async function send() {
   </div>
 )}
 
+      <div className="flex items-center gap-2" role="group" aria-label="Sposób pracy NaviMind">
+        <button
+          type="button"
+          aria-pressed={interactionMode === "conversation"}
+          onClick={() => setInteractionMode("conversation")}
+          className={`rounded-lg px-3 py-1.5 text-xs ${interactionMode === "conversation" ? "bg-blue-600 text-white" : "bg-white/10"}`}
+        >
+          Rozmowa
+        </button>
+        <button
+          type="button"
+          aria-pressed={interactionMode === "task"}
+          onClick={() => setInteractionMode("task")}
+          className={`rounded-lg px-3 py-1.5 text-xs ${interactionMode === "task" ? "bg-blue-600 text-white" : "bg-white/10"}`}
+        >
+          Zadanie dla agenta
+        </button>
+      </div>
+      {interactionMode === "task" && (
+        <p className="text-xs opacity-75">
+          Przygotuję zlecenie do przekazania lokalnemu agentowi. Nie uruchamia to żadnych działań na komputerze.
+        </p>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -445,7 +474,7 @@ async function send() {
 
             <textarea
             value={text}
-            placeholder="Napisz co masz na głowie..."
+            placeholder={interactionMode === "task" ? "Opisz zadanie, np. przygotuj ofertę na 3 okna..." : "Napisz co masz na głowie..."}
             onChange={(e) => {
             setText(e.target.value);
             e.target.style.height = "auto";

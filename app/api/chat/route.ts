@@ -1,4 +1,5 @@
 import { getUserId } from "../../lib/userId";
+import { prepareAgentTaskHandoff, isTaskMode } from "@/lib/chat/agentTaskHandoff";
 
 import { getSessionEmail } from "../../lib/auth/session";
 
@@ -101,6 +102,12 @@ export async function POST(
     }
     
 
+    // A task draft is never a claim of desktop execution.
+    // Explicit mode or a clear WindowHub offer request may prepare a handoff.
+    const interactionMode = isTaskMode(body?.interactionMode)
+      ? body.interactionMode : "conversation";
+    const handoff = prepareAgentTaskHandoff(userText, interactionMode);
+
     /* ========= USER ========= */
 
     const userId =
@@ -173,6 +180,7 @@ const {
     userId,
     userText,
     history,
+    taskHandoffPrepared: handoff !== null,
   });
 /* ========= RESPONSE ========= */
 
@@ -180,6 +188,7 @@ return new Response(
   JSON.stringify({
     reply:
       finalOutput,
+    taskHandoff: handoff,
   }),
   {
     headers: {

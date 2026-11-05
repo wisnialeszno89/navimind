@@ -26,11 +26,13 @@ type BuildChatSystemPromptInput = {
   userText: string;
 
   aiState: AIState;
+  taskHandoffPrepared?: boolean;
 };
 
 export function buildChatSystemPrompt({
   userText,
   aiState,
+  taskHandoffPrepared = false,
 }: BuildChatSystemPromptInput) {
   const {
   intelligence,
@@ -130,6 +132,24 @@ Continue naturally.
       mode,
     });
 
+  const taskContext = taskHandoffPrepared
+    ? `
+TASK HANDOFF:
+System przygotował wyłącznie PROJEKT zlecenia do lokalnego agenta.
+Nie uruchomiono WindowHub, nie kliknięto, nie zapisano oferty.
+W odpowiedzi omów krótko zrozumiany cel i ewentualnie najważniejsze braki.
+Karta z przyciskiem pobrania zlecenia jest widoczna w interfejsie czatu.
+Nie twierdź, że agent już pracuje, że zadanie trafiło na komputer,
+ani że zakończyłeś cokolwiek bez otrzymanego dowodu z wykonawcy.
+Użytkownik musi świadomie przekazać zlecenie i zatwierdzić wykonanie lokalnie.
+`
+    : `
+AGENT STATUS:
+Jesteś partnerem w rozmowie i potrafisz pomóc planować zadania.
+Nie masz bezpośredniego dostępu do komputera użytkownika w tym czacie.
+Nie twierdź, że wykonałeś zadanie w zewnętrznej aplikacji bez weryfikacji.
+`;
+
   return buildSystemPrompt({
     mode,
     strategy,
@@ -164,6 +184,8 @@ ${topicContext}
 
 GUIDANCE:
 ${guidanceLayer}
+
+${taskContext}
 
 ${internalStateContext}
 

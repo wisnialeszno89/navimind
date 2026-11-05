@@ -12,6 +12,7 @@ import { useLanguage } from "../lib/useLanguage";
 import { extractOptions } from "../lib/nextStepEngine";
 
 import SendForm from "./SendForm";
+import AgentTaskHandoffCard from "./AgentTaskHandoffCard";
 import TypingIndicator from "./TypingIndicator";
 import ChatLimitBar from "./ChatLimitBar";
 import CrisisHelp from "./CrisisHelp";
@@ -129,6 +130,9 @@ export default function ChatWindow() {
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {m.content}
                 </ReactMarkdown>
+              )}
+              {!isUser && m.taskHandoff && (
+                <AgentTaskHandoffCard task={m.taskHandoff} />
               )}
             </div>
           );
