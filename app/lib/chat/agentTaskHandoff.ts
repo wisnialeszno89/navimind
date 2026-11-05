@@ -18,10 +18,10 @@ export type AgentTaskHandoff = {
   format: "plain_text_v1";
 };
 
-const WINDOW_TERMS = /\b(?:okn(?:o|a|em|ie|ami|ach)?|okien|stolark\w*|windowhub)\b/i;
-const OFFER_TERMS = /\b(?:ofert\w*|wycen\w*|zamów\w*|zlec\w*|kalkulac\w*)\b/i;
-const COMMAND_TERMS = /\b(?:przygotuj|utwórz|stwórz|zrób|wyceń|wygeneruj|wprowadź|dodaj|potrzebuję|chcę|poproszę|wykonaj|zbuduj)\b/i;
-const QUESTIONS = /\b(?:jak|dlaczego|czym|co to|wytłumacz|wyjaśnij|porównaj)\b/i;
+const WINDOW_TERMS = /(?:^|[^\p{L}])(?:okn[\p{L}]*|okien[\p{L}]*|stolark[\p{L}]*|windowhub)(?=$|[^\p{L}])/iu;
+const OFFER_TERMS = /(?:^|[^\p{L}])(?:ofert[\p{L}]*|wyce[nń][\p{L}]*|zamów[\p{L}]*|zlec[\p{L}]*|kalkulac[\p{L}]*)(?=$|[^\p{L}])/iu;
+const COMMAND_TERMS = /(?:^|[^\p{L}])(?:przygotuj|utwórz|stwórz|zrób|wyceń|wygeneruj|wprowadź|dodaj|potrzebuję|chcę|poproszę|wykonaj|zbuduj)(?=$|[^\p{L}])/iu;
+const QUESTIONS = /(?:^|[^\p{L}])(?:jak|dlaczego|czym|co to|wytłumacz|wyjaśnij|porównaj)(?=$|[^\p{L}])/iu;
 
 function isWindowOfferRequest(text: string): boolean {
   return WINDOW_TERMS.test(text) && OFFER_TERMS.test(text)
