@@ -20,12 +20,14 @@ type GenerateChatReplyInput = {
   history: any[];
 
   aiState: AIState;
+  taskHandoffPrepared?: boolean;
 };
 
 export async function generateChatReply({
   userText,
   history,
   aiState,
+  taskHandoffPrepared = false,
 }: GenerateChatReplyInput) {
   const openai =
     new OpenAI({
@@ -42,6 +44,7 @@ export async function generateChatReply({
   buildChatSystemPrompt({
   userText,
   aiState,
+  taskHandoffPrepared,
 });
 
   const response =
