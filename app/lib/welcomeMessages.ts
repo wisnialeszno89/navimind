@@ -1,15 +1,11 @@
 export function getWelcomeMessage(lang: "pl" | "en") {
   if (lang === "pl") {
-    return `Cześć.
+    return `Cześć! Możemy po prostu pogadać albo zająć się konkretnym zadaniem.
 
-Możesz napisać tu wszystko — bez oceniania.
-
-Co jest dziś dla Ciebie najtrudniejsze?`;
+Napisz własnymi słowami, co chcesz zrobić. Pomogę to rozpracować, przygotować albo wykonać tam, gdzie mam dostęp do odpowiednich narzędzi.`;
   }
 
-  return `Hi.
+  return `Hi! We can just talk or work through a specific task.
 
-You can write anything here — no judgment.
-
-What feels the hardest today?`;
+Tell me what you want to do in your own words. I'll help plan, prepare, or execute it when the right tools are available.`;
 }
