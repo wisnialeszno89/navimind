@@ -40,12 +40,14 @@ type Input = {
   userId: string;
   userText: string;
   history: any[];
+  taskHandoffPrepared?: boolean;
 };
 
 export async function runChatOrchestrator({
   userId,
   userText,
   history,
+  taskHandoffPrepared = false,
 }: Input) {
   const historyTexts =
     history.map(
@@ -112,6 +114,7 @@ export async function runChatOrchestrator({
   userText,
   history,
   aiState,
+  taskHandoffPrepared,
 })
 
   const processed =
