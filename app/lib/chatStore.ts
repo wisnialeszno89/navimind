@@ -1,9 +1,11 @@
+import type { AgentTaskHandoff } from "./chat/agentTaskHandoff";
 import { create } from "zustand";
 
 type Msg = {
   role: "user" | "assistant";
   content: string;
   highlight?: string | null;
+  taskHandoff?: AgentTaskHandoff | null;
 };
 
 export type Plan = "free" | "pro" | "pro_plus";
