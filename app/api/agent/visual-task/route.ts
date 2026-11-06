@@ -1,7 +1,7 @@
 import {timingSafeEqual} from 'node:crypto';
 import {NextResponse} from 'next/server';
 import {VISUAL_BODY_LIMIT,validateVisualRequest} from '@/lib/agent/visualTaskContract';
-import {reasonVisualTask} from '@/lib/agent/reasonVisualTask';
+import {reasonVisualTask,safeVisualFailure} from '@/lib/agent/reasonVisualTask';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const error=(code:string,status:number)=>NextResponse.json({error:code},{status});
@@ -21,8 +21,10 @@ export async function POST(req:Request){
     let body:unknown;
     try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));validateVisualRequest(body)}catch{return error('INVALID_VISUAL_TASK',400)}
     return NextResponse.json(await reasonVisualTask(body));
-  }catch{
+  }catch(cause){
     // No screenshot, request, secret, endpoint or provider body in logs/errors.
-    return error('VISUAL_TASK_FAILED',502);
+    const code=safeVisualFailure(cause);
+    console.warn('VISUAL_FAILURE='+code);
+    return error(code,502);
   }
 }

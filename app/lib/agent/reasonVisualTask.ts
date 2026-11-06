@@ -1,5 +1,17 @@
 import OpenAI from 'openai';
 import {VISUAL_ACTION_SCHEMA,validateVisualAction,type VisualRequest,type VisualResponse} from './visualTaskContract';
+export function safeVisualFailure(error:unknown):string{
+  if(error instanceof Error && /^VISUAL_(MODEL_REFUSAL|MODEL_OUTPUT_TRUNCATED|MODEL_EMPTY_OUTPUT|MODEL_INVALID_JSON|MODEL_INVALID_ACTION)$/.test(error.message))return error.message;
+  const status=error&&typeof error==='object'&&'status' in error?error.status:undefined;
+  if(status===400)return 'VISUAL_PROVIDER_REQUEST_REJECTED';
+  if(status===401||status===403)return 'VISUAL_PROVIDER_AUTH_REJECTED';
+  if(status===404)return 'VISUAL_PROVIDER_MODEL_UNAVAILABLE';
+  if(status===429)return 'VISUAL_PROVIDER_QUOTA_OR_RATE_LIMIT';
+  if(typeof status==='number'&&status>=500)return 'VISUAL_PROVIDER_UNAVAILABLE';
+  if(error instanceof Error&&error.name==='APIConnectionTimeoutError')return 'VISUAL_PROVIDER_TIMEOUT';
+  if(error instanceof Error&&error.name==='APIConnectionError')return 'VISUAL_PROVIDER_CONNECTION_FAILED';
+  return 'VISUAL_TASK_FAILED';
+}
 export const VISUAL_SYSTEM_PROMPT=[
   'You operate a computer toward the user goal using the CURRENT screenshot. Choose exactly ONE small action.',
   'Coordinates refer to pixels of this screenshot, starting at its upper-left corner. Never infer desktop coordinates.',
@@ -28,7 +40,12 @@ export async function reasonVisualTask(task:VisualRequest):Promise<VisualRespons
   const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY,timeout:30000,maxRetries:0});
   const result=await client.chat.completions.create({model,store:false,max_tokens:600,
     messages:visualMessages(task),response_format:{type:'json_schema',json_schema:{name:'visual_computer_action',strict:true,schema:VISUAL_ACTION_SCHEMA}}});
-  const action=JSON.parse(result.choices?.[0]?.message?.content||'null');
-  validateVisualAction(action,task.screen.width,task.screen.height);
+  const choice=result.choices?.[0];
+  if(choice?.message?.refusal)throw new Error('VISUAL_MODEL_REFUSAL');
+  if(choice?.finish_reason==='length')throw new Error('VISUAL_MODEL_OUTPUT_TRUNCATED');
+  if(!choice?.message?.content)throw new Error('VISUAL_MODEL_EMPTY_OUTPUT');
+  let action:unknown;
+  try{action=JSON.parse(choice.message.content)}catch{throw new Error('VISUAL_MODEL_INVALID_JSON')}
+  try{validateVisualAction(action,task.screen.width,task.screen.height)}catch{throw new Error('VISUAL_MODEL_INVALID_ACTION')}
   return {version:'visual-1',task_id:task.task_id,turn:task.turn,action};
 }

@@ -14,3 +14,30 @@ function http(body=request(),secret='synthetic-test-secret'){return new Request(
 test('endpoint is disabled by default',()=>environment(async()=>{delete process.env.NAVIMIND_VISUAL_ENABLED;assert.equal((await route().POST(http())).status,503)}));
 test('endpoint authenticates and validates before invoking reasoner',()=>environment(async()=>{assert.equal((await route().POST(http(request(),'wrong'))).status,401);assert.equal((await route().POST(http({...request(),hwnd:123}))).status,400);const response=await route().POST(http());assert.equal(response.status,200);assert.equal((await response.json()).action.kind,'inspect')}));
 test('endpoint bounds image body without revealing provider details',()=>environment(async()=>{const response=await route().POST(http({...request(),goal:'x'.repeat(contract.VISUAL_BODY_LIMIT+1)}));assert.equal(response.status,413);assert.deepEqual(await response.json(),{error:'PAYLOAD_TOO_LARGE'})}));
+
+test('provider failures expose only fixed categories, never provider details',()=>{
+  const r=load('app/lib/agent/reasonVisualTask.ts',{'./visualTaskContract':contract,'openai':class {}});
+  for(const [status,code] of [[400,'VISUAL_PROVIDER_REQUEST_REJECTED'],[401,'VISUAL_PROVIDER_AUTH_REJECTED'],[404,'VISUAL_PROVIDER_MODEL_UNAVAILABLE'],[429,'VISUAL_PROVIDER_QUOTA_OR_RATE_LIMIT'],[503,'VISUAL_PROVIDER_UNAVAILABLE']]){
+    assert.equal(r.safeVisualFailure({status,message:'sensitive payload',body:{secret:'do not expose'}}),code);
+  }
+  assert.equal(r.safeVisualFailure(new Error('private provider response')),'VISUAL_TASK_FAILED');
+});
+test('model output failures distinguish truncation, refusal, JSON and action validation',async()=>{
+  for(const [choice,expected] of [
+    [{finish_reason:'length',message:{content:'{'}},'VISUAL_MODEL_OUTPUT_TRUNCATED'],
+    [{message:{refusal:'private text'}},'VISUAL_MODEL_REFUSAL'],
+    [{message:{content:null}},'VISUAL_MODEL_EMPTY_OUTPUT'],
+    [{message:{content:'not-json'}},'VISUAL_MODEL_INVALID_JSON'],
+    [{message:{content:JSON.stringify(action('click',{x:99,y:0}))}},'VISUAL_MODEL_INVALID_ACTION']
+  ]){
+    class FakeOpenAI{constructor(){this.chat={completions:{create:async()=>({choices:[choice]})}}}}
+    const r=load('app/lib/agent/reasonVisualTask.ts',{'./visualTaskContract':contract,'openai':FakeOpenAI});
+    await assert.rejects(r.reasonVisualTask(request()),new RegExp('^Error: '+expected+'$'));
+  }
+});
+test('route returns safe failure code without logging screenshot or provider body',()=>environment(async()=>{
+  const r=load('app/lib/agent/reasonVisualTask.ts',{'./visualTaskContract':contract,'openai':class {}});
+  const api=load('app/api/agent/visual-task/route.ts',{'next/server':{NextResponse:{json:(body,init)=>new Response(JSON.stringify(body),{status:init?.status||200})}},'@/lib/agent/visualTaskContract':contract,'@/lib/agent/reasonVisualTask':{safeVisualFailure:r.safeVisualFailure,reasonVisualTask:async()=>{throw {status:429,message:'private provider body'}}}});
+  const before=console.warn;const logs=[];console.warn=(line)=>logs.push(line);
+  try{const response=await api.POST(http());assert.equal(response.status,502);assert.deepEqual(await response.json(),{error:'VISUAL_PROVIDER_QUOTA_OR_RATE_LIMIT'});assert.deepEqual(logs,['VISUAL_FAILURE=VISUAL_PROVIDER_QUOTA_OR_RATE_LIMIT'])}finally{console.warn=before}
+}));
