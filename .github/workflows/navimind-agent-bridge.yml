@@ -33,4 +33,4 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       - name: Agent task route tests
-        run: pnpm test:agent-bridge
+        run: node --test tests/agent-task-route.test.cjs tests/visual-task-route.test.cjs
