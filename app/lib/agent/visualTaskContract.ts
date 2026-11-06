@@ -48,9 +48,26 @@ export function validateVisualAction(value:unknown,width:number,height:number):a
   if(a.kind==='wait'){use('amount');integer(a.amount,1,2)}
   for(const k of unused)if(a[k]!==null)fail('unused_action_fields');
 }
-export const VISUAL_ACTION_SCHEMA={type:'object',additionalProperties:false,
-  properties:{kind:{type:'string',enum:ACTION_KINDS},x:{type:['integer','null']},y:{type:['integer','null']},
-    width:{type:['integer','null']},height:{type:['integer','null']},text:{type:['string','null']},
-    key:{anyOf:[{type:'string',enum:KEYS},{type:'null'}]},direction:{anyOf:[{type:'string',enum:['up','down']},{type:'null'}]},
-    amount:{type:['integer','null']},reason:{type:'string'}},
-  required:['kind','x','y','width','height','text','key','direction','amount','reason']};
+// The provider must obey the same per-action null fields as the executor.
+// A generic nullable bag allowed e.g. click+text, which passed JSON Schema
+// but was correctly rejected by the execution contract.
+export function visualActionResponseSchema(width:number,height:number){
+  const integer=(minimum:number,maximum:number)=>({type:'integer',minimum,maximum});
+  const text=(maxLength:number)=>({type:'string',minLength:1,maxLength,pattern:'\\S'});
+  const variant=(kind:VisualAction['kind'],used:Record<string,unknown>={})=>{
+    const properties:Record<string,unknown>={kind:{type:'string',enum:[kind]}};
+    for(const name of ['x','y','width','height','text','key','direction','amount'])properties[name]=used[name]||{type:'null'};
+    properties.reason=text(1000);
+    return {type:'object',additionalProperties:false,properties,required:Object.keys(properties)};
+  };
+  return {type:'object',additionalProperties:false,required:['action'],properties:{action:{anyOf:[
+    variant('click',{x:integer(0,width-1),y:integer(0,height-1)}),
+    variant('type_text',{text:{...text(2000),pattern:'^[^\\u0000-\\u001f]*\\S[^\\u0000-\\u001f]*$'}}),
+    variant('key',{key:{type:'string',enum:KEYS}}),
+    variant('scroll',{direction:{type:'string',enum:['up','down']},amount:integer(1,5)}),
+    variant('wait',{amount:integer(1,2)}),
+    variant('inspect'),
+    variant('inspect',{x:integer(0,width-1),y:integer(0,height-1),width:integer(1,width),height:integer(1,height)}),
+    variant('done'),variant('ask_user'),
+  ]}}};
+}

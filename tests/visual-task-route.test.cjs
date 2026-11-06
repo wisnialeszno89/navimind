@@ -7,7 +7,7 @@ const action=(kind,extras={})=>({kind,x:null,y:null,width:null,height:null,text:
 test('accepts PNG image with exact dimensions, rejects remote URL and mismatched dimensions',()=>{contract.validateVisualRequest(request());for(const screen of [{image_data_url:'https://example.com/screen.png',width:1,height:1},{image_data_url:image,width:2,height:1}])assert.throws(()=>contract.validateVisualRequest({...request(),screen}))});
 test('rejects coordinates outside screenshot and arbitrary keyboard shortcuts',()=>{assert.throws(()=>contract.validateVisualAction(action('click',{x:1,y:0}),1,1));assert.throws(()=>contract.validateVisualAction(action('key',{key:'CTRL+S'}),1,1));contract.validateVisualAction(action('key',{key:'CTRL+A'}),1,1)});
 test('unused action fields cannot hide additional instructions',()=>{assert.throws(()=>contract.validateVisualAction(action('done',{text:'execute code'}),1,1))});
-test('reasoner sends image as image content, not text OCR',async()=>{let sent;class FakeOpenAI{constructor(){this.chat={completions:{create:async args=>{sent=args;return {choices:[{message:{content:JSON.stringify(action('inspect'))}}]}}}}}}const reasoner=load('app/lib/agent/reasonVisualTask.ts',{'./visualTaskContract':contract,'openai':FakeOpenAI});const result=await reasoner.reasonVisualTask(request());assert.equal(result.task_id,'test-image');assert.equal(sent.messages[1].content[1].type,'image_url');assert.equal(sent.messages[1].content[1].image_url.url,image);assert.equal(sent.store,false);assert.match(sent.messages[0].content,/actual field/)});
+test('reasoner sends image as image content, not text OCR',async()=>{let sent;class FakeOpenAI{constructor(){this.chat={completions:{create:async args=>{sent=args;return {choices:[{message:{content:JSON.stringify({action:action('inspect')})}}]}}}}}}const reasoner=load('app/lib/agent/reasonVisualTask.ts',{'./visualTaskContract':contract,'openai':FakeOpenAI});const result=await reasoner.reasonVisualTask(request());assert.equal(result.task_id,'test-image');assert.equal(sent.messages[1].content[1].type,'image_url');assert.equal(sent.messages[1].content[1].image_url.url,image);assert.equal(sent.store,false);assert.match(sent.messages[0].content,/actual field/)});
 function route(){return load('app/api/agent/visual-task/route.ts',{'next/server':{NextResponse:{json:(body,init)=>new Response(JSON.stringify(body),{status:init?.status||200})}},'@/lib/agent/visualTaskContract':contract,'@/lib/agent/reasonVisualTask':{reasonVisualTask:async task=>({version:task.version,task_id:task.task_id,turn:task.turn,action:action('inspect')})}})}
 async function environment(fn){const before={...process.env};process.env.NAVIMIND_VISUAL_ENABLED='1';process.env.NAVIMIND_AGENT_SECRET='synthetic-test-secret';process.env.OPENAI_API_KEY='synthetic-provider-key';try{await fn()}finally{for(const k of ['NAVIMIND_VISUAL_ENABLED','NAVIMIND_AGENT_SECRET','OPENAI_API_KEY'])before[k]===undefined?delete process.env[k]:process.env[k]=before[k]}}
 function http(body=request(),secret='synthetic-test-secret'){return new Request('http://localhost/api/agent/visual-task',{method:'POST',headers:{'content-type':'application/json','x-navimind-agent-secret':secret},body:JSON.stringify(body)})}
@@ -28,7 +28,7 @@ test('model output failures distinguish truncation, refusal, JSON and action val
     [{message:{refusal:'private text'}},'VISUAL_MODEL_REFUSAL'],
     [{message:{content:null}},'VISUAL_MODEL_EMPTY_OUTPUT'],
     [{message:{content:'not-json'}},'VISUAL_MODEL_INVALID_JSON'],
-    [{message:{content:JSON.stringify(action('click',{x:99,y:0}))}},'VISUAL_MODEL_INVALID_ACTION']
+    [{message:{content:JSON.stringify({action:action('click',{x:99,y:0})})}},'VISUAL_MODEL_INVALID_ACTION_INTEGER_INVALID']
   ]){
     class FakeOpenAI{constructor(){this.chat={completions:{create:async()=>({choices:[choice]})}}}}
     const r=load('app/lib/agent/reasonVisualTask.ts',{'./visualTaskContract':contract,'openai':FakeOpenAI});
@@ -41,3 +41,25 @@ test('route returns safe failure code without logging screenshot or provider bod
   const before=console.warn;const logs=[];console.warn=(line)=>logs.push(line);
   try{const response=await api.POST(http());assert.equal(response.status,502);assert.deepEqual(await response.json(),{error:'VISUAL_PROVIDER_QUOTA_OR_RATE_LIMIT'});assert.deepEqual(logs,['VISUAL_FAILURE=VISUAL_PROVIDER_QUOTA_OR_RATE_LIMIT'])}finally{console.warn=before}
 }));
+
+test('provider schema constrains unused fields and current image coordinates before generation',()=>{
+  const schema=contract.visualActionResponseSchema(680,400);
+  assert.equal(schema.type,'object');assert.equal(schema.additionalProperties,false);assert.deepEqual(schema.required,['action']);
+  const variants=schema.properties.action.anyOf;
+  const click=variants.find(v=>v.properties.kind.enum[0]==='click');
+  assert.deepEqual(click.properties.x,{type:'integer',minimum:0,maximum:679});
+  assert.deepEqual(click.properties.y,{type:'integer',minimum:0,maximum:399});
+  for(const key of ['width','height','text','key','direction','amount'])assert.deepEqual(click.properties[key],{type:'null'});
+  const typing=variants.find(v=>v.properties.kind.enum[0]==='type_text');
+  assert.deepEqual(typing.properties.x,{type:'null'});assert.deepEqual(typing.properties.key,{type:'null'});
+  assert.equal(typing.properties.text.maxLength,2000);
+  assert.equal(variants.length,9);
+  for(const variant of variants){assert.equal(variant.additionalProperties,false);assert.deepEqual(variant.required,Object.keys(variant.properties))}
+});
+test('reasoner keeps the public action contract and rejects unused data or wrong envelope',async()=>{
+  for(const value of [{action:action('click',{x:0,y:0,text:'must not execute'})},{action:action('inspect'),extra:'untrusted'},action('inspect')]){
+    class FakeOpenAI{constructor(){this.chat={completions:{create:async()=>({choices:[{message:{content:JSON.stringify(value)}}]})}}}}
+    const r=load('app/lib/agent/reasonVisualTask.ts',{'./visualTaskContract':contract,'openai':FakeOpenAI});
+    await assert.rejects(r.reasonVisualTask(request()),/VISUAL_MODEL_INVALID_ACTION_(UNUSED_ACTION_FIELDS|FIELDS_INVALID)/);
+  }
+});

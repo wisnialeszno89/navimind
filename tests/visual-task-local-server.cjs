@@ -5,7 +5,7 @@ const contract=load('app/lib/agent/visualTaskContract.ts');
 class FakeOpenAI{constructor(){this.chat={completions:{create:async args=>{
   const image=args.messages[1].content.find(part=>part.type==='image_url');
   if(!image?.image_url?.url?.startsWith('data:image/png;base64,'))throw new Error('Image was not delivered to provider');
-  return {choices:[{message:{content:JSON.stringify({kind:'inspect',x:null,y:null,width:null,height:null,text:null,key:null,direction:null,amount:null,reason:'Synthetic image transport fixture, not real model inference.'})}}]};
+  return {choices:[{message:{content:JSON.stringify({action:{kind:'inspect',x:null,y:null,width:null,height:null,text:null,key:null,direction:null,amount:null,reason:'Synthetic image transport fixture, not real model inference.'}})}}]};
 }}}}}
 const reasoning=load('app/lib/agent/reasonVisualTask.ts',{'openai':FakeOpenAI,'./visualTaskContract':contract});
 const route=load('app/api/agent/visual-task/route.ts',{'next/server':{NextResponse:{json:(body,init)=>new Response(JSON.stringify(body),{status:init?.status||200})}},'@/lib/agent/visualTaskContract':contract,'@/lib/agent/reasonVisualTask':reasoning});
