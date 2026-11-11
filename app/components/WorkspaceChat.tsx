@@ -4,14 +4,16 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MicrophoneButton from "./MicrophoneButton";
+import type { BrowserSnapshot } from "@/lib/browser-plan";
 import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
 
 type Message = { role: "user" | "assistant"; content: string; image?: string };
-type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; currentTable: (TableContext & { file: string }) | null };
-type TaskResult = { status: "verified" | "review"; message: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
+type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; currentTable: (TableContext & { file: string }) | null };
+type TaskResult = { status: "verified" | "review"; message: string; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
   if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message;
+  if (result.browser) return "**Krok w przeglądarce wykonany.** " + result.message;
   if (result.summary) {
     const summary = result.summary;
     return `**Arkusz zapisany i sprawdzony.** ${result.message}\n\nPlik: ${result.file}\n\nPodgląd: ${result.preview}\n\n| Wynik | Wartość |\n|---|---:|\n| Pliki źródłowe | ${summary.files} |\n| Pozycje | ${summary.positions} |\n| Sztuki | ${summary.quantity} |\n| Powierzchnia [m²] | ${summary.area_m2} |\n| Wiersze z powtórzeniem | ${summary.duplicate_rows} |\n| Grupy powtórzeń | ${summary.duplicate_groups} |\n\nPowtórzenia oznaczono bez usuwania. Sumy obejmują wszystkie wybrane źródła.`;
@@ -39,6 +41,9 @@ export default function WorkspaceChat() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [desktopMode, setDesktopMode] = useState(false);
+  const [browserMode, setBrowserMode] = useState(false);
+  const [browserProgress, setBrowserProgress] = useState("");
+  const stopBrowser = useRef(false);
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [pendingJob, setPendingJob] = useState<string | null>(null);
   const tokenRef = useRef("");
@@ -72,6 +77,7 @@ export default function WorkspaceChat() {
     tokenRef.current = "";
     setConnected(false);
     setDesktopMode(false);
+    setBrowserMode(false);
     setAgent(null);
   }
 
@@ -122,14 +128,58 @@ export default function WorkspaceChat() {
     const history = previousMessages.slice(-12).map(({role, content}) => ({role, content}));
     const attachedImage = image;
     const attachedName = imageName;
-    if (attachedImage) setDesktopMode(false);
+    if (attachedImage) {setDesktopMode(false);setBrowserMode(false);}
     setMessages(previous => [...previous, { role: "user", content, ...(attachedImage ? {image: attachedImage} : {}) }]);
     setText("");
     setImage(null);
     setImageName("");
     let executionStarted = false;
+    let browserActions = 0;
+    stopBrowser.current = false;
     try {
-      if (desktopMode && !attachedImage) {
+      if (browserMode && !attachedImage) {
+        if (!connected || !tokenRef.current) throw new Error("Najpierw połącz komputer.");
+        const status: AgentStatus = await localRequest(tokenRef.current, "/status");
+        if (!status.browser?.available) throw new Error("Uruchom wykonawcę z --browser i połącz go ponownie, aby otworzyć okno Chromium NaviMind.");
+        let snapshot: BrowserSnapshot = await localRequest(tokenRef.current, "/browser/observe");
+        const steps: string[] = [];
+        let staleRetries = 0;
+        const noEffect = new Map<string,number>();
+        const viewKey = (view: BrowserSnapshot) => JSON.stringify([view.url,view.text,view.controls.map(({ref,...control})=>control)]);
+        for (let step = 0; step < 12; step++) {
+          if (stopBrowser.current) break;
+          setBrowserProgress(`Odczytuję stronę i planuję krok ${step+1}/12…`);
+          const response = await fetch("/api/workspace/browser-plan", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:content,history,snapshot,steps})});
+          const plan = await response.json();
+          if (!response.ok) throw new Error(plan.message || "Nie udało się przygotować kroku przeglądarki.");
+          if (stopBrowser.current) break;
+          if (!plan.task) {
+            setMessages(previous => [...previous,{role:"assistant",content:(plan.decision==='done'?"**Wynik pracy w przeglądarce.** ":"**Potrzebny kolejny krok.** ")+plan.reply}]);
+            return;
+          }
+          const before=viewKey(snapshot);
+          const target='ref' in plan.task?snapshot.controls.find(c=>c.ref===plan.task.ref)?.name:plan.task.url||plan.task.kind;
+          const actionKey=JSON.stringify([before,plan.task.kind,target]);
+          if ((noEffect.get(actionKey)||0)>=2) {
+            setMessages(previous=>[...previous,{role:"assistant",content:"Zatrzymałem zadanie: dwie próby nie zmieniły widoku strony. Sprawdź aktualny stan w oknie Chromium NaviMind."}]);return;
+          }
+          setBrowserProgress(`Krok ${step+1}/12: ${plan.reply}`);
+          const id=crypto.randomUUID();setPendingJob(id);executionStarted=true;
+          const result:TaskResult=await localRequest(tokenRef.current,"/execute",{id,task:plan.task,expectedRevision:plan.expectedRevision});
+          setPendingJob(null);executionStarted=false;
+          steps.push(JSON.stringify({task:plan.task,result:result.message,status:result.status}).slice(0,1000));
+          if(result.code==='STALE_PAGE' && staleRetries<2 && !stopBrowser.current){
+            staleRetries++;snapshot=await localRequest(tokenRef.current,"/browser/observe");continue;
+          }
+          if(result.status!=='verified'||!result.browser){
+            setMessages(previous=>[...previous,{role:"assistant",content:resultText(result)+" Nowej próby nie wykonano automatycznie."}]);return;
+          }
+          browserActions++;
+          snapshot=result.browser;
+          if(plan.task.kind==='browser_click'&&viewKey(snapshot)===before)noEffect.set(actionKey,(noEffect.get(actionKey)||0)+1);
+        }
+        setMessages(previous=>[...previous,{role:"assistant",content:stopBrowser.current?"Zatrzymałem zadanie w przeglądarce. Wykonane kroki pozostają widoczne w oknie Chromium NaviMind.":"Zatrzymałem zadanie po 12 krokach. Sprawdź aktualny widok; nie uznaję całego zadania za zakończone."}]);
+      } else if (desktopMode && !attachedImage) {
         if (!connected || !tokenRef.current) throw new Error("Najpierw połącz komputer.");
         const status: AgentStatus = await localRequest(tokenRef.current, "/status");
         if (status.status !== "ready" || status.protocol !== 1) throw new Error("Wykonawca nie jest gotowy.");
@@ -167,6 +217,9 @@ export default function WorkspaceChat() {
     } catch (problem) {
       if (executionStarted) {
         setMessages(previous => [...previous, { role: "assistant", content: "**Brak potwierdzenia wyniku.** Połączenie przerwano podczas wykonania. Kliknij „Sprawdź wynik zadania”; nie wysyłaj ponownie tego samego polecenia." }]);
+      } else if (browserActions > 0) {
+        setMessages(previous=>[...previous,{role:"assistant",content:`Przerwałem planowanie po ${browserActions} wykonanych krokach. Ich efekty pozostają w oknie Chromium NaviMind. Sprawdź aktualny widok i podaj dalsze polecenie.`}]);
+        setError(problem instanceof Error ? problem.message : "Przerwano połączenie.");
       } else {
         setMessages(previousMessages);
         setText(content);
@@ -177,6 +230,7 @@ export default function WorkspaceChat() {
     } finally {
       sendingRef.current = false;
       setSending(false);
+      setBrowserProgress("");
       inputRef.current?.focus();
     }
   }
@@ -193,8 +247,11 @@ export default function WorkspaceChat() {
           <button type="button" disabled={sending || connecting || !!pendingJob} onClick={() => connected ? disconnect() : setPairing(value => !value)} className="rounded border border-slate-500 px-3 py-1 disabled:opacity-50">
             {connected ? "Rozłącz" : "Połącz komputer"}
           </button>
-          {connected && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={desktopMode} disabled={sending || !!pendingJob} onChange={event => setDesktopMode(event.target.checked)} />Praca na komputerze</label>}
+          {connected && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={desktopMode} disabled={sending || !!pendingJob} onChange={event => {setDesktopMode(event.target.checked);if(event.target.checked)setBrowserMode(false);}} />Praca na komputerze</label>}
         </div>
+        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={browserMode} disabled={sending || !!pendingJob || !agent?.browser?.available} onChange={event=>{setBrowserMode(event.target.checked);if(event.target.checked)setDesktopMode(false);}} />Przeglądarka · Chromium NaviMind</label>}
+        {connected && !agent?.browser?.available && <p className="mt-2 text-xs text-amber-200">Obsługa stron wymaga aktualnego wykonawcy uruchomionego z --browser.</p>}
+        {browserMode && <p className="mt-2 text-sm text-amber-100">Agent pracuje w osobnym oknie Chromium NaviMind. Po wysłaniu polecenia przekaże do modelu widoczny tekst i opisy elementów tej karty. Hasła, kody i dane pól nie są odczytywane. Logowanie oraz końcowe zatwierdzanie płatności, wysyłania i usuwania wykonujesz ręcznie.</p>}
         {pairing && <div className="mt-3 space-y-2 rounded-lg bg-slate-800 p-3">
           <p className="text-sm">Uruchom lokalnego wykonawcę w PowerShell. Wklej tutaj kod parowania z tego okna. Kod zostaje w tej karcie i służy wyłącznie do połączenia lokalnego.</p>
           <label htmlFor="pairing-code" className="block text-sm">Kod parowania</label>
@@ -218,13 +275,14 @@ export default function WorkspaceChat() {
             <div className="space-y-2 overflow-x-auto break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
           </article>
         ))}
-        {sending && <p role="status">NaviMind analizuje zadanie i przygotowuje wynik…</p>}
+        {sending && <p role="status">{browserProgress || "NaviMind analizuje zadanie i przygotowuje wynik…"}</p>}
+        {sending && browserMode && <button type="button" onClick={()=>{stopBrowser.current=true;setBrowserProgress("Zatrzymuję po bieżącym kroku…");}} className="rounded border border-amber-300 px-3 py-2">Zatrzymaj po bieżącym kroku</button>}
         {pendingJob && !sending && <button type="button" onClick={recover} className="rounded border border-amber-300 px-3 py-2">Sprawdź wynik zadania</button>}
         <div ref={bottomRef} />
       </section>
       <form onSubmit={send} className="sticky bottom-0 space-y-3 border-t border-slate-700 bg-slate-950 py-4">
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <label htmlFor="workspace-command" className="block text-sm">{image ? "Pytanie do zrzutu ekranu" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
+        <label htmlFor="workspace-command" className="block text-sm">{image ? "Pytanie do zrzutu ekranu" : browserMode ? "Polecenie dla przeglądarki" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
         <textarea id="workspace-command" ref={inputRef} value={text} rows={3} maxLength={8000}
           disabled={sending || !!pendingJob} onChange={event => setText(event.target.value)}
           onPaste={event => { const file = Array.from(event.clipboardData.files).find(file => file.type.startsWith("image/")); if (file) { event.preventDefault(); void attachImage(file); } }}
@@ -235,7 +293,7 @@ export default function WorkspaceChat() {
             }
           }}
           className="w-full resize-y rounded-xl border border-slate-600 bg-slate-900 p-3"
-          placeholder={desktopMode ? "Utwórz folder Oferta Top Trans i tabelę: 2 okna DKR 1000×1000 mm…" : "Napisz wiadomość…"} />
+          placeholder={browserMode ? "W formularzu wybierz Top Trans, ustaw 1100 × 1000 mm, antracyt i DKR. Pokaż podgląd." : desktopMode ? "Utwórz folder Oferta Top Trans i tabelę: 2 okna DKR 1000×1000 mm…" : "Napisz wiadomość…"} />
         <div className="space-y-2">
           <label className="inline-block cursor-pointer rounded border border-slate-500 px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-blue-400">
             {imageBusy ? "Wczytuję zrzut…" : "Dołącz zrzut ekranu"}
@@ -252,7 +310,7 @@ export default function WorkspaceChat() {
         </div>
         <div className="flex items-start justify-between gap-3">
           <MicrophoneButton disabled={sending || !!pendingJob} onResult={transcript => setText(previous => [previous.trim(), transcript].filter(Boolean).join(" "))} />
-          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{image ? "Wyślij zrzut" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
+          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{image ? "Wyślij zrzut" : browserMode ? "Wykonaj w przeglądarce" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
         </div>
         <p className="text-xs text-slate-400">Historia, zrzuty i parowanie działają w bieżącej karcie. Po odświeżeniu połącz komputer ponownie. Nagranie wysyłane jest do rozpoznania mowy po zatrzymaniu.</p>
       </form>
