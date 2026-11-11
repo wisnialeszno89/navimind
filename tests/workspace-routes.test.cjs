@@ -131,3 +131,19 @@ test('missing Lemon Squeezy account view gets a grounded next step without inven
   assert.equal(workspace.lemonAccountHelp('Jak działa refund w Lemon Squeezy?'),null);
   assert.equal(workspace.lemonAccountHelp('Chcę odzyskać pieniądze z Lemon Squeezy.',true),null);
 });
+
+
+test('refund execution request corrects outside-transfer advice and never reaches a model or executor', async () => {
+  process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='synthetic-test-key';
+  const before=modelCalls;
+  const history=[{role:'user',content:'W Lemon Squeezy chcę odzyskać wpłatę za własny zakup.'},{role:'assistant',content:'Jeśli nie ma Refund, wykonaj ręczny przelew poza panelem.'}];
+  const response=await chat.POST(new Request('https://test/api',{method:'POST',body:JSON.stringify({message:'Możesz to wykonać?',history})}));
+  const result=await response.json();
+  assert.equal(response.status,200);assert.equal(result.agentConnected,false);
+  assert.match(result.reply,/błędna rada/);assert.match(result.reply,/nie anuluje/);assert.match(result.reply,/menu akcji/);assert.match(result.reply,/nie steruje/);
+  assert.equal(modelCalls,before);
+  for(const content of ['Zrób tabelę z dwoma oknami', 'Czy mam zrobić ręczny przelew?', 'Dlaczego sklep jest nieaktywny?']) {
+    assert.equal(workspace.paymentExecutionHelp([...history,{role:'user',content}]),null);
+  }
+  assert.equal(workspace.paymentExecutionHelp([{role:'user',content:'Możesz to wykonać?'}]),null);
+});

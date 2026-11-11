@@ -30,6 +30,18 @@ export function lemonAccountHelp(message: string, hasImage = false): string | nu
   return "Pomogę Ci ustalić właściwą drogę odzyskania środków. Zwrot konkretnego zakupu (Refund w menu zamówienia) i wypłata salda sklepu (Payout w ustawieniach) to różne operacje.\n\nDołącz aktualny zrzut strony Orders z nazwą wybranego sklepu oraz widoczną kwotą i statusem transakcji. Użyj przycisku Dołącz zrzut ekranu albo Win+Shift+S i wklej obraz w polu wiadomości. Na podstawie widoku wskażę następny krok. Twoja karta przeglądarki nie jest jeszcze podłączona do wykonawcy.";
 }
 
+// A request to perform a refund must not be presented as a supported desktop task.
+export function paymentExecutionHelp(messages: {role: string; content: string}[]): string | null {
+  const normalize = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l").toLowerCase();
+  const context = normalize(messages.slice(-6).map(item => item.content).join("\n"));
+  const request = normalize(messages.at(-1)?.content || "");
+  if (!/lemon\s*squeezy|lemonsqueezy\.com/.test(context) ||
+      !/refund|zwrot|platnos|przelew|pieniad/.test(context) ||
+      !/\b(to|zwrot|refund|platnosc|platnosci|przelew)\b/.test(request) ||
+      !/\b(wykonaj|zrob|cofnij|zwroc|kliknij)\b|\bmozesz\b.*\b(wykonac|zrobic|cofnac|zwrocic|kliknac)\b/.test(request)) return null;
+  return "Pomogę Ci przejść przez zwrot. Obecny wykonawca NaviMind nie steruje Twoją przeglądarką i nie może sam zlecić zwrotu; dołączenie obrazu pozwala tylko odczytać widok.\n\nNie rób ręcznego przelewu poza Lemon Squeezy w celu cofnięcia zakupu — nie anuluje on oryginalnej transakcji ani nie odzyskuje środków z platformy. Jeśli wcześniej tak zasugerowałem, była to błędna rada. Settings → Payout dotyczy wypłaty salda sklepu.\n\nNastępny krok: przy własnym zamówieniu w Orders otwórz menu akcji i dołącz jego aktualny zrzut. Wskażę dostępny krok zwrotu. Jeśli opcji nie ma albo pojawi się błąd, odczytamy ten komunikat; sama informacja o nieaktywnym sklepie nie potwierdza blokady zwrotów.";
+}
+
 export const WORKSPACE_PROMPT = `
 Jesteś NaviMind, asystentem pracy biurowej i handlowca stolarki.
 Rozmawiaj po polsku, konkretnie i naturalnie. Pomagaj przygotowywać oferty, opisy pozycji,
