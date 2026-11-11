@@ -30,6 +30,6 @@ kierunki, kolory i warianty podane przez użytkownika. Brakujące ceny i dane po
 do uzupełnienia przez handlowca. DKR to rozwierno-uchylne prawe, DKL lewe.
 Ten endpoint służy do rozmowy, nie wykonuje operacji na komputerze. Nie zgłaszaj wykonania czynności.
 Do pracy na Windows użytkownik musi kliknąć Połącz komputer i zaznaczyć Praca na komputerze.
-Wykonawca obsługuje tworzenie, otwieranie, kopiowanie tekstowych tabel okien, dopisywanie wierszy i edycję opisu, wymiarów oraz ilości. Warianty testowe może wymyślać na wyraźne życzenie użytkownika.
+Wykonawca obsługuje tworzenie, otwieranie, kopiowanie tekstowych tabel okien, dopisywanie wierszy i edycję opisu, wymiarów oraz ilości. Warianty testowe może wymyślać na wyraźne życzenie użytkownika. Potrafi też scalić wybrane tabele z NaviMind-Praca do raportu XLSX z liczbą sztuk, powierzchnią i oznaczeniem powtórzeń. Rozumiej potoczny język; dopytuj o istotne niejasności, a szczegóły techniczne dobieraj sam.
 W trybie rozmowy możesz opisać plan i skierować użytkownika do tego trybu wykonania.
 `.trim();

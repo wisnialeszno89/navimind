@@ -20,13 +20,15 @@ const workspace = load('app/lib/workspace.ts');
 const row = { label: 'Okno DKR', width_mm: 1000, height_mm: 1000, quantity: 2 };
 const current = { folder: 'Oferta Top Trans', rows: [row], revision: 'a'.repeat(64) };
 let output;
+let queuedOutputs = null;
 let calls = 0;
 class FakeOpenAI {
   chat = { completions: { create: async input => {
     calls++;
     assert.equal(input.response_format.type, 'json_object');
     assert.ok(!JSON.stringify(input).includes('pairing-secret'));
-    return { choices: [{ message: { content: JSON.stringify(output) } }] };
+    const next = queuedOutputs?.length ? queuedOutputs.shift() : output;
+    return { choices: [{ message: { content: typeof next === 'string' ? next : JSON.stringify(next) } }] };
   } } };
 }
 const route = load('app/api/workspace/desktop-plan/route.ts', {
@@ -112,4 +114,33 @@ test('extended route accepts advertised capabilities and returns append rather t
   const result=await response.json();
   assert.equal(result.task.kind,'append_window_rows');
   assert.equal(result.expectedRevision,current.revision);
+});
+
+test('clarification is a non-executable decision and cannot smuggle a task', () => {
+  const question=planner.desktopPlan({decision:'clarify',reply:'Które okno zmienić: pozycję 1 czy 2?',task:null},current);
+  assert.equal(question.decision,'clarify');assert.equal(question.task,null);
+  assert.throws(()=>planner.desktopPlan({decision:'clarify',reply:'Które?',task:{kind:'update_window_width',row_number:1,width_mm:1100}},current));
+  assert.throws(()=>planner.desktopPlan({decision:'execute',reply:'Gotowe',task:null},current));
+});
+
+test('report proposal binds each source revision server-side and does not require active table', () => {
+  const tables=[{folder:'A',file_name:'tabela-okien.txt',row_count:2,revision:'b'.repeat(64)}];
+  const task={kind:'aggregate_window_tables',sources:[{folder:'A',file_name:'tabela-okien.txt'}],folder:'Raporty',file_name:'zestawienie.xlsx',open_result:true};
+  const result=planner.desktopPlan({decision:'execute',reply:'Plan raportu',task},null,planner.DESKTOP_CAPABILITIES,tables,[]);
+  assert.equal(result.task.sources[0].revision,tables[0].revision);
+  assert.equal(result.expectedRevision,null);
+  assert.throws(()=>planner.desktopPlan({reply:'plan',task:{...task,sources:[...task.sources,...task.sources]}},null,planner.DESKTOP_CAPABILITIES,tables));
+  assert.throws(()=>planner.desktopPlan({reply:'plan',task:{...task,sources:[{folder:'B',file_name:'nieznany.txt'}]}},null,planner.DESKTOP_CAPABILITIES,tables));
+  assert.throws(()=>planner.desktopPlan({reply:'plan',task},null,planner.DESKTOP_CAPABILITIES,tables,[{folder:'Raporty',file_name:'zestawienie.xlsx'}]));
+});
+
+test('planner repairs an invalid proposal without demanding technical syntax from the user', async () => {
+  process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='synthetic-test-key';
+  const before=calls;
+  queuedOutputs=[{decision:'execute',reply:'Plan',task:{kind:'shell',command:'anything'}},{decision:'clarify',reply:'Które okno mam zmienić: pierwsze czy drugie?',task:null}];
+  try {
+    const response=await route.POST(request({message:'to duże zrób szersze',currentTable:current,capabilities:planner.DESKTOP_CAPABILITIES,tables:[]}));
+    assert.equal(response.status,200);
+    const result=await response.json();assert.equal(result.decision,'clarify');assert.equal(result.task,null);assert.equal(calls-before,2);
+  } finally {queuedOutputs=null;}
 });

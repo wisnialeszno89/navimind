@@ -4,14 +4,18 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MicrophoneButton from "./MicrophoneButton";
-import type { TableContext, TableInfo } from "@/lib/desktop-plan";
+import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
 
 type Message = { role: "user" | "assistant"; content: string };
-type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; warning?: string | null; currentTable: (TableContext & { file: string }) | null };
-type TaskResult = { status: "verified" | "review"; message: string; file?: string; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
+type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; currentTable: (TableContext & { file: string }) | null };
+type TaskResult = { status: "verified" | "review"; message: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
   if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message;
+  if (result.summary) {
+    const summary = result.summary;
+    return `**Arkusz zapisany i sprawdzony.** ${result.message}\n\nPlik: ${result.file}\n\nPodgląd: ${result.preview}\n\n| Wynik | Wartość |\n|---|---:|\n| Pliki źródłowe | ${summary.files} |\n| Pozycje | ${summary.positions} |\n| Sztuki | ${summary.quantity} |\n| Powierzchnia [m²] | ${summary.area_m2} |\n| Wiersze z powtórzeniem | ${summary.duplicate_rows} |\n| Grupy powtórzeń | ${summary.duplicate_groups} |\n\nPowtórzenia oznaczono bez usuwania. Sumy obejmują wszystkie wybrane źródła.`;
+  }
   const rows = result.rows || [];
   return `**Wykonano i sprawdzono plik.** ${result.message}\n\nPlik: ${result.file}\n\n` +
     "| Pozycja | Opis | Szerokość [mm] | Wysokość [mm] | Sztuki |\n|---|---|---:|---:|---:|\n" +
@@ -105,7 +109,7 @@ export default function WorkspaceChat() {
         } : null;
         const response = await fetch("/api/workspace/desktop-plan", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: content, history, currentTable, capabilities: status.capabilities, tables: status.tables }),
+          body: JSON.stringify({ message: content, history, currentTable, capabilities: status.capabilities, tables: status.tables, reports: status.reports }),
         });
         const plan = await response.json();
         if (!response.ok) throw new Error(plan.message || "Nie udało się przygotować zadania.");
@@ -168,8 +172,9 @@ export default function WorkspaceChat() {
           {connecting && <p role="status" className="text-sm text-blue-200">Łączę z lokalnym wykonawcą. Sprawdź pytanie przeglądarki o dostęp lokalny. Test odpowiedzi potrwa do 10 sekund.</p>}
           {pairingError && <p role="alert" className="rounded border border-red-400 bg-red-950 p-3 text-sm text-red-100">{pairingError}</p>}
         </div>}
-        {connected && <p className="mt-2 text-xs text-slate-300">Tabele okien: tworzenie, dopisywanie, edycja i osobne pliki przez Notatnik. Pliki: Pulpit / NaviMind-Praca.{agent?.currentTable && ` Aktywny plik: ${agent.currentTable.folder} / ${agent.currentTable.file_name || "tabela-okien.txt"}.`}</p>}
+        {connected && <p className="mt-2 text-xs text-slate-300">Tabele okien: edycja i osobne pliki. Raport XLSX: scalanie, sztuki, powierzchnia i powtórzenia. Pliki: Pulpit / NaviMind-Praca.{agent?.currentTable && ` Aktywny plik: ${agent.currentTable.folder} / ${agent.currentTable.file_name || "tabela-okien.txt"}.`}</p>}
         {connected && agent?.capabilities && !agent.capabilities.includes("append_window_rows") && <p className="mt-2 text-sm text-amber-200">Zaktualizuj lokalnego wykonawcę, aby dopisywać i edytować pozycje.</p>}
+        {connected && agent?.capabilities && !agent.capabilities.includes("aggregate_window_tables") && <p className="mt-2 text-sm text-amber-200">Raport XLSX wymaga aktualizacji lokalnego wykonawcy.</p>}
         {agent?.warning && <p role="alert" className="mt-2 text-sm text-amber-200">{agent.warning}</p>}
       </header>
       <section aria-label="Rozmowa" aria-live="polite" className="flex-1 space-y-4 py-6">
