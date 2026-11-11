@@ -99,6 +99,25 @@ export function desktopPlan(value:unknown,current:TableContext|null,capabilities
  }
  return {decision:'execute',task:validated,reply:'Plan: wykonanie zadania tabeli i sprawdzenie wyniku lokalnie.',expectedRevision};
 }
+export function unresolvedDimensionQuestion(message:string, history:{role:string;content:string}[], task:DesktopTask|null):string|null {
+ if(!task)return null;
+ const changesDimensions=task.kind==='create_window_table'||task.kind==='append_window_rows'||task.kind==='update_window_width'||task.kind==='edit_window_rows'&&task.changes.some(change=>'width_mm' in change.fields||'height_mm' in change.fields);
+ if(!changesDimensions)return null;
+ const units=/\b(?:mm|cm|m|milimetr\p{L}*|centymetr\p{L}*|metr\p{L}*)\b/iu;
+ if(units.test(message))return null;
+ const unitContext=history.some(item=>item.role==='user'&&(
+  /\b(?:wszystkie|wszystko|zawsze|domyślnie)\b.{0,60}\b(?:mm|cm|milimetr\p{L}*|centymetr\p{L}*|metr\p{L}*)\b/iu.test(item.content)||
+  /^\s*(?:w\s+)?(?:mm|cm|m|milimetr\p{L}*|centymetr\p{L}*|metrach|metry)[.!]?\s*$/iu.test(item.content)
+ ));
+ if(unitContext)return null;
+ const pair=/([0-9]+(?:[.,][0-9]+)?)\s*(?:x|×|na)\s*([0-9]+(?:[.,][0-9]+)?)/gi;
+ for(const match of message.matchAll(pair)){
+  const a=Number(match[1].replace(',','.')),b=Number(match[2].replace(',','.'));
+  if(a>0&&b>0&&a<500&&b<500)return `Wymiary ${match[1]} × ${match[2]} podajesz w centymetrach, milimetrach czy metrach?`;
+ }
+ return null;
+}
+
 export const DESKTOP_PLAN_PROMPT = `Jesteś planistą lokalnego wykonawcy Windows NaviMind.
 Zwracaj wyłącznie JSON: {"decision":"execute|clarify|respond","reply":"krótka informacja, nigdy niepotwierdzony sukces", "task": obiekt lub null}.
 DECYDOWANIE: execute oznacza gotowe zadanie, clarify jedno konkretne pytanie bez zadania (task:null), respond odpowiedź informacyjną bez zadania. Nie łącz pytania wymagającego odpowiedzi z wykonaniem zmian.

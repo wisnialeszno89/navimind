@@ -144,3 +144,17 @@ test('planner repairs an invalid proposal without demanding technical syntax fro
     const result=await response.json();assert.equal(result.decision,'clarify');assert.equal(result.task,null);assert.equal(calls-before,2);
   } finally {queuedOutputs=null;}
 });
+
+test('small unqualified dimensions force a question instead of guessed conversion', async () => {
+  const task={kind:'append_window_rows',rows:[{...row,width_mm:1500,height_mm:1400,quantity:1}]};
+  assert.match(planner.unresolvedDimensionQuestion('dopisz jedno okno 150 na 140',[],task),/centymetrach/);
+  assert.equal(planner.unresolvedDimensionQuestion('dopisz jedno okno 150 na 140 cm',[],task),null);
+  assert.equal(planner.unresolvedDimensionQuestion('dopisz jedno okno 150 na 140',[{role:'user',content:'Wszystkie wymiary podaję w cm.'}],task),null);
+  assert.equal(planner.unresolvedDimensionQuestion('dopisz jedno okno 150 na 140',[{role:'user',content:'Centymetry.'}],task),null);
+  assert.equal(planner.unresolvedDimensionQuestion('dopisz jedno okno 1500 na 1400',[],task),null);
+  process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='synthetic-test-key';
+  output={decision:'execute',reply:'Plan',task};
+  const response=await route.POST(request({message:'Dopisz jedno okno 150 na 140',currentTable:current,capabilities:planner.DESKTOP_CAPABILITIES,tables:[]}));
+  const result=await response.json();
+  assert.equal(result.decision,'clarify');assert.equal(result.task,null);
+});

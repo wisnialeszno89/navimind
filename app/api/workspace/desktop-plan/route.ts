@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { isPrivateWorkspace, workspaceMessages } from "@/lib/workspace";
-import { DESKTOP_PLAN_PROMPT, desktopPlan, tableContext, tableCatalog, desktopCapabilities, reportCatalog } from "@/lib/desktop-plan";
+import { DESKTOP_PLAN_PROMPT, desktopPlan, tableContext, tableCatalog, desktopCapabilities, reportCatalog, unresolvedDimensionQuestion } from "@/lib/desktop-plan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +38,11 @@ export async function POST(req: Request) {
       });
       const content = response.choices[0]?.message.content || "";
       try {
-        return NextResponse.json(desktopPlan(JSON.parse(content), current, capabilities, tables, reports));
+        const plan = desktopPlan(JSON.parse(content), current, capabilities, tables, reports);
+        const latest = messages[messages.length-1];
+        const question = unresolvedDimensionQuestion(latest.content, messages.slice(0,-1), plan.task);
+        if(question)return NextResponse.json({decision: "clarify", task: null, reply: question, expectedRevision: null});
+        return NextResponse.json(plan);
       } catch (problem) {
         if (attempt === 1) throw problem;
         const category = problem instanceof SyntaxError ? "INVALID_JSON" : problem instanceof Error ? problem.message : "INVALID_PLAN";
