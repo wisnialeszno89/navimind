@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MicrophoneButton from "./MicrophoneButton";
 import type { TableContext } from "@/lib/desktop-plan";
-import { localRequest, pairingCode } from "@/lib/desktop-connection";
+import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
 
 type Message = { role: "user" | "assistant"; content: string };
 type AgentStatus = { status: string; protocol: number; warning?: string | null; currentTable: (TableContext & { file: string }) | null };
@@ -26,6 +26,8 @@ export default function WorkspaceChat() {
   const [pairing, setPairing] = useState(false);
   const [pairingError, setPairingError] = useState("");
   const [code, setCode] = useState("");
+  const [showPairingCode, setShowPairingCode] = useState(false);
+  const codeLength = cleanPairingCode(code).length;
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [desktopMode, setDesktopMode] = useState(false);
@@ -51,6 +53,7 @@ export default function WorkspaceChat() {
       setConnected(true);
       setDesktopMode(true);
       setCode("");
+      setShowPairingCode(false);
       setPairing(false);
     } catch (problem) {
       setPairingError(problem instanceof Error ? problem.message : "Błąd połączenia z lokalnym wykonawcą.");
@@ -159,7 +162,8 @@ export default function WorkspaceChat() {
         {pairing && <div className="mt-3 space-y-2 rounded-lg bg-slate-800 p-3">
           <p className="text-sm">Uruchom lokalnego wykonawcę w PowerShell. Wklej tutaj kod parowania z tego okna. Kod zostaje w tej karcie i służy wyłącznie do połączenia lokalnego.</p>
           <label htmlFor="pairing-code" className="block text-sm">Kod parowania</label>
-          <div className="flex gap-2"><input id="pairing-code" type="password" autoComplete="off" value={code} onChange={event => { setCode(event.target.value); setPairingError(""); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void connect(); } }} aria-describedby="pairing-help" aria-invalid={!!pairingError} className="min-w-0 flex-1 rounded bg-slate-900 p-2" /><button type="button" onClick={connect} disabled={connecting || !code.trim()} className="rounded bg-blue-600 px-3 py-2 disabled:opacity-50">{connecting ? "Sprawdzam połączenie…" : "Połącz"}</button></div>
+          <div className="flex gap-2"><input id="pairing-code" type={showPairingCode ? "text" : "password"} spellCheck={false} autoCapitalize="none" autoComplete="off" value={code} onChange={event => { setCode(event.target.value); setPairingError(""); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void connect(); } }} aria-describedby="pairing-help" aria-invalid={!!pairingError} className="min-w-0 flex-1 rounded bg-slate-900 p-2" /><button type="button" aria-pressed={showPairingCode} aria-controls="pairing-code" onClick={() => setShowPairingCode(value => !value)} className="rounded border border-slate-500 px-3 py-2">{showPairingCode ? "Ukryj kod" : "Pokaż kod"}</button><button type="button" onClick={connect} disabled={connecting || !code.trim()} className="rounded bg-blue-600 px-3 py-2 disabled:opacity-50">{connecting ? "Sprawdzam połączenie…" : "Połącz"}</button></div>
+          <p role="status" className="text-sm text-slate-200">Wklejono {codeLength} znaków kodu. Oczekiwane: 43.</p>
           <p id="pairing-help" className="text-xs text-slate-300">Kod musi pochodzić z wykonawcy uruchomionego na tym samym komputerze. Zostaw jego okno otwarte.</p>
           {connecting && <p role="status" className="text-sm text-blue-200">Łączę z lokalnym wykonawcą. Sprawdź pytanie przeglądarki o dostęp lokalny. Test odpowiedzi potrwa do 10 sekund.</p>}
           {pairingError && <p role="alert" className="rounded border border-red-400 bg-red-950 p-3 text-sm text-red-100">{pairingError}</p>}

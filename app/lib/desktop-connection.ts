@@ -1,9 +1,15 @@
 const BRIDGE = "http://127.0.0.1:43127";
 
+export function cleanPairingCode(value: string) {
+  return value.trim().replace(/^KOD_PAROWANIA\s*=\s*/i, "")
+    .replace(/^["']|["']$/g, "").replace(/[\s\u200B-\u200D\u2060\uFEFF]/g, "");
+}
+
 export function pairingCode(value: string) {
-  // Accept copying the labelled terminal line as well as the clipboard's bare code.
-  const token = value.trim().replace(/^KOD_PAROWANIA\s*=\s*/i, "").trim();
-  if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) throw new Error("Wklej kod parowania z aktualnego okna PowerShell. Możesz wkleić cały wiersz KOD_PAROWANIA=…");
+  const token = cleanPairingCode(value);
+  if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) {
+    throw new Error(`Nieprawidłowy wpis: odczytano ${token.length} znaków kodu. Kod wykonawcy ma 43 znaki: litery, cyfry, myślnik lub podkreślenie. Kliknij Pokaż kod i sprawdź, co zostało wklejone.`);
+  }
   return token;
 }
 

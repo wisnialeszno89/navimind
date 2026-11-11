@@ -15,8 +15,10 @@ const token = 'synthetic-test-pairing-token-0123456789012345';
 test('pairing accepts the bare clipboard code and a labelled terminal line', () => {
   assert.equal(pairingCode(token), token);
   assert.equal(pairingCode('  KOD_PAROWANIA=' + token + ' \r\n'), token);
-  assert.throws(() => pairingCode('short'));
-  assert.throws(() => pairingCode(token + '\nother code'));
+  assert.equal(pairingCode('KOD_PAROWANIA=\"' + token + '\"'), token);
+  assert.equal(pairingCode(token.slice(0,20) + '\u200b\r\n' + token.slice(20)), token);
+  assert.throws(() => pairingCode('short'), /odczytano 5 znaków/);
+  assert.throws(() => pairingCode(token + '\n' + token));
 });
 test('connection keeps credentials on loopback and makes auth failures actionable', async () => {
   const previous = global.fetch;
