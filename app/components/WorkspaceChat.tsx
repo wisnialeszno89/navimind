@@ -122,6 +122,7 @@ export default function WorkspaceChat() {
     const history = previousMessages.slice(-12).map(({role, content}) => ({role, content}));
     const attachedImage = image;
     const attachedName = imageName;
+    if (attachedImage) setDesktopMode(false);
     setMessages(previous => [...previous, { role: "user", content, ...(attachedImage ? {image: attachedImage} : {}) }]);
     setText("");
     setImage(null);

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
-import { isPrivateWorkspace, workspaceMessages, WORKSPACE_PROMPT } from "@/lib/workspace";
+import { isPrivateWorkspace, workspaceMessages, WORKSPACE_PROMPT, lemonAccountHelp } from "@/lib/workspace";
 
 import { readWorkspaceBody, workspaceImage } from "@/lib/workspace-image";
 
@@ -19,6 +19,8 @@ export async function POST(req: Request) {
     const large = problem instanceof Error && problem.message === "REQUEST_TOO_LARGE";
     return NextResponse.json({ error: large ? "REQUEST_TOO_LARGE" : "INVALID_MESSAGE", message: large ? "Wiadomość jest za duża. Zrzut może mieć do 2 MB." : "Sprawdź wiadomość i zrzut ekranu. Obsługiwane formaty: PNG, JPG, WebP, do 2 MB." }, { status: large ? 413 : 400 });
   }
+  const help = lemonAccountHelp(messages[messages.length-1].content, !!screenshot);
+  if (help) return NextResponse.json({reply: help, agentConnected: false});
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json({ error: "MODEL_NOT_CONFIGURED", message: "Brakuje konfiguracji modelu na serwerze." }, { status: 503 });
   }

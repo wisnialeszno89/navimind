@@ -119,3 +119,15 @@ test('streamed uploads are bounded even without a content-length header', async 
   const response=await chat.POST(new Request('https://test/api',{method:'POST',body:stream,duplex:'half'}));
   assert.equal(response.status,413);assert.equal(modelCalls,before);assert.equal(cancelled,true);
 });
+
+test('missing Lemon Squeezy account view gets a grounded next step without invented refund forms', async () => {
+  process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='synthetic-test-key';
+  const before=modelCalls;
+  const response=await chat.POST(new Request('https://test/api',{method:'POST',body:JSON.stringify({message:'Wejdź na https://app.lemonsqueezy.com/orders otwarte w przeglądarce, chcę odzyskać pieniądze, które wpłaciłem.',history:[]})}));
+  const result=await response.json();
+  assert.match(result.reply,/zrzut/);assert.match(result.reply,/Refund/);assert.match(result.reply,/Payout/);
+  assert.doesNotMatch(result.reply,/Request Refund|Wypełnij formularz/);
+  assert.equal(modelCalls,before);
+  assert.equal(workspace.lemonAccountHelp('Jak działa refund w Lemon Squeezy?'),null);
+  assert.equal(workspace.lemonAccountHelp('Chcę odzyskać pieniądze z Lemon Squeezy.',true),null);
+});

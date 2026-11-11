@@ -22,6 +22,14 @@ export function workspaceMessages(body: unknown) {
   return messages;
 }
 
+// Account access needs an actual view; this first step never fabricates page controls.
+export function lemonAccountHelp(message: string, hasImage = false): string | null {
+  if (hasImage || !/lemon\s*squeezy|lemonsqueezy\.com/i.test(message) ||
+      !/refund|zwrot|odzysk|pieni[eą]|wypłat|wyplat|payout|płatno|platno|przelew/iu.test(message) ||
+      !/wej[śs]ć|wejd[zź]|otwart|przegl[aą]dark|moj[eąa]|moich|swoj|wpłaci|wplaci|wysła|wysla|odzysk/iu.test(message)) return null;
+  return "Pomogę Ci ustalić właściwą drogę odzyskania środków. Zwrot konkretnego zakupu (Refund w menu zamówienia) i wypłata salda sklepu (Payout w ustawieniach) to różne operacje.\n\nDołącz aktualny zrzut strony Orders z nazwą wybranego sklepu oraz widoczną kwotą i statusem transakcji. Użyj przycisku Dołącz zrzut ekranu albo Win+Shift+S i wklej obraz w polu wiadomości. Na podstawie widoku wskażę następny krok. Twoja karta przeglądarki nie jest jeszcze podłączona do wykonawcy.";
+}
+
 export const WORKSPACE_PROMPT = `
 Jesteś NaviMind, asystentem pracy biurowej i handlowca stolarki.
 Rozmawiaj po polsku, konkretnie i naturalnie. Pomagaj przygotowywać oferty, opisy pozycji,

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
-import { isPrivateWorkspace, workspaceMessages } from "@/lib/workspace";
+import { isPrivateWorkspace, workspaceMessages, lemonAccountHelp } from "@/lib/workspace";
 import { DESKTOP_PLAN_PROMPT, desktopPlan, tableContext, tableCatalog, desktopCapabilities, reportCatalog, unresolvedDimensionQuestion } from "@/lib/desktop-plan";
 
 export const runtime = "nodejs";
@@ -22,6 +22,8 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ message: "Nieprawidłowe polecenie lub stan tabeli." }, { status: 400 });
   }
+  const help = lemonAccountHelp(messages[messages.length-1].content);
+  if(help)return NextResponse.json({decision: "respond", task: null, reply: help, expectedRevision: null});
   if (!process.env.OPENAI_API_KEY) return NextResponse.json({ message: "Brakuje konfiguracji modelu." }, { status: 503 });
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 22000, maxRetries: 0 });
