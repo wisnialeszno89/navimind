@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import {NextResponse} from 'next/server';
 import {isPrivateWorkspace,workspaceMessages} from '@/lib/workspace';
 import {readWorkspaceBody} from '@/lib/workspace-image';
-import {browserSnapshot,browserDecision,BROWSER_PROMPT} from '@/lib/browser-plan';
+import {browserSnapshot,browserDecision,navigationURLs,BROWSER_PROMPT} from '@/lib/browser-plan';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
@@ -18,7 +18,7 @@ export async function POST(req:Request){
   for(let attempt=0;attempt<2;attempt++){
    const response=await client.chat.completions.create({model:process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini',messages:conversation,response_format:{type:'json_object'},temperature:0,max_tokens:1200});
    const content=response.choices[0]?.message.content||'';
-   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot));}catch{
+   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,navigationURLs(messages[messages.length-1].content)));}catch{
     if(attempt===1)throw Error('INVALID_PLAN');
     conversation.push({role:'assistant',content},{role:'system',content:'Propozycja nie spełnia formatu albo odwołuje się do nieistniejącego elementu/opcji. Niczego nie wykonano. Popraw jeden krok na podstawie aktualnego controls albo zwróć review z task:null.'});
    }

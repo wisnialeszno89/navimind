@@ -36,3 +36,11 @@ test('malformed proposals are repaired before any local action and review stays 
  replies=[{decision:'act',reply:'Plan',task:{kind:'browser_click',ref:'invented'}},{decision:'review',reply:'Potrzebne ręczne zatwierdzenie.',task:null}];
  const before=calls,response=await route.POST(request()),plan=await response.json();assert.equal(response.status,200);assert.equal(calls,before+2);assert.equal(plan.task,null);assert.equal(plan.decision,'review');
 });
+
+
+test('new navigation is bound to URLs explicitly supplied in the current user command',()=>{
+ const urls=lib.navigationURLs('Otwórz https://example.org/orders.');assert.deepEqual(urls,['https://example.org/orders']);
+ const plan={decision:'act',reply:'Otwieram stronę.',task:{kind:'browser_navigate',url:'https://example.org/orders'}};
+ assert.throws(()=>lib.browserDecision(plan,snapshot));assert.equal(lib.browserDecision(plan,snapshot,urls).task.url,urls[0]);
+ assert.throws(()=>lib.browserDecision({...plan,task:{kind:'browser_navigate',url:'https://other.example/?data=private'}},snapshot,urls));
+});

@@ -13,3 +13,5 @@ Hasła, kody, końcowe wysyłanie, usuwanie, zakupy, zwroty oraz wypłaty wymaga
 Domyślne laboratorium: `Wybierz dokładnie Top Trans, ustaw szerokość 1100 mm, wysokość 1000 mm, kolor antracyt, okucie DKR i pokaż podgląd.` Oczekiwany widok końcowy zawiera PODGLĄD GOTOWY i zgodne dane. Cena i zamówienie nie powstają. Test natywnego adaptera na Windows: `python tools/test_navimind_browser_live.py --execute-live`.
 
 Walidacja serwera i route: `node --test tests/browser-plan.test.cjs`. Testy lokalne sesji, wersji widoku, idempotencji, niewysyłania wartości i blokad: `python -m unittest discover -s tests -p test_navimind_browser.py`. Próbę Chromium na Windows wykonuje się oddzielnie; testy atrap DOM jej nie zastępują.
+
+Nowy adres nawigacji musi pochodzić z bieżącego polecenia użytkownika jako pełny http/https. Odnośniki otwieramy w obrębie bieżącej domeny; przejście do innej domeny wymaga nowego jawnego polecenia z jej pełnym adresem. Agent nie tworzy adresów z danych odczytanych na stronie.
