@@ -78,3 +78,38 @@ test('route returns executable plan with revision, never a fabricated execution 
   output = { task: { kind: 'shell', command: 'anything' }, reply: 'bad' };
   assert.equal((await route.POST(request({ message: 'test', currentTable: null }))).status, 503);
 });
+
+test('append and field patches preserve intent and bind to the active revision', () => {
+  const context = {...current, rows: [row, {...row, label:'Okno dwuskrzydłowe'}]};
+  const extra = {...row, height_mm:1300};
+  const append = planner.desktopPlan({task:{kind:'append_window_rows',rows:[extra]},reply:'plan'},context);
+  assert.deepEqual(append.task,{kind:'append_window_rows',rows:[extra]});
+  assert.equal(append.expectedRevision,context.revision);
+  const edit = planner.desktopPlan({task:{kind:'edit_window_rows',changes:[{row_number:2,fields:{height_mm:1400,quantity:3}}]},reply:'plan'},context);
+  assert.deepEqual(edit.task.changes[0].fields,{height_mm:1400,quantity:3});
+  assert.throws(()=>planner.desktopPlan({task:{kind:'append_window_rows',rows:[extra]},reply:'plan'},context,['create_window_table','update_window_width']));
+  assert.throws(()=>planner.desktopPlan({task:{kind:'edit_window_rows',changes:[{row_number:1,fields:{quantity:0}}]},reply:'plan'},context));
+});
+
+test('new variant file uses the same folder without replacing the original; open binds catalog revision', () => {
+  const context={...current,file_name:'tabela-okien.txt'};
+  const tables=[{folder:current.folder,file_name:'tabela-okien.txt',row_count:1,revision:current.revision}];
+  const create=planner.desktopPlan({task:{kind:'create_window_table',folder:current.folder,file_name:'warianty-okien.txt',rows:Array.from({length:10},(_,i)=>({...row,label:`Wariant testowy ${i+1}`,width_mm:1000+i*50}))},reply:'plan'},context,planner.DESKTOP_CAPABILITIES,tables);
+  assert.equal(create.task.rows.length,10);
+  assert.equal(create.expectedRevision,null);
+  assert.throws(()=>planner.desktopPlan({task:{kind:'create_window_table',folder:current.folder,rows:[row]},reply:'plan'},context,planner.DESKTOP_CAPABILITIES,tables));
+  const open=planner.desktopPlan({task:{kind:'open_window_table',folder:current.folder,file_name:'tabela-okien.txt'},reply:'plan'},null,planner.DESKTOP_CAPABILITIES,tables);
+  assert.equal(open.expectedRevision,current.revision);
+  assert.throws(()=>planner.desktopPlan({task:{kind:'open_window_table',folder:current.folder,file_name:'nieznane.txt'},reply:'plan'},null,planner.DESKTOP_CAPABILITIES,tables));
+});
+
+test('extended route accepts advertised capabilities and returns append rather than a create request', async () => {
+  process.env.NAVIMIND_WORKSPACE_MODE='private';
+  process.env.OPENAI_API_KEY='synthetic-test-key';
+  output={task:{kind:'append_window_rows',rows:[{...row,height_mm:1300}]},reply:'plan'};
+  const response=await route.POST(request({message:'dopisz Okno DKR 1000 1300 2',currentTable:{...current,file_name:'tabela-okien.txt'},capabilities:planner.DESKTOP_CAPABILITIES,tables:[]}));
+  assert.equal(response.status,200);
+  const result=await response.json();
+  assert.equal(result.task.kind,'append_window_rows');
+  assert.equal(result.expectedRevision,current.revision);
+});
