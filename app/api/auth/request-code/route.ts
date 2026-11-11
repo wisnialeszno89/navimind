@@ -6,8 +6,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    console.log("KV URL:", process.env.KV_REST_API_URL);
-    console.log("KV TOKEN:", process.env.KV_REST_API_TOKEN);
 
     const body = await req.json().catch(() => null);
     const email = body?.email as string | undefined;
