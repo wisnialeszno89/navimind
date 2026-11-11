@@ -44,3 +44,14 @@ test('new navigation is bound to URLs explicitly supplied in the current user co
  assert.throws(()=>lib.browserDecision(plan,snapshot));assert.equal(lib.browserDecision(plan,snapshot,urls).task.url,urls[0]);
  assert.throws(()=>lib.browserDecision({...plan,task:{kind:'browser_navigate',url:'https://other.example/?data=private'}},snapshot,urls));
 });
+
+
+test('payment and submission proposals become manual review before a local task is sent',()=>{
+ for(const changed of [{name:'Refund'},{name:'Payout'},{name:'Potwierdź zwrot'},{name:'Usuń pozycję'},{name:'Dalej',type:'submit'}]){
+  const c={...control,tag:'button',type:'button',...changed};
+  const plan=lib.browserDecision({decision:'act',reply:'Klikam',task:{kind:'browser_click',ref:c.ref}},{...snapshot,controls:[c]});
+  assert.equal(plan.decision,'review');assert.equal(plan.task,null);assert.match(plan.reply,/ręcznej obsługi/);
+ }
+ const secret={...control,name:'Hasło',type:'password'};
+ assert.equal(lib.browserDecision({decision:'act',reply:'Wpisuję',task:{kind:'browser_fill',ref:secret.ref,text:'not-a-real-secret'}},{...snapshot,controls:[secret]}).task,null);
+});
