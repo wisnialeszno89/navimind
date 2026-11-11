@@ -5,27 +5,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MicrophoneButton from "./MicrophoneButton";
 import type { TableContext } from "@/lib/desktop-plan";
+import { localRequest, pairingCode } from "@/lib/desktop-connection";
 
 type Message = { role: "user" | "assistant"; content: string };
 type AgentStatus = { status: string; protocol: number; warning?: string | null; currentTable: (TableContext & { file: string }) | null };
 type TaskResult = { status: "verified" | "review"; message: string; file?: string; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
-const BRIDGE = "http://127.0.0.1:43127";
-
-// Pairing credentials travel only to loopback, never to the model or Vercel.
-async function localRequest(token: string, path: string, body?: unknown): Promise<any> {
-  const options: RequestInit & { targetAddressSpace?: string } = {
-    method: body === undefined ? "GET" : "POST",
-    headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
-    mode: "cors", credentials: "omit", cache: "no-store",
-    signal: AbortSignal.timeout(body === undefined ? 10000 : 90000),
-    targetAddressSpace: "loopback",
-  };
-  if (body !== undefined) options.body = JSON.stringify(body);
-  const response = await fetch(BRIDGE + path, options);
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.message || "Sprawdź kod parowania i uruchom lokalnego wykonawcę.");
-  return result;
-}
 function resultText(result: TaskResult) {
   if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message;
   const rows = result.rows || [];
@@ -40,6 +24,7 @@ export default function WorkspaceChat() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [pairing, setPairing] = useState(false);
+  const [pairingError, setPairingError] = useState("");
   const [code, setCode] = useState("");
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -56,10 +41,9 @@ export default function WorkspaceChat() {
   async function connect() {
     if (connecting) return;
     setConnecting(true);
-    setError("");
+    setPairingError("");
     try {
-      const token = code.trim();
-      if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) throw new Error("Wklej kod parowania z okna PowerShell.");
+      const token = pairingCode(code);
       const status: AgentStatus = await localRequest(token, "/status");
       if (status.status !== "ready" || status.protocol !== 1) throw new Error("Zaktualizuj lokalnego wykonawcę.");
       tokenRef.current = token;
@@ -69,7 +53,7 @@ export default function WorkspaceChat() {
       setCode("");
       setPairing(false);
     } catch (problem) {
-      setError(problem instanceof TypeError ? "Brak połączenia z wykonawcą. Uruchom go w PowerShell i zezwól przeglądarce na dostęp do komputera lokalnego, jeśli o to zapyta." : problem instanceof Error ? problem.message : "Błąd połączenia.");
+      setPairingError(problem instanceof Error ? problem.message : "Błąd połączenia z lokalnym wykonawcą.");
     } finally { setConnecting(false); }
   }
 
@@ -175,7 +159,10 @@ export default function WorkspaceChat() {
         {pairing && <div className="mt-3 space-y-2 rounded-lg bg-slate-800 p-3">
           <p className="text-sm">Uruchom lokalnego wykonawcę w PowerShell. Wklej tutaj kod parowania z tego okna. Kod zostaje w tej karcie i służy wyłącznie do połączenia lokalnego.</p>
           <label htmlFor="pairing-code" className="block text-sm">Kod parowania</label>
-          <div className="flex gap-2"><input id="pairing-code" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} className="min-w-0 flex-1 rounded bg-slate-900 p-2" /><button type="button" onClick={connect} disabled={connecting || !code.trim()} className="rounded bg-blue-600 px-3 py-2 disabled:opacity-50">{connecting ? "Łączenie…" : "Połącz"}</button></div>
+          <div className="flex gap-2"><input id="pairing-code" type="password" autoComplete="off" value={code} onChange={event => { setCode(event.target.value); setPairingError(""); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void connect(); } }} aria-describedby="pairing-help" aria-invalid={!!pairingError} className="min-w-0 flex-1 rounded bg-slate-900 p-2" /><button type="button" onClick={connect} disabled={connecting || !code.trim()} className="rounded bg-blue-600 px-3 py-2 disabled:opacity-50">{connecting ? "Sprawdzam połączenie…" : "Połącz"}</button></div>
+          <p id="pairing-help" className="text-xs text-slate-300">Kod musi pochodzić z wykonawcy uruchomionego na tym samym komputerze. Zostaw jego okno otwarte.</p>
+          {connecting && <p role="status" className="text-sm text-blue-200">Łączę z lokalnym wykonawcą. Sprawdź pytanie przeglądarki o dostęp lokalny. Test odpowiedzi potrwa do 10 sekund.</p>}
+          {pairingError && <p role="alert" className="rounded border border-red-400 bg-red-950 p-3 text-sm text-red-100">{pairingError}</p>}
         </div>}
         {connected && <p className="mt-2 text-xs text-slate-300">Pilot: tworzenie tekstowej tabeli okien i korekta szerokości wskazanej pozycji przez Notatnik. Pliki: Pulpit / NaviMind-Praca.{agent?.currentTable && ` Aktywna tabela: ${agent.currentTable.folder}.`}</p>}
         {agent?.warning && <p role="alert" className="mt-2 text-sm text-amber-200">{agent.warning}</p>}
