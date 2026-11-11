@@ -7,7 +7,7 @@ import MicrophoneButton from "./MicrophoneButton";
 import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; content: string; image?: string };
 type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; currentTable: (TableContext & { file: string }) | null };
 type TaskResult = { status: "verified" | "review"; message: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
@@ -27,6 +27,10 @@ export default function WorkspaceChat() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [image, setImage] = useState<string | null>(null);
+  const [imageName, setImageName] = useState("");
+  const [imageBusy, setImageBusy] = useState(false);
+  const imageGeneration = useRef(0);
   const [pairing, setPairing] = useState(false);
   const [pairingError, setPairingError] = useState("");
   const [code, setCode] = useState("");
@@ -86,20 +90,45 @@ export default function WorkspaceChat() {
     } finally { sendingRef.current = false; setSending(false); }
   }
 
+  async function attachImage(file: File) {
+    if (sendingRef.current || pendingJob) return;
+    const generation = ++imageGeneration.current;
+    setImageBusy(true);
+    setImage(null);
+    setImageName("");
+    setError("");
+    try {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 2 * 1024 * 1024 || !file.size) throw new Error("Wybierz PNG, JPG lub WebP do 2 MB. Duży zrzut możesz zapisać jako JPG.");
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Nie udało się odczytać zrzutu."));
+        reader.onerror = () => reject(new Error("Nie udało się odczytać zrzutu."));
+        reader.readAsDataURL(file);
+      });
+      if (generation === imageGeneration.current) { setImage(data); setImageName(file.name || "Zrzut ekranu"); }
+    } catch (problem) {
+      if (generation === imageGeneration.current) setError(problem instanceof Error ? problem.message : "Nie udało się dodać zrzutu.");
+    } finally { if (generation === imageGeneration.current) setImageBusy(false); }
+  }
+
   async function send(event: FormEvent) {
     event.preventDefault();
-    const content = text.trim();
-    if (!content || sendingRef.current || pendingJob) return;
+    const content = text.trim() || (image ? "Pomóż zinterpretować ten zrzut i wskaż następny krok." : "");
+    if (!content || sendingRef.current || pendingJob || imageBusy) return;
     sendingRef.current = true;
     setSending(true);
     setError("");
     const previousMessages = messages;
-    const history = previousMessages.slice(-12);
-    setMessages(previous => [...previous, { role: "user", content }]);
+    const history = previousMessages.slice(-12).map(({role, content}) => ({role, content}));
+    const attachedImage = image;
+    const attachedName = imageName;
+    setMessages(previous => [...previous, { role: "user", content, ...(attachedImage ? {image: attachedImage} : {}) }]);
     setText("");
+    setImage(null);
+    setImageName("");
     let executionStarted = false;
     try {
-      if (desktopMode) {
+      if (desktopMode && !attachedImage) {
         if (!connected || !tokenRef.current) throw new Error("Najpierw połącz komputer.");
         const status: AgentStatus = await localRequest(tokenRef.current, "/status");
         if (status.status !== "ready" || status.protocol !== 1) throw new Error("Wykonawca nie jest gotowy.");
@@ -128,7 +157,7 @@ export default function WorkspaceChat() {
       } else {
         const response = await fetch("/api/workspace/chat", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: content, history }),
+          body: JSON.stringify({ message: content, history, ...(attachedImage ? {image: attachedImage} : {}) }),
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "Nie udało się wysłać wiadomości.");
@@ -140,6 +169,8 @@ export default function WorkspaceChat() {
       } else {
         setMessages(previousMessages);
         setText(content);
+        setImage(attachedImage);
+        setImageName(attachedName);
         setError(problem instanceof Error ? problem.message : "Błąd połączenia.");
       }
     } finally {
@@ -182,18 +213,20 @@ export default function WorkspaceChat() {
         {messages.map((message, index) => (
           <article key={index} className={`rounded-xl p-4 ${message.role === "user" ? "ml-6 bg-blue-900" : "mr-6 bg-slate-800"}`}>
             <p className="mb-2 text-xs text-slate-300">{message.role === "user" ? "Ty" : "NaviMind"}</p>
+            {message.image && <img src={message.image} alt="Zrzut dołączony do tej wiadomości" className="mb-3 max-h-80 max-w-full rounded border border-slate-500 object-contain" />}
             <div className="space-y-2 overflow-x-auto break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
           </article>
         ))}
-        {sending && <p role="status">{desktopMode ? "Agent przygotowuje zadanie, wykonuje je i sprawdza wynik…" : "NaviMind przygotowuje odpowiedź…"}</p>}
+        {sending && <p role="status">NaviMind analizuje zadanie i przygotowuje wynik…</p>}
         {pendingJob && !sending && <button type="button" onClick={recover} className="rounded border border-amber-300 px-3 py-2">Sprawdź wynik zadania</button>}
         <div ref={bottomRef} />
       </section>
       <form onSubmit={send} className="sticky bottom-0 space-y-3 border-t border-slate-700 bg-slate-950 py-4">
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <label htmlFor="workspace-command" className="block text-sm">{desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
+        <label htmlFor="workspace-command" className="block text-sm">{image ? "Pytanie do zrzutu ekranu" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
         <textarea id="workspace-command" ref={inputRef} value={text} rows={3} maxLength={8000}
           disabled={sending || !!pendingJob} onChange={event => setText(event.target.value)}
+          onPaste={event => { const file = Array.from(event.clipboardData.files).find(file => file.type.startsWith("image/")); if (file) { event.preventDefault(); void attachImage(file); } }}
           onKeyDown={event => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
@@ -202,11 +235,25 @@ export default function WorkspaceChat() {
           }}
           className="w-full resize-y rounded-xl border border-slate-600 bg-slate-900 p-3"
           placeholder={desktopMode ? "Utwórz folder Oferta Top Trans i tabelę: 2 okna DKR 1000×1000 mm…" : "Napisz wiadomość…"} />
+        <div className="space-y-2">
+          <label className="inline-block cursor-pointer rounded border border-slate-500 px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-blue-400">
+            {imageBusy ? "Wczytuję zrzut…" : "Dołącz zrzut ekranu"}
+            <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={sending || !!pendingJob || imageBusy}
+              onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void attachImage(file); }} />
+          </label>
+          <p className="text-xs text-slate-400">Możesz też wykonać zrzut przez Win+Shift+S i wkleić Ctrl+V w polu wiadomości. PNG, JPG, WebP, do 2 MB.</p>
+          {image && <div className="rounded-lg border border-slate-600 p-3">
+            <img src={image} alt="Zrzut przygotowany do wysłania" className="max-h-48 max-w-full rounded object-contain" />
+            <p className="mt-2 text-xs">{imageName}</p>
+            <p className="mt-1 text-xs text-amber-200">Po wysłaniu zrzut zostanie przekazany do modelu NaviMind do analizy. Ta wiadomość nie uruchomi działań na komputerze. Ukryj zbędne dane przed wysłaniem.</p>
+            <button type="button" disabled={sending} onClick={() => { imageGeneration.current++; setImage(null); setImageName(""); }} className="mt-2 text-sm underline">Usuń zrzut</button>
+          </div>}
+        </div>
         <div className="flex items-start justify-between gap-3">
           <MicrophoneButton disabled={sending || !!pendingJob} onResult={transcript => setText(previous => [previous.trim(), transcript].filter(Boolean).join(" "))} />
-          <button type="submit" disabled={sending || !!pendingJob || !text.trim()} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{desktopMode ? "Wykonaj" : "Wyślij"}</button>
+          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{image ? "Wyślij zrzut" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
         </div>
-        <p className="text-xs text-slate-400">Historia i parowanie działają w bieżącej karcie. Po odświeżeniu połącz komputer ponownie. Nagranie wysyłane jest do rozpoznania mowy po zatrzymaniu.</p>
+        <p className="text-xs text-slate-400">Historia, zrzuty i parowanie działają w bieżącej karcie. Po odświeżeniu połącz komputer ponownie. Nagranie wysyłane jest do rozpoznania mowy po zatrzymaniu.</p>
       </form>
     </main>
   );
