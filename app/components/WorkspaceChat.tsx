@@ -7,7 +7,7 @@ import MicrophoneButton from "./MicrophoneButton";
 import type { TableContext } from "@/lib/desktop-plan";
 
 type Message = { role: "user" | "assistant"; content: string };
-type AgentStatus = { status: string; protocol: number; currentTable: (TableContext & { file: string }) | null };
+type AgentStatus = { status: string; protocol: number; warning?: string | null; currentTable: (TableContext & { file: string }) | null };
 type TaskResult = { status: "verified" | "review"; message: string; file?: string; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 const BRIDGE = "http://127.0.0.1:43127";
 
@@ -178,6 +178,7 @@ export default function WorkspaceChat() {
           <div className="flex gap-2"><input id="pairing-code" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} className="min-w-0 flex-1 rounded bg-slate-900 p-2" /><button type="button" onClick={connect} disabled={connecting || !code.trim()} className="rounded bg-blue-600 px-3 py-2 disabled:opacity-50">{connecting ? "Łączenie…" : "Połącz"}</button></div>
         </div>}
         {connected && <p className="mt-2 text-xs text-slate-300">Pilot: tworzenie tekstowej tabeli okien i korekta szerokości wskazanej pozycji przez Notatnik. Pliki: Pulpit / NaviMind-Praca.{agent?.currentTable && ` Aktywna tabela: ${agent.currentTable.folder}.`}</p>}
+        {agent?.warning && <p role="alert" className="mt-2 text-sm text-amber-200">{agent.warning}</p>}
       </header>
       <section aria-label="Rozmowa" aria-live="polite" className="flex-1 space-y-4 py-6">
         {messages.length === 0 && <p className="text-slate-300">Napisz zadanie lub nagraj polecenie. Po nagraniu sprawdź tekst i naciśnij Wyślij.</p>}

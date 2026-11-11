@@ -52,7 +52,7 @@ export function desktopPlan(value: unknown, current: TableContext | null) {
     if (!current) throw new Error("NO_CURRENT_TABLE");
     validated = { kind: task.kind, row_number: number(task.row_number, 1, current.rows.length), width_mm: number(task.width_mm, 100, 10000) };
   } else throw new Error("UNSUPPORTED_TASK");
-  return { task: validated, reply: input.reply, expectedRevision: validated.kind === "update_window_width" ? current!.revision : null };
+  return { task: validated, reply: validated.kind === "create_window_table" ? "Plan: utworzenie i sprawdzenie tabeli okien." : "Plan: zmiana szerokości wskazanej pozycji i sprawdzenie pozostałych danych.", expectedRevision: validated.kind === "update_window_width" ? current!.revision : null };
 }
 export const DESKTOP_PLAN_PROMPT = `Jesteś planistą lokalnego wykonawcy Windows NaviMind.
 Zwracaj wyłącznie JSON: {"reply":"krótka informacja o planie, nigdy o sukcesie", "task": obiekt lub null}.
