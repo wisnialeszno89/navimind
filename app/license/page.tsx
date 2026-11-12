@@ -1,64 +1,36 @@
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Download, KeyRound, LockKeyhole, Monitor, ShieldCheck, ShoppingCart } from "lucide-react";
 
-export const metadata = {
-  title: "Aktywacja licencji NaviMind – podgląd",
-  description: "Zobacz planowany proces zakupu, wydania licencji i aktywacji NaviMind na komputerze.",
-};
-
-const stages = [
-  { label: "1. Wybór pakietu", description: "Klient wybierze subskrypcję Personal albo Business.", icon: ShoppingCart },
-  { label: "2. Potwierdzona płatność", description: "Dopiero serwerowe potwierdzenie operatora umożliwi wydanie licencji.", icon: CheckCircle2 },
-  { label: "3. Wydanie kodu licencji", description: "Indywidualny kod zostanie przypisany do konta i konkretnej subskrypcji.", icon: KeyRound },
-  { label: "4. Aktywacja na komputerze", description: "Klient zainstaluje aplikację, zaloguje się i aktywuje uprawnione stanowisko.", icon: Monitor },
+export const metadata={title:"Licencja NaviMind – podgląd aktywacji"};
+const steps=[
+  {name:"Wybór pakietu",desc:"Użytkownik wybiera Personal lub Business.",icon:ShoppingCart},
+  {name:"Potwierdzona płatność",desc:"Serwer weryfikuje opłaconą subskrypcję.",icon:CheckCircle2},
+  {name:"Indywidualny kod",desc:"Licencja trafia wyłącznie do uprawnionego klienta.",icon:KeyRound},
+  {name:"Aktywacja stanowiska",desc:"Po zgodzie użytkownika aplikacja paruje komputer.",icon:Monitor}
 ];
-
-export default function LicensePreviewPage() {
-  return (
-    <main className="relative z-10 min-h-screen px-4 py-14 text-slate-100 sm:px-6">
-      <section className="mx-auto max-w-5xl">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">NaviMind · licencja i komputer</p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">Jedna licencja. Kontrolowany dostęp.</h1>
-        <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">Tak będzie wyglądała aktywacja NaviMind po uruchomieniu sprzedaży. Obecnie to wyłącznie interaktywny podgląd ekranów — bez wydawania kodów i połączeń z urządzeniem.</p>
-        <div className="mt-7 flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-300/5 p-4 text-sm leading-6 text-amber-100">
-          <LockKeyhole className="shrink-0" size={21} />
-          <span>Tryb demonstracyjny. Zakup, generowanie kodów, pobieranie instalatora i aktywacja komputera są wyłączone.</span>
-        </div>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {stages.map(({label,description,icon:Icon})=>(
-            <article key={label} className="rounded-2xl border border-white/10 bg-slate-900/65 p-6">
-              <Icon className="mb-4 text-blue-300" size={25}/>
-              <h2 className="text-lg font-semibold">{label}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
-            </article>
-          ))}
-        </div>
-        <div className="mt-10 grid gap-6 rounded-3xl border border-white/10 bg-slate-900/80 p-6 lg:grid-cols-2 lg:p-9">
-          <div>
-            <p className="text-sm font-semibold text-blue-300">Podgląd panelu klienta</p>
-            <h2 className="mt-3 text-2xl font-semibold">Moja licencja NaviMind</h2>
-            <dl className="mt-6 space-y-4 text-sm">
-              <div className="flex justify-between gap-4 border-b border-white/10 pb-3"><dt className="text-slate-400">Status zakupu</dt><dd className="font-semibold text-amber-200">Niedostępny w wersji demo</dd></div>
-              <div className="flex justify-between gap-4 border-b border-white/10 pb-3"><dt className="text-slate-400">Licencja</dt><dd className="font-semibold">Nieprzydzielona</dd></div>
-              <div className="flex justify-between gap-4 border-b border-white/10 pb-3"><dt className="text-slate-400">Kod aktywacyjny</dt><dd className="font-mono text-slate-500">•••• •••• ••••</dd></div>
-              <div className="flex justify-between gap-4 border-b border-white/10 pb-3"><dt className="text-slate-400">Połączone komputery</dt><dd className="font-semibold">0</dd></div>
-            </dl>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-black/25 p-6">
-            <div className="flex items-center gap-3 text-white"><Monitor className="text-blue-300"/><h3 className="font-semibold">Aktywuj komputer</h3></div>
-            <label htmlFor="inactive-license" className="mt-6 block text-xs font-semibold uppercase tracking-wider text-slate-400">Indywidualny kod po zakupie</label>
-            <input id="inactive-license" type="text" disabled aria-describedby="license-lock-notice" placeholder="Kod dostępny po zakupie licencji" className="mt-2 w-full cursor-not-allowed rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-500"/>
-            <button type="button" disabled className="mt-4 w-full cursor-not-allowed rounded-xl bg-slate-600 px-4 py-3 font-semibold text-slate-300">Aktywacja niedostępna</button>
-            <button type="button" disabled className="mt-3 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-3 text-sm text-slate-500"><Download size={17}/> Instalator – w przygotowaniu</button>
-            <p id="license-lock-notice" className="mt-4 text-xs leading-6 text-slate-400">To tylko makieta formularza. Niczego nie wysyła do serwera, nie sprawdza kodu i nie łączy się z komputerem.</p>
-          </div>
-        </div>
-        <div className="mt-8 flex items-start gap-3 rounded-xl border border-blue-400/20 bg-blue-400/5 p-5 text-sm leading-7 text-slate-300">
-          <ShieldCheck className="mt-1 shrink-0 text-blue-300" size={21}/>
-          <p>Docelowo kod licencji nie będzie hasłem dostępu zdalnego do komputera. Aplikacja lokalna musi osobno uzyskać zgodę użytkownika, potwierdzić uprawnienia i ograniczać wykonywane akcje. Sam zakup nie włącza zdalnego sterowania.</p>
-        </div>
-        <Link href="/plans" className="mt-10 inline-flex items-center gap-2 rounded-xl bg-blue-500 px-6 py-3 font-semibold text-white hover:bg-blue-400"><ArrowLeft size={17}/> Powrót do pakietów</Link>
-      </section>
-    </main>
-  );
+export default function LicensePreviewPage(){
+ return <main className="nm-page pb-24 pt-16">
+  <div className="nm-shell">
+    <div className="max-w-3xl"><span className="nm-kicker"><ShieldCheck size={15}/> Aktywacja na Twoich zasadach</span><h1 className="nm-display mt-7">Twoja licencja.<br/><span style={{color:"#6753a6"}}>Twoja kontrola.</span></h1><p className="nm-lead mt-6">Zobacz, jak po uruchomieniu sprzedaży będzie przebiegał zakup, wydanie kodu i aktywacja komputera. Teraz to wyłącznie prezentacja.</p><div className="nm-note mt-7">Tryb demonstracyjny: płatności, wydawanie kodów, instalator i aktywacja urządzeń są wyłączone.</div></div>
+    <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{steps.map(({name,desc,icon:Icon},i)=><div className="nm-card p-6" key={name}><div className="flex items-center justify-between"><div className="nm-step-number">0{i+1}</div><Icon className="text-[#6753a6]" size={23}/></div><h2 className="mt-6 text-lg font-bold">{name}</h2><p className="mt-2 text-sm leading-7 text-[#746c7c]">{desc}</p></div>)}</div>
+    <div className="nm-card mt-12 grid gap-9 p-7 sm:p-10 lg:grid-cols-2">
+      <div><span className="nm-label">Wizualizacja panelu klienta</span><h2 className="mt-4 text-3xl font-bold">Moja licencja</h2><dl className="mt-7 space-y-4 text-sm">
+       <div className="flex justify-between gap-3 border-b border-[#ebe9f0] pb-4"><dt className="nm-muted">Status zakupu</dt><dd className="font-semibold text-[#765b9c]">Nieaktywny</dd></div>
+       <div className="flex justify-between gap-3 border-b border-[#ebe9f0] pb-4"><dt className="nm-muted">Licencja</dt><dd className="font-semibold">Nieprzydzielona</dd></div>
+       <div className="flex justify-between gap-3 border-b border-[#ebe9f0] pb-4"><dt className="nm-muted">Kod aktywacyjny</dt><dd className="font-mono text-[#a39aab]">•••• •••• ••••</dd></div>
+       <div className="flex justify-between gap-3 border-b border-[#ebe9f0] pb-4"><dt className="nm-muted">Połączone urządzenia</dt><dd className="font-semibold">0</dd></div>
+      </dl></div>
+      <div className="rounded-2xl border border-[#e5e0ed] bg-[#faf9fd] p-6">
+       <div className="flex items-center gap-3"><Monitor className="text-[#6753a6]"/><h3 className="text-lg font-bold">Aktywuj komputer</h3></div>
+       <label htmlFor="nm-inactive-license" className="nm-label mt-8 block">Kod po opłaceniu subskrypcji</label>
+       <input id="nm-inactive-license" disabled placeholder="Kod dostępny po zakupie" className="mt-3 w-full rounded-xl border border-[#ded9e7] bg-white px-4 py-3 text-sm text-[#726c7b]"/>
+       <button disabled className="mt-4 w-full rounded-xl bg-[#6753a6] px-4 py-3 font-semibold text-white">Aktywacja niedostępna</button>
+       <button disabled className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#d9d4e2] bg-white px-4 py-3 text-sm text-[#786e80]"><Download size={17}/> Instalator w przygotowaniu</button>
+       <p className="mt-4 text-xs leading-6 text-[#7b7583]">Pola demonstracyjne nie wysyłają danych i nie komunikują się z komputerem.</p>
+      </div>
+    </div>
+    <div className="mt-8 flex max-w-4xl items-start gap-3 rounded-2xl border border-[#ded8ee] bg-[#f1edf9] p-5 text-sm leading-7 text-[#5f5374]"><LockKeyhole size={20} className="mt-1 shrink-0"/> Kod licencji nie jest zdalnym hasłem do komputera. Aktywacja urządzenia i zgoda na wykonywanie zadań będą osobnymi etapami.</div>
+    <Link href="/plans" className="nm-btn-secondary mt-9"><ArrowLeft size={17}/> Wróć do pakietów</Link>
+  </div>
+ </main>;
 }
