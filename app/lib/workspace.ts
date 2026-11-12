@@ -3,7 +3,7 @@ export function isPrivateWorkspace() {
   return process.env.NAVIMIND_WORKSPACE_MODE === "private";
 }
 
-export function workspaceMessages(body: unknown) {
+export function workspaceMessages(body: unknown, historyLimit = 8000) {
   if (!body || typeof body !== "object") throw new Error("INVALID_MESSAGE");
   const input = body as { message?: unknown; history?: unknown };
   if (typeof input.message !== "string" || !input.message.trim() || input.message.length > 8000) {
@@ -13,7 +13,7 @@ export function workspaceMessages(body: unknown) {
   const messages: { role: "user" | "assistant"; content: string }[] = [];
   for (const item of history) {
     if (!item || typeof item !== "object" || !["user", "assistant"].includes(item.role) ||
-        typeof item.content !== "string" || item.content.length > 8000) {
+        typeof item.content !== "string" || item.content.length > historyLimit) {
       throw new Error("INVALID_HISTORY");
     }
     messages.push({ role: item.role, content: item.content });

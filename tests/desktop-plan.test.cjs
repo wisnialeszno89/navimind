@@ -182,3 +182,30 @@ test('diagnostics are independent of the active table and cannot specify command
  assert.throws(()=>planner.desktopPlan({decision:'execute',reply:'Plan',task:{...task,command:'anything'}},current));
  assert.throws(()=>planner.desktopPlan({decision:'execute',reply:'Plan',task:{...task,file_name:'x.exe'}},current));
 });
+
+test('complete specification uses independent text document and root alias, not a table revision', () => {
+  const content='Specyfikacja\nA: DL, trzy szyby, kod TEST-701605, zamek i elektrozaczep.\nListwa transportowa opcjonalna 30 mm poza wysokością.\n';
+  const task={kind:'save_offer_specification',folder:'NaviMind-Praca',file_name:'Specyfikacja testowa.txt',content};
+  const plan=planner.desktopPlan({decision:'execute',reply:'Plan zapisu',task},current);
+  assert.equal(plan.task.folder,null);assert.equal(plan.task.content,content);assert.equal(plan.expectedRevision,null);
+  assert.throws(()=>planner.desktopPlan({reply:'Plan',task},null,['create_window_table']));
+  assert.throws(()=>planner.desktopPlan({reply:'Plan',task:{...task,folder:'../escape'}},null));
+  assert.throws(()=>planner.desktopPlan({reply:'Plan',task:{...task,content:'bad\u0000text'}},null));
+});
+
+test('desktop context retains lengthy PDF equipment while ordinary chat limits stay unchanged', async () => {
+  process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='test-only';
+  const history=[{role:'assistant',content:'Źródłowa specyfikacja i wyposażenie. '.repeat(350)}];
+  assert.throws(()=>workspace.workspaceMessages({message:'Zapisz specyfikację',history}));
+  assert.equal(workspace.workspaceMessages({message:'Zapisz specyfikację',history},48000)[0].content,history[0].content);
+  output={decision:'execute',reply:'Plan zapisu',task:{kind:'save_offer_specification',folder:null,file_name:'Specyfikacja.txt',content:'Pełny tekst testowy\n'}};
+  const response=await route.POST(request({message:'Zapisz pełną specyfikację z wyposażeniem',history,currentTable:null,capabilities:planner.DESKTOP_CAPABILITIES}));
+  assert.equal(response.status,200);assert.equal((await response.json()).task.kind,'save_offer_specification');
+});
+
+test('full equipment save cannot be reported as a truncated dimension table', async () => {
+  process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='test-only';
+  queuedOutputs=[{decision:'execute',reply:'Plan',task:{kind:'create_window_table',folder:'Test',rows:[row]}},{decision:'execute',reply:'Plan',task:{kind:'save_offer_specification',folder:null,file_name:'Specyfikacja.txt',content:'Pełna treść z wyposażeniem.\n'}}];
+  const response=await route.POST(request({message:'Zapisz pełną specyfikację z wyposażeniem',capabilities:planner.DESKTOP_CAPABILITIES}));
+  assert.equal((await response.json()).task.kind,'save_offer_specification');queuedOutputs=null;
+});

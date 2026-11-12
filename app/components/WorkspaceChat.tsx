@@ -12,9 +12,10 @@ import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-conne
 
 type Message = { role: "user" | "assistant"; content: string; image?: string; documentName?:string };
 type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; native?: {available:boolean;scope:string;title:string}; currentTable: (TableContext & { file: string }) | null };
-type TaskResult = { status: "verified" | "review"; message: string; browser_export?: {image_file:string;report_file:string;goal_verified:boolean;price_verified:boolean;screenshot_scope:string}; native?: NativeSnapshot; system_report?: any; native_result?: {saved_pixels_changed:boolean;goal_verified:boolean}; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
+type TaskResult = { specification?: {content:string;readback_verified:boolean;sha256:string}; status: "verified" | "review"; message: string; browser_export?: {image_file:string;report_file:string;goal_verified:boolean;price_verified:boolean;screenshot_scope:string}; native?: NativeSnapshot; system_report?: any; native_result?: {saved_pixels_changed:boolean;goal_verified:boolean}; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
   if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message + (result.file ? "\n\nPlik: " + result.file : "");
+  if(result.specification)return `**Specyfikacja zapisana i ponownie odczytana.** ${result.message}\n\nPlik: ${result.file}\n\nKontrola obejmuje zgodność całego zapisanego tekstu z przygotowaną treścią. Nie jest ponowną kontrolą źródłowego PDF.\n\n${result.specification.content}`;
   if(result.browser_export)return `**Widok zapisany na Pulpicie.** ${result.message}\n\nZrzut PNG: ${result.browser_export.image_file}\n\nRaport JSON: ${result.browser_export.report_file}\n\nZapis obejmuje aktualny widok. Cena i zgodność całej oferty nie zostały niezależnie potwierdzone.`;
   if(result.native)return "**Krok w aplikacji odczytany.** "+result.message+" Sprawdź okno Painta i podaj dalsze polecenie; całego zadania nie wznowiono automatycznie.";
   if(result.native_result)return `**Zapis pliku potwierdzony.** ${result.message}\n\nPlik: ${result.file}\n\nZmianę pikseli sprawdzono lokalnie. Zgodność rysunku z poleceniem wymaga oceny wizualnej.`;
@@ -153,6 +154,7 @@ export default function WorkspaceChat() {
     setError("");
     const previousMessages = messages;
     const history = previousMessages.slice(-12).map(({role, content}) => ({role, content:content.length>8000?"Wcześniejszy odczyt dokumentu jest zbyt obszerny do historii. Nie zakładaj dostępności wszystkich pozycji. Poproś użytkownika o wskazanie konkretnej pozycji i parametrów przed wykonaniem.":content}));
+    const desktopHistory = previousMessages.slice(-12).map(({role,content})=>({role,content:content.length<=48000?content:"Pełny wcześniejszy dokument nie mieści się w kontekście. Nie zapisuj skróconej specyfikacji jako pełnej; poproś o ponowny odczyt źródła."}));
     const attachedImage = image;
     const attachedName = imageName;
     const attachedPDF = pdf;
@@ -231,7 +233,7 @@ export default function WorkspaceChat() {
         } : null;
         const response = await fetch("/api/workspace/desktop-plan", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: content, history, currentTable, capabilities: status.capabilities, tables: status.tables, reports: status.reports }),
+          body: JSON.stringify({ message: content, history: desktopHistory, currentTable, capabilities: status.capabilities, tables: status.tables, reports: status.reports }),
         });
         const plan = await response.json();
         if (!response.ok) throw new Error(plan.message || "Nie udało się przygotować zadania.");

@@ -12,9 +12,9 @@ export async function POST(req: Request) {
   let messages, current, tables, capabilities, reports;
   try {
     const text = await req.text();
-    if (text.length > 128 * 1024) throw new Error("TOO_LARGE");
+    if (text.length > 640 * 1024) throw new Error("TOO_LARGE");
     const body = JSON.parse(text);
-    messages = workspaceMessages(body);
+    messages = workspaceMessages(body, 48000);
     current = tableContext(body.currentTable);
     tables = tableCatalog(body.tables);
     reports = reportCatalog(body.reports);
@@ -36,12 +36,15 @@ export async function POST(req: Request) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const response = await client.chat.completions.create({
         model: process.env.NAVIMIND_WORKSPACE_MODEL || "gpt-4.1-mini",
-        messages: conversation, response_format: {type: "json_object"}, temperature: 0, max_tokens: 6000,
+        messages: conversation, response_format: {type: "json_object"}, temperature: 0, max_tokens: capabilities.includes("save_offer_specification") ? 14000 : 6000,
       });
       const content = response.choices[0]?.message.content || "";
       try {
         const plan = desktopPlan(JSON.parse(content), current, capabilities, tables, reports);
         const latest = messages[messages.length-1];
+        const specificationIntent = /^(?:tak|ok|okej|wykonaj|zrób|proszę|prosze|kontynuuj)\b|j\.?\s*w\.?/iu.test(latest.content) ? messages.filter(item=>item.role==='user').slice(-5) : [latest];
+        const fullSpecification = specificationIntent.some(item=>/pełn\p{L}*\s+(?:specyfikac|wyposaż)|zapis\p{L}*.{0,100}specyfikac/iu.test(item.content));
+        if(fullSpecification && plan.task?.kind==='create_window_table')throw Error('FULL_SPECIFICATION_REQUIRES_DOCUMENT_NOT_TABLE');
         const question = unresolvedDimensionQuestion(latest.content, messages.slice(0,-1), plan.task);
         if(question)return NextResponse.json({decision: "clarify", task: null, reply: question, expectedRevision: null});
         return NextResponse.json(plan);
