@@ -1,101 +1,54 @@
 import Link from "next/link";
-import { ArrowRight, Check, CircleHelp, Cpu, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Bot, Check, CircleHelp, Cpu, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { commercialPlans } from "../lib/commercialPlans";
 
-export const metadata = {
-  title: "Pakiety NaviMind – Personal i Business",
-  description: "Wstępny cennik NaviMind: automatyzacja komputera dla użytkowników prywatnych i firm.",
-};
+export const metadata = {title:"Pakiety NaviMind – Personal i Business",description:"Poznaj przyszłe pakiety NaviMind. Cennik demonstracyjny, płatności nieaktywne."};
+type Plan=(typeof commercialPlans)[number];
 
-export default function PlansPage() {
-  return (
-    <main className="relative z-10 min-h-screen px-4 pb-24 pt-14 text-slate-100 sm:px-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">
-            <Sparkles size={14} /> NaviMind desktop agent
-          </p>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
-            Twój komputer. <span className="text-blue-400">Więcej możliwości.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-            Wybierz pakiet agenta, który pomaga wykonywać powtarzalne zadania w aplikacjach.
-            Lokalne działania i inteligencja AI w jednym miejscu.
-          </p>
-          <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-300/5 px-5 py-3 text-sm text-amber-100">
-            Wersja przedpremierowa cennika. Pakiety, limity i zakup nie są jeszcze aktywne.
-            Poniższe ceny są propozycją, nie ofertą zakupu.
-          </div>
-        </div>
-
-        <div className="mt-14 flex items-end justify-between gap-4 border-b border-white/10 pb-4">
-          <div><p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Dla Ciebie</p>
-          <h2 className="mt-1 text-2xl font-semibold">NaviMind Personal</h2></div>
-          <span className="hidden text-sm text-slate-400 sm:block">Ceny miesięczne brutto</span>
-        </div>
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
-          {commercialPlans.filter((plan) => plan.category === "personal").map((plan) => (
-            <PlanCard key={plan.id} plan={plan} />
-          ))}
-        </div>
-
-        <div className="mt-16 flex items-end justify-between gap-4 border-b border-white/10 pb-4">
-          <div><p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Dla firm</p>
-          <h2 className="mt-1 text-2xl font-semibold">NaviMind Business</h2></div>
-          <span className="hidden text-sm text-slate-400 sm:block">Ceny miesięczne netto, VAT według przepisów</span>
-        </div>
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
-          {commercialPlans.filter((plan) => plan.category === "business").map((plan) => (
-            <PlanCard key={plan.id} plan={plan} />
-          ))}
-        </div>
-
-        <section className="mt-16 grid gap-4 md:grid-cols-3">
-          <InfoCard icon={<Cpu size={22} />} title="Działanie lokalne" description="Znane czynności mogą być wykonywane lokalnie, bez każdorazowego użycia płatnego modelu." />
-          <InfoCard icon={<ShieldCheck size={22} />} title="Kontrola kosztów" description="Każdy pakiet zakłada limit wykorzystania AI. Kosztowne zadania wymagają dodatkowego budżetu." />
-          <InfoCard icon={<LockKeyhole size={22} />} title="Twoje decyzje" description="Docelowo wybierzesz pakiet AI lub własny klucz dostawcy. Uprawnienia i płatności dopiero powstaną." />
-        </section>
-
-        <section className="mx-auto mt-16 max-w-3xl rounded-3xl border border-white/10 bg-white/5 p-7 sm:p-9">
-          <div className="mb-4 flex items-center gap-2 text-blue-300"><CircleHelp size={20} /><h2 className="text-xl font-semibold text-white">Jak działają pakiety?</h2></div>
-          <div className="space-y-5 text-sm leading-7 text-slate-300">
-            <p><strong className="text-white">Czy agent może być włączony przez całą dobę?</strong> Tak planujemy dostępność aplikacji, ale aktywne wywołania AI wykorzystują przydzielony budżet. Nie oferujemy nieograniczonego AI.</p>
-            <p><strong className="text-white">Co po wykorzystaniu AI?</strong> Planowane są doładowania, przejście na wyższy plan lub własny klucz API. Bez automatycznego pobierania dodatkowych pieniędzy.</p>
-            <p><strong className="text-white">Czy pakiet Business obejmuje wdrożenie?</strong> Nie. Nauka procesów w konkretnych programach i indywidualne wdrożenia będą wyceniane oddzielnie.</p>
-            <p><strong className="text-white">Czy mogę już zapłacić?</strong> Nie. Obecnie można tylko obejrzeć planowany proces wyboru. Żaden przycisk nie uruchamia transakcji.</p>
-          </div>
-        </section>
-        <p className="mx-auto mt-10 max-w-3xl text-center text-xs leading-6 text-slate-500">
-          Cennik demonstracyjny. Funkcje, ceny i dostępność podlegają zmianie przed uruchomieniem sprzedaży.
-          Pakiety nie są jeszcze powiązane z uprawnieniami obecnej wersji NaviMind PRO / PRO+.
-        </p>
+export default function PlansPage(){
+  return <main className="nm-page pb-24 pt-16">
+    <div className="nm-shell">
+      <div className="mx-auto max-w-3xl text-center">
+        <span className="nm-kicker"><Sparkles size={14}/> Plan dopasowany do Twojej pracy</span>
+        <h1 className="nm-display mt-7">Wybierz swój <span style={{color:"#6753a6"}}>pakiet.</span></h1>
+        <p className="nm-lead mx-auto mt-5 max-w-2xl">Proste zasady. Przejrzyste koszty. Narzędzie, które ma pomagać wykonywać zadania — nie tylko o nich rozmawiać.</p>
+        <div className="nm-note mx-auto mt-7 max-w-2xl">Wersja demonstracyjna. Pakiety, płatności i aktywacje są obecnie wyłączone. Ceny mogą ulec zmianie przed premierą.</div>
       </div>
-    </main>
-  );
+      <div className="mt-16 flex flex-wrap items-end justify-between gap-4 border-b border-[#ddd9e7] pb-5"><div><p className="nm-eyebrow">Dla Ciebie</p><h2 className="mt-2 text-3xl font-bold tracking-tight">NaviMind Personal</h2></div><p className="text-sm text-[#787383]">Ceny miesięczne brutto</p></div>
+      <div className="mt-7 grid gap-6 md:grid-cols-2">{commercialPlans.filter(p=>p.category==="personal").map(p=><PlanCard plan={p} key={p.id}/>)}</div>
+      <div className="mt-20 flex flex-wrap items-end justify-between gap-4 border-b border-[#ddd9e7] pb-5"><div><p className="nm-eyebrow">Dla przedsiębiorców</p><h2 className="mt-2 text-3xl font-bold tracking-tight">NaviMind Business</h2></div><p className="text-sm text-[#787383]">Ceny miesięczne netto + właściwy VAT</p></div>
+      <div className="mt-7 grid gap-6 md:grid-cols-2">{commercialPlans.filter(p=>p.category==="business").map(p=><PlanCard plan={p} key={p.id}/>)}</div>
+      <div className="mt-20 grid gap-5 md:grid-cols-3">
+        <InfoCard icon={<Cpu size={22}/>} title="Inteligencja tam, gdzie potrzebna" text="Znane operacje mogą odbywać się lokalnie, bez kosztu wywołania modelu za każde kliknięcie."/>
+        <InfoCard icon={<ShieldCheck size={22}/>} title="Limity pod kontrolą" text="AI wykorzystuje ustalony budżet. Bez niespodziewanych dopłat i bez obietnicy nielimitowanego działania."/>
+        <InfoCard icon={<LockKeyhole size={22}/>} title="Aktywacja po zakupie" text="W przyszłości potwierdzona płatność pozwoli na wydanie indywidualnego kodu licencji."/>
+      </div>
+      <section className="nm-card mx-auto mt-16 max-w-3xl p-8 sm:p-10">
+        <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eeeaf8] text-[#6753a6]"><CircleHelp size={22}/></div><h2 className="text-2xl font-bold">Warto wiedzieć</h2></div>
+        <div className="mt-7 space-y-5 text-sm leading-7 text-[#625c6b]">
+          <p><strong className="text-[#262331]">Czy można korzystać 24/7?</strong> Aplikacja ma być dostępna przez całą dobę, jednak wykorzystanie płatnych modeli AI będzie podlegać limitom pakietu.</p>
+          <p><strong className="text-[#262331]">Co po wykorzystaniu AI?</strong> Docelowo dodatkowy budżet albo własny klucz API (BYOK). Bez automatycznych płatności.</p>
+          <p><strong className="text-[#262331]">Czy Business zawiera wdrożenie?</strong> Indywidualna konfiguracja procedur firmowych będzie wyceniana osobno.</p>
+          <p><strong className="text-[#262331]">Czy mogę już zapłacić?</strong> Nie. Możesz obejrzeć pełny proces wyboru, ale zakup i licencje są wyłączone.</p>
+        </div>
+      </section>
+      <div className="mt-10 flex justify-center"><Link href="/agent" className="nm-btn-secondary"><Bot size={18}/> Wróć do agenta <ArrowRight size={16}/></Link></div>
+      <p className="mt-10 text-center text-xs leading-6 text-[#807a89]">Cennik demonstracyjny. Pakiety nie są połączone ze starymi uprawnieniami PRO/PRO+ ani z lokalnym agentem.</p>
+    </div>
+  </main>;
 }
 
-type Plan = (typeof commercialPlans)[number];
-
-function PlanCard({ plan }: { plan: Plan }) {
-  return (
-    <article className={`relative flex h-full flex-col rounded-3xl border p-7 shadow-xl shadow-black/10 sm:p-9 ${plan.highlighted ? "border-blue-400/50 bg-gradient-to-br from-blue-400/10 to-slate-900/80" : "border-white/10 bg-slate-900/60"}`}>
-      {plan.highlighted && <span className="absolute right-6 top-6 rounded-full bg-blue-400/20 px-3 py-1 text-xs font-semibold text-blue-200">Polecany</span>}
-      <div className="pr-24"><h3 className="text-2xl font-semibold">{plan.name}</h3><p className="mt-3 min-h-[48px] text-sm leading-6 text-slate-300">{plan.description}</p></div>
-      <div className="mt-7 flex items-baseline gap-2"><strong className="text-5xl tracking-tight">{plan.pricePln} zł</strong><span className="text-sm text-slate-400">/ mies.</span></div>
-      <p className="mt-2 text-sm text-slate-400">Cena {plan.priceTax} · {plan.seats}</p>
-      <div className="mt-6 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm">
-        Wliczony budżet AI: <strong className="text-white">{plan.aiBudgetPln} zł / mies.</strong>
-      </div>
-      <ul className="my-8 flex-1 space-y-4">
-        {plan.features.map((feature) => <li className="flex gap-3 text-sm leading-6 text-slate-200" key={feature}><Check size={18} className="mt-1 shrink-0 text-blue-300" />{feature}</li>)}
-      </ul>
-      <Link href={`/checkout?plan=${plan.id}`} className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 ${plan.highlighted ? "bg-blue-500 text-white hover:bg-blue-400" : "bg-white text-slate-900 hover:bg-blue-100"}`}>
-        Zobacz kolejny krok <ArrowRight size={17} />
-      </Link>
-    </article>
-  );
+function PlanCard({plan}:{plan:Plan}) {
+  return <article className={`nm-card relative flex h-full flex-col overflow-hidden p-7 sm:p-9 ${plan.highlighted?"nm-card-featured":""}`}>
+    {plan.highlighted&&<div className="absolute right-0 top-0 rounded-bl-2xl bg-[#6753a6] px-5 py-2 text-xs font-semibold text-white">Polecany</div>}
+    <div className="pr-16"><div className="nm-gold-line"/><h3 className="mt-5 text-2xl font-bold tracking-tight">{plan.name}</h3><p className="mt-3 min-h-[48px] text-sm leading-6 text-[#746d7e]">{plan.description}</p></div>
+    <div className="mt-6 flex items-baseline gap-2"><strong className="text-5xl font-bold tracking-tight text-[#252130]">{plan.pricePln} zł</strong><span className="text-sm text-[#7c7585]">/ mies.</span></div>
+    <p className="mt-2 text-sm text-[#7c7585]">Cena {plan.priceTax} · {plan.seats}</p>
+    <div className="mt-6 rounded-xl border border-[#e8e1f2] bg-[#f6f3fb] px-4 py-4 text-sm text-[#4b3d68]">Wliczony budżet AI: <strong>{plan.aiBudgetPln} zł / mies.</strong></div>
+    <ul className="my-8 flex-1 space-y-4">{plan.features.map(feature=><li key={feature} className="flex gap-3 text-sm leading-6 text-[#514a5d]"><Check size={17} className="mt-1 shrink-0 text-[#6753a6]"/>{feature}</li>)}</ul>
+    <Link href={`/checkout?plan=${plan.id}`} className={plan.highlighted?"nm-btn-primary w-full":"nm-btn-secondary w-full"}>Zobacz plan zakupu <ArrowRight size={17}/></Link>
+  </article>;
 }
-
-function InfoCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-  return <div className="rounded-2xl border border-white/10 bg-white/5 p-6"><div className="mb-3 text-blue-300">{icon}</div><h3 className="font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-400">{description}</p></div>;
+function InfoCard({icon,title,text}:{icon:React.ReactNode;title:string;text:string}){
+  return <div className="nm-card p-7"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eeeaf8] text-[#6753a6]">{icon}</div><h3 className="mt-5 text-lg font-bold">{title}</h3><p className="mt-3 text-sm leading-7 text-[#726c7a]">{text}</p></div>;
 }
