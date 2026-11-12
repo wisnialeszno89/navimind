@@ -2,8 +2,8 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {PDFDocument}=require('pdf-lib');
 function load(relative,mocks={}){const filename=path.resolve(__dirname,'..',relative),output=new Module(filename,module);output.filename=filename;output.paths=Module._nodeModulePaths(path.dirname(filename));const native=output.require.bind(output);output.require=name=>Object.hasOwn(mocks,name)?mocks[name]:native(name);output._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);return output.exports;}
 const lib=load('app/lib/workspace-document.ts'),workspace=load('app/lib/workspace.ts'),images=load('app/lib/workspace-image.ts');
-let calls=0,lastInput,answer,orientationAnswer=null,auditAnswer=null;const inputs=[];
-class OpenAI{chat={completions:{create:async input=>{calls++;lastInput=input;inputs.push(input);const result=input.messages[0].content===lib.ORIENTATION_PROMPT?(orientationAnswer||{rotations:[0]}):input.messages[0].content===lib.DOCUMENT_AUDIT_PROMPT?(auditAnswer||{status:'confirmed',issues:[]}):answer;return {choices:[{message:{content:JSON.stringify(result)}}]};}}};}
+let calls=0,lastInput,answer,orientationAnswer=null,auditAnswer=null,providerFailure=null;const inputs=[];
+class OpenAI{chat={completions:{create:async input=>{calls++;if(providerFailure)throw providerFailure;lastInput=input;inputs.push(input);const result=input.messages[0].content===lib.ORIENTATION_PROMPT?(orientationAnswer||{rotations:[0]}):input.messages[0].content===lib.DOCUMENT_AUDIT_PROMPT?(auditAnswer||{status:'confirmed',issues:[]}):answer;return {choices:[{message:{content:JSON.stringify(result)}}]};}}};}
 const route=load('app/api/workspace/document-plan/route.ts',{'@/lib/workspace-document':lib,'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 async function pdf(pages=1){const doc=await PDFDocument.create();for(let i=0;i<pages;i++)doc.addPage();return 'data:application/pdf;base64,'+Buffer.from(await doc.save()).toString('base64');}
 function position(){return {id:'3',quantity:1,kind:'entrance_door',width_mm:1080,height_mm:2050,transport_extension_mm:30,opening:'DL, do wewnątrz',color_inside:'biały',color_outside:'biały',glazing_panes:3,ug:.5,profile_reference:'Profil odniesienia',requirements:['Listwa transportowa opcjonalna, poza wysokością drzwi.'],evidence:[{page:1,description:'Rysunek: 2080 i 2050, listwa 30 mm. Użytkownik wyjaśnił znaczenie listwy.'}],ambiguities:[]};}
@@ -89,11 +89,41 @@ test('source audit marks wrong fields for review and never silently repairs them
  const checked=lib.auditDocument(report,{status:'review',issues:[{position_id:'3',page:1,field:'profile_reference',reason:'Nazwa profilu nie zgadza się ze źródłem.'}]});
  assert.equal(checked.requires_clarification,true);assert.match(checked.positions[0].ambiguities.at(-1),/Kontrola źródła/);
  assert.equal(checked.positions[0].profile_reference,'Profil odniesienia');
- assert.throws(()=>lib.auditDocument(report,{status:'confirmed',issues:[{position_id:'3',page:1,field:'kind',reason:'Błąd.'}]}));
+ assert.equal(lib.auditDocument(report,{status:'confirmed',issues:[{position_id:'3',page:1,field:'kind',reason:'Błąd.'}]}).reading_audit.status,'review');
  assert.throws(()=>lib.auditDocument(report,{status:'review',issues:[{position_id:'unknown',page:1,field:'kind',reason:'Błąd.'}]}));
 });
 
 test('a provider audit disagreement is returned as review with no executor task',async()=>{
  answer={positions:[position()],notes:[]};auditAnswer={status:'review',issues:[{position_id:'3',page:1,field:'width_mm',reason:'Szerokości nie można potwierdzić.'}]};
  try{const response=await route.POST(request({message:'Odczytaj PDF',history:[],pdf:await pdf()}));const body=await response.json();assert.equal(response.status,200);assert.equal(body.specification.requires_clarification,true);assert.equal(body.specification.executed,false);assert.match(body.reply,/niepotwierdzony/);assert.equal('task' in body,false);}finally{auditAnswer=null;}
+});
+
+
+test('every request uses a strict provider schema with closed root objects',()=>{
+ for(const format of Object.values(lib.documentFormats(3))){assert.equal(format.type,'json_schema');assert.equal(format.json_schema.strict,true);assert.equal(format.json_schema.schema.additionalProperties,false);}
+ const formats=lib.documentFormats(3);assert.deepEqual(formats.orientation.json_schema.schema.properties.rotations.items.enum,[0,90,180,270]);
+ assert.deepEqual(formats.reading.json_schema.schema.properties.positions.items.properties.evidence.items.properties.page.enum,[1,2,3]);
+});
+
+test('an uncertain audit without field details remains a readable review',()=>{
+ const report=lib.auditDocument(lib.documentReport({positions:[position()],notes:[]},1),{status:'review',issues:[]});
+ assert.equal(report.requires_clarification,true);assert.equal(report.reading_audit.status,'review');assert.equal(report.reading_audit.issues.length,1);
+ const reply=lib.documentReply(report);assert.ok(reply.indexOf('Kontrola z PDF')<reply.indexOf('| Poz. |'));
+});
+
+test('diagnostics identify stages without returning provider messages or document text',()=>{
+ const failure=lib.documentFailure(Object.assign(new Error('private source and credentials'),{status:429}),'reading_request','synthetic-id');
+ assert.equal(failure.code,'MODEL_LIMIT');assert.equal(failure.stage,'reading_request');assert.equal(JSON.stringify(failure).includes('private source'),false);
+ assert.equal(lib.documentFailure(new SyntaxError('private'),'audit_parse','test').code,'INVALID_MODEL_JSON');
+ assert.equal(lib.documentFailure(null,'reading_parse','test').code,'DOCUMENT_PROCESSING_ERROR');
+});
+
+test('provider authentication failure identifies the request stage with no task',async()=>{
+ providerFailure=Object.assign(new Error('never expose provider details'),{status:401});
+ try{const response=await route.POST(request({message:'Odczytaj',history:[],pdf:await pdf()}));const body=await response.json();assert.equal(response.status,503);assert.equal(body.stage,'orientation_request');assert.equal(body.code,'MODEL_AUTH');assert.ok(body.requestId);assert.equal('task' in body,false);assert.equal(JSON.stringify(body).includes('provider details'),false);}finally{providerFailure=null;}
+});
+
+test('malformed orientation stops before reading and exposes a safe validation code',async()=>{
+ orientationAnswer={rotations:[13]};const before=calls;
+ try{const response=await route.POST(request({message:'Odczytaj',history:[],pdf:await pdf()}));const body=await response.json();assert.equal(body.stage,'orientation_parse');assert.equal(body.code,'INVALID_PAGE_ORIENTATION');assert.equal(calls-before,1);}finally{orientationAnswer=null;}
 });

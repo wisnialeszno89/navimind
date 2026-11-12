@@ -71,7 +71,23 @@ parametrach w notatkach blokuje traktowanie odczytu jako jednoznacznego.
 
 Domyślnie używamy dokładniejszego modelu gpt-4.1; odczyt trwa dłużej i obejmuje
 więcej żądań modelu. Limit route to 120 sekund; poszczególne wywołania mają
-osobne limity 20/45/35 sekund, bez automatycznych ponowień. Testy sprawdzają
+osobne limity 30/50/35 sekund, bez automatycznych ponowień. Testy sprawdzają
 mechanizmy i znane rodzaje sprzeczności. Jakość rzeczywistego odczytu nowego
 skanu wymaga porównania wyniku z rysunkami — sam wzrost liczby testów jej
 nie potwierdza.
+
+
+## Diagnostyka i struktura odpowiedzi
+
+Wszystkie trzy żądania mają ścisły JSON Schema przekazany do dostawcy.
+Lokalna walidacja nadal kontroluje treść, identyfikatory i zakresy. Schemat
+ogranicza błędy formatu; nie potwierdza poprawności odczytanych wymiarów.
+Niepewny audyt bez szczegółów daje `review` z jawnym brakiem potwierdzenia.
+Audyt z rozbieżnościami zawsze daje `review`, również gdy model podał confirmed.
+
+Awaria zwraca etap, bezpieczny kod i losowy identyfikator żądania. Log zawiera
+te same pola i opcjonalny liczbowy status dostawcy, bez surowego wyjątku,
+PDF, treści odczytu ani kluczy. Użytkownik może przekazać kod bez dokumentu.
+Rozróżniamy limit, uwierzytelnienie, niedostępność modelu, timeout oraz
+błąd formatu odpowiedzi. Przyczyny poprzedniego ogólnego błędu nie można
+ustalić z dawnych logów; poprawka umożliwia rozpoznanie kolejnej próby.
