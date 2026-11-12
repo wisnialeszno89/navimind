@@ -26,7 +26,7 @@ export default function HeaderClient() {
 
   return (
     <div
-      className="w-full border-b"
+      className="nm-public-header w-full border-b"
       style={{
         borderColor: "var(--nm-border-soft)",
         background:
@@ -37,7 +37,7 @@ export default function HeaderClient() {
         
         {/* LOGO / NAZWA */}
         <Link href="/"
-          className="text-sm tracking-wide"
+          className="nm-brand text-base font-bold tracking-tight"
           style={{ color: "var(--nm-text-soft)" }}
         >
           NaviMind
@@ -49,7 +49,7 @@ export default function HeaderClient() {
           {/* REGULAMIN */}
           <Link
             href="/regulamin"
-            className="text-[11px] uppercase tracking-wide text-white/40 hover:text-white/70 transition"
+            className="nm-legal-link text-[11px] uppercase tracking-wide text-white/40 hover:text-white/70 transition"
           >
             REGULAMIN
           </Link>
@@ -57,7 +57,7 @@ export default function HeaderClient() {
           {/* FREE badge */}
           {isFree && (
             <div
-              className="text-xs px-2 py-1 rounded-full border"
+              className="nm-free-badge text-xs px-2 py-1 rounded-full border"
               style={{
                 borderColor: "var(--nm-border-soft)",
                 color: "var(--nm-text-muted)",
@@ -69,15 +69,15 @@ export default function HeaderClient() {
 
           <Link
             href="/agent"
-            className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/30 bg-blue-400/10 px-3 py-2 text-xs text-blue-100 transition hover:bg-blue-400/20"
+            className="nm-nav-link inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs transition"
           >
             <Bot size={15} /> Agent
           </Link>
 
           <Link
             href="/plans"
-            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs transition hover:bg-white/10"
-            style={{ borderColor: "var(--nm-pro-gold)", color: "var(--nm-pro-gold)", background: "var(--nm-pro-gold-soft)" }}
+            className="nm-nav-link nm-nav-highlight inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs transition"
+            
           >
             <CreditCard size={15} /> Wybierz swój pakiet
           </Link>
