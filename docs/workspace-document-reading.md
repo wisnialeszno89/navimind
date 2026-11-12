@@ -1,3 +1,5 @@
+Aktualny przebieg: PDF-R3. Wcześniejsze sekcje opisują również historię poprawek.
+
 # Odczyt zapytania ze skanowanego PDF
 
 W Workspace przycisk **Dołącz PDF zapytania** przyjmuje pojedynczy PDF do 2 MB
@@ -8,7 +10,7 @@ przełącza wiadomość w analizę dokumentu; nie wywołuje lokalnego wykonawcy.
 kanoniczny Base64, nagłówek i strukturę PDF oraz rzeczywistą liczbę stron przez
 pdf-lib. PDF jest renderowany przez PDF.js do obrazów stron. Dostawca modelu otrzymuje
 obrazy całości i powiększenia, bez nazwy źródłowego pliku.
-Model: `NAVIMIND_DOCUMENT_MODEL`, domyślnie `gpt-4.1`; istniejący klucz modelu.
+Model: `NAVIMIND_DOCUMENT_MODEL`, domyślnie `gpt-6.1-terra`; istniejący klucz modelu.
 Nie zapisujemy źródłowego dokumentu ani jego treści w logach aplikacji lub repo.
 Dokument jest przekazywany do dostawcy modelu, o czym informuje formularz.
 
@@ -151,3 +153,47 @@ inny produkt, kopia czy błędny odczyt numeracji. Nawet identyczne parametry ni
 powodują automatycznego scalania lub sumowania ilości. Funkcja nie zmienia
 rekordów wejściowych. Ścisła walidacja duplikatów w jednym odczycie jednej
 strony oraz pozostałe limity nadal obowiązują.
+
+
+## Jakość ekstrakcji i oddzielne korekty (PDF-R3)
+
+R2.2 zwrócił cztery rekordy, ale nadal błędne numery, wymiary, profile i szklenie.
+Nie jest to poprawnie odczytana oferta. Domyślny czytnik zmieniono z gpt-4.1 na
+gpt-6.1-terra, z reasoning_effort medium i max_completion_tokens, bez temperature.
+Konfiguracja NAVIMIND_DOCUMENT_MODEL nadal jest obsługiwana. Nie ma cichego
+powrotu do starszego modelu przy braku dostępu. Aktualną dostępność sprawdza
+rzeczywiste wywołanie w teście jakości przed udanym wdrożeniem.
+
+Do czytnika trafia całość strony i cztery zachodzące na siebie ćwiartki, aby
+zwiększyć czytelność opisów. Odczyt bazuje wyłącznie na obrazach, bez historii
+i bez bieżących korekt użytkownika. Drugi przebieg widzi ćwiartki przed całością.
+Numery pozycji, marka/system, kolory, tafle w pakiecie i oznaczenia wymiarów
+muszą wynikać ze źródła. Model nie może mylić kodu rysunku z nazwą profilu.
+
+Korekty width_mm, height_mm i transport_extension_mm są odrębnym żądaniem
+po ekstrakcji. Wymagają dosłownego cytatu z bieżącej wiadomości, wartości
+w cytacie, jawnego numeru pozycji i jednoznacznego powiązania z source_id.
+Niejasna/zdublowana numeracja nie pozwala wybrać pierwszego pasującego rekordu.
+Korekta zachowuje wymiar źródłowy w user_corrections.before i dowody PDF.
+Nie usuwa innych niejasności audytu. Niewalidowana korekta nie kasuje odczytu:
+pozostaje szkic źródłowy z review i jawną informacją o niezastosowaniu instrukcji.
+Nie jest to pełny mechanizm dowolnych korekt koloru, systemu i wyposażenia.
+
+W logu zapisujemy nazwę modelu, fizyczną orientację/wymiary obrazów i 16 znaków
+SHA256 źródła, aby porównywać, czy próby dotyczą tego samego pliku. Nie zapisujemy
+nazwy pliku, jego bajtów, obrazów, instrukcji ani treści pozycji. models_used
+pochodzi z odpowiedzi API; oznaczenie modelu jest widoczne na końcu odpowiedzi.
+Przy błędzie API dopuszczone są tylko znane kody i nazwa parametru, nie surowa
+wiadomość dostawcy lub klucze.
+
+scripts/check-pdf-model.cjs na Vercel wykonuje prawdziwe płatne wywołania API
+na WYGENEROWANYM dokumencie bez danych klienta. Sprawdza dwie różne pozycje,
+numery, ilości, wymiary, kolory, kierunki, profil, pakiety i Ug oraz korektę
+wyłącznie wskazanej pozycji. Wymaga też zgodności niezależnych odczytów pól
+podstawowych. Nigdy nie używa dokumentu użytkownika jako fixture w repo.
+Test uruchamia się przy zmianie czytnika/modelu/fixture lub po upływie 24 h
+przy kolejnym buildzie. Sukces jest cache'owany w .next/cache; zmiany wyłącznie
+strony marketingowej nie ponawiają go w tym okresie. Lokalnie bez konfiguracji
+Vercel test jest jawnie pomijany. Wyjątkiem nie jest poprawna odpowiedź JSON:
+niepoprawne wartości przerywają build. Ten test nie dowodzi poprawności odczytu
+każdego rzeczywistego skanu; dokument klienta nadal trzeba porównać ze źródłem.

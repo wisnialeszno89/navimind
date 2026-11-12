@@ -46,13 +46,11 @@ export async function pdfPageViews(page:PDFRaster,rotation:number){
  const {width,height}=upright.info;
  // Overlap prevents a center label being lost. Full view provides context and
  // halves are evidence zooms of the same page, never additional products.
- const horizontal=width>height;
- const extent=Math.ceil((horizontal?width:height)*.56);
- const regions=horizontal?
-  [{left:0,top:0,width:extent,height},{left:width-extent,top:0,width:extent,height}]:
-  [{left:0,top:0,width,height:extent},{left:0,top:height-extent,width,height:extent}];
- const images=[{label:'cała strona',image:await sharp(upright.data).jpeg({quality:93}).toBuffer()}];
- for(let i=0;i<regions.length;i++)images.push({label:horizontal?(i?'prawa część':'lewa część'):(i?'dolna część':'górna część'),image:await sharp(upright.data).extract(regions[i]).jpeg({quality:95}).toBuffer()});
+ const w=Math.ceil(width*.56),h=Math.ceil(height*.56);
+ const regions=[{left:0,top:0,width:w,height:h},{left:width-w,top:0,width:w,height:h},{left:0,top:height-h,width:w,height:h},{left:width-w,top:height-h,width:w,height:h}];
+ const labels=['górna lewa część','górna prawa część','dolna lewa część','dolna prawa część'];
+ const images=[{label:'cała strona',image:await sharp(upright.data).jpeg({quality:95}).toBuffer()}];
+ for(let i=0;i<regions.length;i++)images.push({label:labels[i],image:await sharp(upright.data).extract(regions[i]).jpeg({quality:97}).toBuffer()});
  return {page:page.page,width,height,images};
 }
 
@@ -67,6 +65,6 @@ export async function pdfRendererProbe(){
  const rasters=await rasterPDF('data:application/pdf;base64,'+Buffer.from(await pdf.save()).toString('base64'),1);
  const views=await pdfPageViews(rasters[0],0);
  const stats=await sharp(rasters[0].image).stats();
- if(rasters.length!==1||views.images.length!==3||stats.channels[0].mean<stats.channels[1].mean+50)throw Error('PDF_RENDER_PROBE_FAILED');
- return {pages:1,views:3};
+ if(rasters.length!==1||views.images.length!==5||stats.channels[0].mean<stats.channels[1].mean+50)throw Error('PDF_RENDER_PROBE_FAILED');
+ return {pages:1,views:5};
 }
