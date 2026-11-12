@@ -16,13 +16,15 @@ export async function runNativeCommand(token:string,message:string,history:{role
   if(hooks.stopped())return {reply:'Zatrzymałem zadanie przed następną akcją.'};
   if(!plan.task&&plan.decision!=='done')return {reply:plan.reply};
   const task=plan.task||{kind:'native_finish'};
-  const signature=JSON.stringify([snapshot.revision,task]);
+  const target=task.kind==='native_target'?snapshot.controls?.find(c=>c.ref===task.ref):undefined;
+  const signature=JSON.stringify([snapshot.revision,target?{kind:task.kind,name:target.name,x:target.x,y:target.y}:task]);
   if((attempts.get(signature)||0)>=2)return {reply:'Zatrzymałem powtarzane próby na niezmienionym obrazie. Sprawdź płótno Painta.'};
   hooks.progress(`Krok ${turn+1}/24: ${plan.reply}`);
   const id=crypto.randomUUID();hooks.pending(id);
   const result=await localRequest<any>(token,'/execute',{id,task,expectedRevision:plan.expectedRevision,session});
   hooks.pending(null);
-  steps.push(JSON.stringify({task,result:result.message,status:result.status}).slice(0,1000));
+  const memoryTask=task.kind==='native_text'?{...task,text:task.text.slice(0,80)}:task;
+  steps.push(JSON.stringify({task:memoryTask,target_name:target?.name,reason:String(plan.reply).slice(0,160),result:result.message,status:result.status}).slice(0,1000));
   if(result.code==='STALE_NATIVE_FRAME'&&stale<2&&!hooks.stopped()){stale++;snapshot=await localRequest(token,'/native/observe');continue;}
   if(result.status!=='verified')return {reply:'**Potrzebne sprawdzenie.** '+result.message};
   hooks.executed();attempts.set(signature,(attempts.get(signature)||0)+1);

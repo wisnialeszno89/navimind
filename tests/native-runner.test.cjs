@@ -4,7 +4,7 @@ const snap={revision:'a'.repeat(64),image:'synthetic',width:10,height:10,title:'
 function hooks(){const h={ids:[],n:0,stop:false};return {...h,progress:()=>{},stopped:()=>h.stop,pending:id=>h.ids.push(id),executed:()=>h.n++,state:h};}
 test('native runner observes after each step, then saves and retains independent result',async()=>{
  const old=global.fetch,calls=[];let planned=0;
- global.fetch=async()=>new Response(JSON.stringify(planned++===0?{decision:'act',reply:'Klikam',task:{kind:'native_click',x:2,y:2},expectedRevision:snap.revision}:{decision:'done',reply:'Wynik widoczny',task:null,expectedRevision:snap.revision}));
+ global.fetch=async(_url,options)=>{assert.ok(!options.body.includes('c'.repeat(32)));return new Response(JSON.stringify(planned++===0?{decision:'act',reply:'Klikam',task:{kind:'native_click',x:2,y:2},expectedRevision:snap.revision}:{decision:'done',reply:'Wynik widoczny',task:null,expectedRevision:snap.revision}));};
  const lib=load(async(_token,url,body)=>{calls.push([url,body]);if(url==='/native/start')return {...snap,session:'c'.repeat(32)};if(body.task.kind==='native_finish')return {status:'verified',message:'Zapis sprawdzony',native_result:{saved_pixels_changed:true,goal_verified:false}};return {status:'verified',message:'Odczyt po kroku',native:snap};});
  try{const h=hooks(),r=await lib.runNativeCommand('local-token','Narysuj',[],h);assert.equal(r.result.native_result.goal_verified,false);assert.equal(h.state.n,2);assert.deepEqual(calls.map(c=>c[0]),['/native/start','/execute','/execute']);assert.equal(calls[2][1].task.kind,'native_finish');assert.equal(h.state.ids.at(-1),null);}finally{global.fetch=old;}
 });
