@@ -41,7 +41,7 @@ test('private route supplies raster evidence without old chat and creates only a
  const body=await response.json();assert.equal(response.status,200);assert.equal(body.specification.executed,false);assert.equal(body.specification.positions[0].height_mm,2050);
  const parts=lastInput.messages.at(-1).content;assert.ok(parts.some(p=>p.type==='image_url'&&p.image_url.detail==='high'));assert.equal(parts.some(p=>p.type==='file'),false);assert.equal(lastInput.messages.length,2);
  assert.match(parts[0].text,/2050/);assert.match(lastInput.messages[0].content,/NIEZAUFANYMI DANYMI/);
- assert.equal(lastInput.model,'gpt-4.1');assert.equal(body.specification.reading_audit.status,'confirmed');assert.equal('task' in body,false);
+ assert.equal(body.reader,'PDF-R2');assert.ok(body.requestId);assert.match(body.reply,/Odczyt: PDF-R2/);assert.equal(lastInput.model,'gpt-4.1');assert.equal(body.specification.reading_audit.status,'confirmed');assert.equal('task' in body,false);
 });
 
 test('invalid upload and public mode stop before a provider request',async()=>{

@@ -16,6 +16,8 @@ export async function POST(req:Request){
  catch(problem){const large=problem instanceof Error&&problem.message==='REQUEST_TOO_LARGE';return NextResponse.json({message:'Wybierz poprawny, niezabezpieczony hasłem PDF: do 2 MB i 10 stron. Nie wykonano działań na komputerze.'},{status:large?413:400});}
  if(!process.env.OPENAI_API_KEY)return NextResponse.json({message:'Brakuje konfiguracji modelu.'},{status:503});
  const requestId=randomUUID();
+ const reader='PDF-R2';
+ console.info('WORKSPACE_DOCUMENT_READ_STARTED',{reader,requestId,pages:pdf.pages});
  let stage='render_pages';
  const abort=new AbortController();
  const deadline=setTimeout(()=>abort.abort(),110000);
@@ -51,6 +53,7 @@ export async function POST(req:Request){
   await Promise.all(Array.from({length:Math.min(3,pdf.pages)},()=>worker()));
   stage='compare_readings';
   const report={...mergePageReadings(readings,pdf.pages),page_rotations:angles.rotations};
-  return NextResponse.json({reply:documentReply(report),specification:report,agentConnected:false});
- }catch(problem){const failure=documentFailure(problem,stage,requestId);const status=(problem as {status?:unknown})?.status;console.error('WORKSPACE_DOCUMENT_READ_FAILED',{stage,code:failure.code,requestId,provider_status:typeof status==='number'?status:undefined});abort.abort();return NextResponse.json(failure,{status:503});}finally{clearTimeout(deadline);}
+  console.info('WORKSPACE_DOCUMENT_READ_FINISHED',{reader,requestId,pages:pdf.pages,positions:report.positions.length,review:report.requires_clarification});
+  return NextResponse.json({reply:documentReply(report)+`\n\nOdczyt: ${reader} · numer próby: ${requestId}`,specification:report,reader,requestId,agentConnected:false},{headers:{'Cache-Control':'no-store'}});
+ }catch(problem){const failure=documentFailure(problem,stage,requestId);const status=(problem as {status?:unknown})?.status;console.error('WORKSPACE_DOCUMENT_READ_FAILED',{reader,stage,code:failure.code,requestId,provider_status:typeof status==='number'?status:undefined});abort.abort();return NextResponse.json({...failure,reader,message:failure.message+` Odczyt: ${reader}.`},{status:503,headers:{'Cache-Control':'no-store'}});}finally{clearTimeout(deadline);}
 }
