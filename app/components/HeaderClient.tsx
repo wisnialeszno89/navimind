@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Bot, CreditCard } from "lucide-react";
 import { useChatStore } from "../lib/chatStore";
 
 export default function HeaderClient() {
@@ -32,15 +33,15 @@ export default function HeaderClient() {
           "linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0))",
       }}
     >
-      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         
         {/* LOGO / NAZWA */}
-        <div
+        <Link href="/"
           className="text-sm tracking-wide"
           style={{ color: "var(--nm-text-soft)" }}
         >
           NaviMind
-        </div>
+        </Link>
 
         {/* PRAWA STRONA */}
         <div className="flex items-center gap-3">
@@ -66,17 +67,19 @@ export default function HeaderClient() {
             </div>
           )}
 
-          {/* ⭐ PRO / UPGRADE */}
           <Link
-            href="/pro"
-            className="text-xs px-3 py-1.5 rounded-full border transition"
-            style={{
-              borderColor: "var(--nm-pro-gold)",
-              color: "var(--nm-pro-gold)",
-              background: "var(--nm-pro-gold-soft)",
-            }}
+            href="/agent"
+            className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/30 bg-blue-400/10 px-3 py-2 text-xs text-blue-100 transition hover:bg-blue-400/20"
           >
-            ⭐ {isFree ? "UPGRADE" : "PRO"}
+            <Bot size={15} /> Agent
+          </Link>
+
+          <Link
+            href="/plans"
+            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs transition hover:bg-white/10"
+            style={{ borderColor: "var(--nm-pro-gold)", color: "var(--nm-pro-gold)", background: "var(--nm-pro-gold-soft)" }}
+          >
+            <CreditCard size={15} /> Wybierz swój pakiet
           </Link>
 
           {/* 🚪 LOGOUT (tylko jeśli zalogowany / PRO) */}
