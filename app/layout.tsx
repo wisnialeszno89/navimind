@@ -1,6 +1,7 @@
 import "./globals.css";
 import { isPrivateWorkspace } from "./lib/workspace";
 import HeaderClient from "./components/HeaderClient";
+import WorkspaceHeader from "./components/WorkspaceHeader";
 
 export default function RootLayout({
   children,
@@ -16,7 +17,7 @@ export default function RootLayout({
           color: "var(--nm-text-main)",
         }}
       >
-        {!isPrivateWorkspace() && <HeaderClient />}
+        {isPrivateWorkspace() ? <WorkspaceHeader /> : <HeaderClient />}
         {children}
       </body>
     </html>
