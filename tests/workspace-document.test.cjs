@@ -2,8 +2,8 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {PDFDocument}=require('pdf-lib');
 function load(relative,mocks={}){const filename=path.resolve(__dirname,'..',relative),output=new Module(filename,module);output.filename=filename;output.paths=Module._nodeModulePaths(path.dirname(filename));const native=output.require.bind(output);output.require=name=>Object.hasOwn(mocks,name)?mocks[name]:native(name);output._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);return output.exports;}
 const lib=load('app/lib/workspace-document.ts'),workspace=load('app/lib/workspace.ts'),images=load('app/lib/workspace-image.ts');
-let calls=0,lastInput,answer;
-class OpenAI{chat={completions:{create:async input=>{calls++;lastInput=input;return {choices:[{message:{content:JSON.stringify(answer)}}]};}}};}
+let calls=0,lastInput,answer,orientationAnswer=null,auditAnswer=null;const inputs=[];
+class OpenAI{chat={completions:{create:async input=>{calls++;lastInput=input;inputs.push(input);const result=input.messages[0].content===lib.ORIENTATION_PROMPT?(orientationAnswer||{rotations:[0]}):input.messages[0].content===lib.DOCUMENT_AUDIT_PROMPT?(auditAnswer||{status:'confirmed',issues:[]}):answer;return {choices:[{message:{content:JSON.stringify(result)}}]};}}};}
 const route=load('app/api/workspace/document-plan/route.ts',{'@/lib/workspace-document':lib,'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 async function pdf(pages=1){const doc=await PDFDocument.create();for(let i=0;i<pages;i++)doc.addPage();return 'data:application/pdf;base64,'+Buffer.from(await doc.save()).toString('base64');}
 function position(){return {id:'3',quantity:1,kind:'entrance_door',width_mm:1080,height_mm:2050,transport_extension_mm:30,opening:'DL, do wewnątrz',color_inside:'biały',color_outside:'biały',glazing_panes:3,ug:.5,profile_reference:'Profil odniesienia',requirements:['Listwa transportowa opcjonalna, poza wysokością drzwi.'],evidence:[{page:1,description:'Rysunek: 2080 i 2050, listwa 30 mm. Użytkownik wyjaśnił znaczenie listwy.'}],ambiguities:[]};}
@@ -41,7 +41,7 @@ test('private route supplies original PDF to the model and creates only a readin
  const body=await response.json();assert.equal(response.status,200);assert.equal(body.specification.executed,false);assert.equal(body.specification.positions[0].height_mm,2050);
  const parts=lastInput.messages.at(-1).content;assert.equal(parts[1].type,'file');assert.equal(parts[1].file.file_data,data);
  assert.match(parts[0].text,/2050/);assert.match(lastInput.messages[0].content,/NIEZAUFANYMI DANYMI/);
- assert.equal(lastInput.model,'gpt-4.1-mini');assert.equal('task' in body,false);
+ assert.equal(lastInput.model,'gpt-4.1');assert.equal(body.specification.reading_audit.status,'confirmed');assert.equal('task' in body,false);
 });
 
 test('invalid upload and public mode stop before a provider request',async()=>{
@@ -61,4 +61,39 @@ test('invalid provider reading never becomes a desktop task',async()=>{
 test('untrusted document text is displayed as text, not embedded external images',()=>{
  const report=lib.documentReport({positions:[{...position(),requirements:['![tracking](https://example.org/image.png)']}],notes:[]},1);
  const reply=lib.documentReply(report);assert.ok(reply.includes('\\!\\[tracking\\]'));assert.equal(reply.includes('![tracking]'),false);
+});
+
+
+test('orientation normalization changes PDF rotations and rejects invented page mappings',async()=>{
+ const data=await pdf(2);const normalized=await lib.orientedPDF(data,2,{rotations:[270,0]});
+ const parsed=await PDFDocument.load(Buffer.from(normalized.data.split(',')[1],'base64'));
+ assert.equal(parsed.getPages()[0].getRotation().angle,270);assert.equal(parsed.getPages()[1].getRotation().angle,0);
+ await assert.rejects(lib.orientedPDF(data,2,{rotations:[270]}));
+ await assert.rejects(lib.orientedPDF(data,2,{rotations:[13,0]}));
+});
+
+test('semantic contradictions cannot be presented as a clear reading',()=>{
+ const wrong={...position(),kind:'window',glazing_panes:2,opening:'DKL',requirements:['Eingangstür, Dreh Links, Dreifache Verglasung'],evidence:[{page:1,description:'Drzwi wejściowe, szkło trzyszybowe.'}]};
+ const report=lib.documentReport({positions:[wrong],notes:['Przyjęto biały jako domyślny.']},1);
+ assert.equal(report.requires_clarification,true);assert.ok(report.positions[0].ambiguities.length>=3);
+ assert.match(lib.documentReply(report),/niepotwierdzony/);
+});
+
+test('suspicious door proportions require inspection without silently swapping dimensions',()=>{
+ const report=lib.documentReport({positions:[{...position(),width_mm:2050,height_mm:1000}],notes:[]},1);
+ assert.equal(report.requires_clarification,true);assert.equal(report.positions[0].width_mm,2050);
+});
+
+test('source audit marks wrong fields for review and never silently repairs them',()=>{
+ const report=lib.documentReport({positions:[position()],notes:[]},1);
+ const checked=lib.auditDocument(report,{status:'review',issues:[{position_id:'3',page:1,field:'profile_reference',reason:'Nazwa profilu nie zgadza się ze źródłem.'}]});
+ assert.equal(checked.requires_clarification,true);assert.match(checked.positions[0].ambiguities.at(-1),/Kontrola źródła/);
+ assert.equal(checked.positions[0].profile_reference,'Profil odniesienia');
+ assert.throws(()=>lib.auditDocument(report,{status:'confirmed',issues:[{position_id:'3',page:1,field:'kind',reason:'Błąd.'}]}));
+ assert.throws(()=>lib.auditDocument(report,{status:'review',issues:[{position_id:'unknown',page:1,field:'kind',reason:'Błąd.'}]}));
+});
+
+test('a provider audit disagreement is returned as review with no executor task',async()=>{
+ answer={positions:[position()],notes:[]};auditAnswer={status:'review',issues:[{position_id:'3',page:1,field:'width_mm',reason:'Szerokości nie można potwierdzić.'}]};
+ try{const response=await route.POST(request({message:'Odczytaj PDF',history:[],pdf:await pdf()}));const body=await response.json();assert.equal(response.status,200);assert.equal(body.specification.requires_clarification,true);assert.equal(body.specification.executed,false);assert.match(body.reply,/niepotwierdzony/);assert.equal('task' in body,false);}finally{auditAnswer=null;}
 });

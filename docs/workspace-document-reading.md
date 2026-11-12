@@ -8,7 +8,7 @@ przełącza wiadomość w analizę dokumentu; nie wywołuje lokalnego wykonawcy.
 kanoniczny Base64, nagłówek i strukturę PDF oraz rzeczywistą liczbę stron przez
 pdf-lib. Oryginalny PDF jest przekazywany jako wejście plikowe modelu obsługującego
 rysunki i tekst stron. Nazwa pliku u dostawcy to stałe `zapytanie.pdf`.
-Model: `NAVIMIND_DOCUMENT_MODEL`, domyślnie `gpt-4.1-mini`; istniejący klucz modelu.
+Model: `NAVIMIND_DOCUMENT_MODEL`, domyślnie `gpt-4.1`; istniejący klucz modelu.
 Nie zapisujemy źródłowego dokumentu ani jego treści w logach aplikacji lub repo.
 Dokument jest przekazywany do dostawcy modelu, o czym informuje formularz.
 
@@ -46,3 +46,32 @@ udawać kompletną specyfikację dla wykonawcy. Odświeżenie usuwa stan karty.
 Testy sprawdzają kontrakt PDF, strony, walidację wyniku, zachowanie wymiaru i
 listwy, brak akcji oraz przekazanie oryginalnego PDF do atrapy API. Nie dowodzą
 jakości odczytu rzeczywistych skanów; to sprawdzamy na dokumencie użytkownika.
+
+
+## Wzmocniony odczyt po błędnym wyniku na skanie
+
+Odczyt ma trzy przebiegi: ocena orientacji stron, odczyt z poprawnie obróconej
+kopii PDF oraz porównanie kandydata z tą samą kopią źródłową. Oryginalny plik
+pozostaje bez zmian; obrót zmienia metadane stron w kopii w pamięci. Kąty to
+0/90/180/270, dokładnie jeden na stronę. Nie zapisujemy na stałe prawidłowych
+wartości konkretnego zamówienia ani nie podstawiamy ręcznie odczytanej oferty.
+
+Drugi odczyt kontrolny jest osobnym żądaniem modelu z dokumentem i kandydatem.
+`reading_audit.status=confirmed` oznacza tylko brak rozbieżności zgłoszonych
+przez kontrolę modelu — nie niezależny dowód poprawności. `review` dodaje
+konkretne problemy do pozycji i wstrzymuje użycie specyfikacji. Kontroler nie
+przepisuje po cichu podejrzanych wartości. Błędny format orientacji lub audytu
+powoduje błąd odczytu, a nie przejście do konfiguratora.
+
+Dodatkowe reguły oznaczają rozbieżność tekstu Eingangstür z typem okno,
+Dreh links z uchyłem oraz opisu Dreifach z liczbą szyb inną niż 3. Nietypowe
+proporcje drzwi i dwie szyby z niskim Ug wymagają sprawdzenia, nie dowodzą
+same w sobie niemożliwości technicznej. Wzmianka o przyjętych domyślnych
+parametrach w notatkach blokuje traktowanie odczytu jako jednoznacznego.
+
+Domyślnie używamy dokładniejszego modelu gpt-4.1; odczyt trwa dłużej i obejmuje
+więcej żądań modelu. Limit route to 120 sekund; poszczególne wywołania mają
+osobne limity 20/45/35 sekund, bez automatycznych ponowień. Testy sprawdzają
+mechanizmy i znane rodzaje sprzeczności. Jakość rzeczywistego odczytu nowego
+skanu wymaga porównania wyniku z rysunkami — sam wzrost liczby testów jej
+nie potwierdza.

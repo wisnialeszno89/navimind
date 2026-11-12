@@ -167,7 +167,7 @@ export default function WorkspaceChat() {
     stopBrowser.current = false;
     try {
       if(attachedPDF){
-        setBrowserProgress("Odczytuję rysunki i opisy z PDF…");
+        setBrowserProgress("Sprawdzam orientację stron, odczytuję pozycje i porównuję wynik z PDF… To może potrwać około minuty.");
         const response=await fetch("/api/workspace/document-plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:content,history,pdf:attachedPDF.data})});
         const result=await response.json();
         if(!response.ok)throw Error(result.message||"Nie udało się odczytać PDF.");
