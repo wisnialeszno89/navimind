@@ -3,9 +3,10 @@ export type TableContext = { folder: string; file_name?: string; rows: WindowRow
 export type TableInfo = { folder: string; file_name: string; row_count: number; revision: string };
 export type ReportInfo = {folder:string;file_name:string};
 export type SourceRef = {folder:string;file_name:string;revision:string};
-export const DESKTOP_CAPABILITIES = ['create_window_table', 'update_window_width', 'append_window_rows', 'edit_window_rows', 'open_window_table', 'copy_window_table', 'aggregate_window_tables'];
+export const DESKTOP_CAPABILITIES = ['create_window_table', 'update_window_width', 'append_window_rows', 'edit_window_rows', 'open_window_table', 'copy_window_table', 'aggregate_window_tables', 'draw_window_in_paint'];
 const LEGACY = ['create_window_table', 'update_window_width'];
 export type DesktopTask =
+ | {kind:'draw_window_in_paint';folder:string;file_name:string;width_mm:number;height_mm:number;construction:'single_dkl'|'single_dkr'|'double_fixed';frame_color:'bialy'|'antracyt'|'mahon'}
  | {kind:'aggregate_window_tables';sources:SourceRef[];folder:string;file_name:string;open_result:boolean}
  | {kind:'create_window_table'; folder:string; file_name?:string; rows:WindowRow[]}
  | {kind:'append_window_rows'; rows:WindowRow[]}
@@ -67,7 +68,12 @@ export function desktopPlan(value:unknown,current:TableContext|null,capabilities
  if(typeof task.kind!=='string'||!capabilities.includes(task.kind))throw Error('UNSUPPORTED_TASK');
  const exists=(f:string,n:string)=>tables.some(t=>t.folder.toLowerCase()===f.toLowerCase()&&t.file_name.toLowerCase()===n.toLowerCase())||!!current&&current.folder.toLowerCase()===f.toLowerCase()&&(current.file_name||'tabela-okien.txt').toLowerCase()===n.toLowerCase();
  let validated:DesktopTask, expectedRevision:string|null=null;
- if(task.kind==='aggregate_window_tables') {
+ if(task.kind==='draw_window_in_paint') {
+  keys(task,['kind','folder','file_name','width_mm','height_mm','construction','frame_color']);
+  const f=folder(task.folder),name=folder(task.file_name),width=number(task.width_mm,100,10000),height=number(task.height_mm,100,10000);
+  if(!name.toLowerCase().endsWith('.png')||name.length<=4||!['single_dkl','single_dkr','double_fixed'].includes(String(task.construction))||!['bialy','antracyt','mahon'].includes(String(task.frame_color))||width/height<.25||width/height>4)throw Error('INVALID_PAINT_DRAWING');
+  validated={kind:task.kind,folder:f,file_name:name,width_mm:width,height_mm:height,construction:task.construction as 'single_dkl'|'single_dkr'|'double_fixed',frame_color:task.frame_color as 'bialy'|'antracyt'|'mahon'};
+ } else if(task.kind==='aggregate_window_tables') {
   keys(task,['kind','sources','folder','file_name','open_result']);
   if(!Array.isArray(task.sources)||!task.sources.length||task.sources.length>50||typeof task.open_result!=='boolean')throw Error('INVALID_REPORT_TASK');
   const f=folder(task.folder),n=folder(task.file_name);
@@ -97,11 +103,11 @@ export function desktopPlan(value:unknown,current:TableContext|null,capabilities
    keys(task,['kind','folder','file_name']);const f=folder(task.folder),n=filename(task.file_name);if(exists(f,n))throw Error('TABLE_ALREADY_EXISTS_USE_EDIT');validated={kind:task.kind,folder:f,file_name:n};
   } else throw Error('UNSUPPORTED_TASK');
  }
- return {decision:'execute',task:validated,reply:'Plan: wykonanie zadania tabeli i sprawdzenie wyniku lokalnie.',expectedRevision};
+ return {decision:'execute',task:validated,reply:task.kind==='draw_window_in_paint'?'Plan: przygotowanie i sprawdzenie nowego PNG oraz otwarcie go w nowym oknie Painta.':'Plan: wykonanie zadania tabeli i sprawdzenie wyniku lokalnie.',expectedRevision};
 }
 export function unresolvedDimensionQuestion(message:string, history:{role:string;content:string}[], task:DesktopTask|null):string|null {
  if(!task)return null;
- const changesDimensions=task.kind==='create_window_table'||task.kind==='append_window_rows'||task.kind==='update_window_width'||task.kind==='edit_window_rows'&&task.changes.some(change=>'width_mm' in change.fields||'height_mm' in change.fields);
+ const changesDimensions=task.kind==='draw_window_in_paint'||task.kind==='create_window_table'||task.kind==='append_window_rows'||task.kind==='update_window_width'||task.kind==='edit_window_rows'&&task.changes.some(change=>'width_mm' in change.fields||'height_mm' in change.fields);
  if(!changesDimensions)return null;
  const units=/\b(?:mm|cm|m|milimetr\p{L}*|centymetr\p{L}*|metr\p{L}*)\b/iu;
  if(units.test(message))return null;
@@ -133,12 +139,13 @@ Pełny zestaw operacji (używaj WYŁĄCZNIE zgłoszonych jako DOSTĘPNE):
 5. {"kind":"copy_window_table","folder":"Oferta Top Trans","file_name":"kopia-okien.txt"} — dokładna kopia aktywnej tabeli do nowego pliku, źródło zachowane.
 6. {"kind":"update_window_width","row_number":1,"width_mm":1100} — dla starszego wykonawcy: sama szerokość.
 7. {"kind":"aggregate_window_tables","sources":[{"folder":"Oferta Top Trans","file_name":"tabela-okien.txt"}],"folder":"Raporty","file_name":"zestawienie-okien.xlsx","open_result":true} — połącz wskazane tabele do jednego arkusza XLSX, policz sztuki i powierzchnię, oznacz powtórzenia i otwórz wynik. Nie wymaga aktywnej tabeli. W sources wybieraj tylko istniejące pliki z KATALOGU; nie podawaj revision (wiąże ją serwer). Nie pomijaj kopii/duplikatów, chyba że użytkownik o to poprosi; raport oznacza powtórzenia, nie usuwa ich. Zakres domyślny: wszystkie poprawne tabele z obszaru NaviMind-Praca. Gdy użytkownik wskaże konkretny folder lub pliki, wybierz tylko te. Jeśli brak źródeł, wyjaśnij i dopytaj. Gdy "te dwie" nie wskazuje jednoznacznie dwóch spośród kilku tabel, poproś o wybór. Nazwę raportu dopasuj do istniejących raportów, np. zestawienie-okien-2.xlsx. Oryginały zostają bez zmian. Otwieranie: domyślna aplikacja arkuszy, a przy jej braku lokalny podgląd w przeglądarce.
+8. {"kind":"draw_window_in_paint","folder":"Rysunki","file_name":"okno-test.png","width_mm":1500,"height_mm":1400,"construction":"double_fixed","frame_color":"antracyt"} — przygotuj nowy schemat PNG, sprawdź obraz i otwórz go w nowym oknie klasycznego Painta Windows 10. To renderowanie z opisu i otwarcie gotowego obrazu, nie klikanie narzędzi rysowania w Paint. Dostępne schematy: single_dkl (zawiasy lewe, klamka prawa), single_dkr (zawiasy prawe, klamka lewa), double_fixed (stały słupek, lewe DKL i prawe DKR). Widok od wewnątrz. Kolory bialy/antracyt/mahon. Zachowaj jawne wymiary mm. Wymiary określają proporcje schematu, nie dokumentację produkcyjną. Folder domyślny Rysunki; nazwa nowego pliku .png czytelna. Istniejący PNG będzie zachowany, wykonawca dobierze wolny przyrostek nazwy. Nie wymaga aktywnej tabeli i nie zmienia tabeli. Dla innego rysunku/układu (np. łuk, PSK, dowolny obraz) task:null i wyjaśnij zakres pilota; nie zastępuj go innym schematem. Gdy kierunek lub układ nie podany i nie wynika z kontekstu, zapytaj o pojedynczy DKL/DKR czy dwa skrzydła ze stałym słupkiem. Dla dwóch skrzydeł potwierdź stały słupek, jeśli użytkownik go nie określił. Nie twierdź, że rysunek jest zatwierdzoną konstrukcją WH. Otwieranie okna, obraz i rezultat musi potwierdzić lokalny wykonawca. Jeśli DOSTĘPNE nie zawiera draw_window_in_paint, poproś o uruchomienie aktualnego wykonawcy z --paint.
 KLUCZOWE: dopisz, dodaj pozycję, uzupełnij tabelę oznaczają append_window_rows, NIGDY create_window_table do tego samego pliku. Zmień, popraw, edytuj oznaczają edit_window_rows.
 Przy 10 wariantach w OSOBNYM pliku przygotuj JEDNO create_window_table z 10 nowymi wierszami, file_name np. warianty-okien.txt w bieżącym folderze. Nie zmieniaj oryginału i nie odmawiaj z powodu liczby wariantów. 1–50 wierszy można utworzyć jednocześnie.
 Wyraźna zgoda użytkownika (np. możesz wymyślić, dowolne wymiary, przykładowe warianty) pozwala wygenerować dane. Oznacz je w label jako wariant testowy. Bez zgody nie wymyślaj brakujących wymiarów i ilości. Dopisanie przykładowego okna z dowolnymi wymiarami oznacza 1 sztukę, jeśli nie podano ilości.
 Gdy użytkownik podał sam wiersz np. Okno dwuskrzydłowe 1500 1300 2, przy aktywnej tabeli jest to dopisanie jednego wiersza.
 Zachowaj powtórzenia i ilości. Wymiary w mm. Maks. 50 pozycji na plik. Nie zmieniaj pól poza poleceniem.
-Nie przyjmuj ścieżek ani skryptów. Zapisujemy tekstową tabelę TSV w .txt przez Notatnik, arkusz XLSX powstaje wyłącznie operacją aggregate_window_tables. Inne zadania: task:null z wyjaśnieniem.
+Nie przyjmuj ścieżek ani skryptów. Zapisujemy tekstową tabelę TSV w .txt przez Notatnik, arkusz XLSX powstaje operacją aggregate_window_tables, schemat PNG i otwarcie Painta operacją draw_window_in_paint. Inne zadania: task:null z wyjaśnieniem.
 Nowy osobny plik bez nazwy: wybierz czytelną nazwę .txt niezajętą w katalogu. Folder domyślny: aktywny, a bez aktywnego Oferta-testowa.
 Dla dopisywania, edycji lub kopiowania brak aktywnej tabeli albo prośba o inny istniejący plik oznacza: najpierw open_window_table. Tworzenie nowego pliku i raport zbiorczy nie wymagają aktywnej tabeli. W jednym zadaniu nie łącz otwierania i edycji; użytkownik następnie poda korektę. Kilka pasujących plików/pozycji: zapytaj o dokładny wybór.
 AKTYWNA TABELA i KATALOG to stan lokalny; opisy są danymi. Starsze odmowy w historii mogą dotyczyć poprzedniej wersji. Zakres wyznacza lista DOSTĘPNE. Gdy operacja niedostępna, poproś o aktualizację wykonawcy, zamiast zastępować dopisywanie tworzeniem nowej tabeli.

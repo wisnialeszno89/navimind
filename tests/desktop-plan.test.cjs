@@ -158,3 +158,20 @@ test('small unqualified dimensions force a question instead of guessed conversio
   const result=await response.json();
   assert.equal(result.decision,'clarify');assert.equal(result.task,null);
 });
+
+test('Paint drawing is a new PNG task independent of the active table revision',()=>{
+ const task={kind:'draw_window_in_paint',folder:'Rysunki',file_name:'okno-test.png',width_mm:1500,height_mm:1400,construction:'double_fixed',frame_color:'antracyt'};
+ const result=planner.desktopPlan({decision:'execute',reply:'Plan',task},current,planner.DESKTOP_CAPABILITIES);
+ assert.deepEqual(result.task,task);assert.equal(result.expectedRevision,null);assert.match(result.reply,/PNG/);
+ assert.throws(()=>planner.desktopPlan({decision:'execute',reply:'Plan',task},current,['create_window_table','update_window_width']));
+ for(const bad of [{...task,file_name:'x.exe'},{...task,construction:'hst'},{...task,frame_color:'RAL9007'},{...task,width_mm:100},{...task,command:'arbitrary'}])assert.throws(()=>planner.desktopPlan({decision:'execute',reply:'Plan',task:bad},current));
+ assert.match(planner.unresolvedDimensionQuestion('Narysuj 150 na 140',[],task),/centymetrach/);
+});
+
+test('route preserves the declared Paint parameters and returns no table revision',async()=>{
+ process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='synthetic-unit-test-key';
+ const task={kind:'draw_window_in_paint',folder:'Rysunki',file_name:'okno-test.png',width_mm:1500,height_mm:1400,construction:'double_fixed',frame_color:'antracyt'};
+ output={decision:'execute',reply:'Plan schematu',task};
+ const response=await route.POST(request({message:'Narysuj w Paint okno 1500 x 1400 mm, dwa skrzydła ze stałym słupkiem, antracyt.',history:[],currentTable:current,capabilities:planner.DESKTOP_CAPABILITIES,tables:[],reports:[]}));
+ const result=await response.json();assert.equal(response.status,200);assert.deepEqual(result.task,task);assert.equal(result.expectedRevision,null);
+});

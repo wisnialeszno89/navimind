@@ -9,10 +9,15 @@ import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
 
 type Message = { role: "user" | "assistant"; content: string; image?: string };
-type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; currentTable: (TableContext & { file: string }) | null };
-type TaskResult = { status: "verified" | "review"; message: string; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
+type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; currentTable: (TableContext & { file: string }) | null };
+type TaskResult = { status: "verified" | "review"; message: string; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
-  if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message;
+  if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message + (result.file ? "\n\nPlik: " + result.file : "");
+  if (result.drawing) {
+    const drawing=result.drawing;
+    const construction:Record<string,string>={single_dkl:'Jednoskrzydłowe DKL',single_dkr:'Jednoskrzydłowe DKR',double_fixed:'Dwa skrzydła, stały słupek, lewe DKL / prawe DKR'};
+    return `**Schemat zapisany i otwarty w Paint.** ${result.message}\n\nPlik: ${result.file}\n\n${drawing.width_mm} × ${drawing.height_mm} mm · ${construction[drawing.construction]||drawing.construction} · kolor: ${drawing.frame_color}.\n\nSchemat poglądowy od wewnątrz. Przygotowano PNG z opisu i otwarto w nowym oknie Painta.`;
+  }
   if (result.browser) return "**Krok w przeglądarce wykonany.** " + result.message;
   if (result.summary) {
     const summary = result.summary;
@@ -264,6 +269,7 @@ export default function WorkspaceChat() {
         {connected && <p className="mt-2 text-xs text-slate-300">Tabele okien: edycja i osobne pliki. Raport XLSX: scalanie, sztuki, powierzchnia i powtórzenia. Pliki: Pulpit / NaviMind-Praca.{agent?.currentTable && ` Aktywny plik: ${agent.currentTable.folder} / ${agent.currentTable.file_name || "tabela-okien.txt"}.`}</p>}
         {connected && agent?.capabilities && !agent.capabilities.includes("append_window_rows") && <p className="mt-2 text-sm text-amber-200">Zaktualizuj lokalnego wykonawcę, aby dopisywać i edytować pozycje.</p>}
         {connected && agent?.capabilities && !agent.capabilities.includes("aggregate_window_tables") && <p className="mt-2 text-sm text-amber-200">Raport XLSX wymaga aktualizacji lokalnego wykonawcy.</p>}
+        {connected && agent?.paint?.available && <p className="mt-2 text-xs text-slate-300">Paint: w trybie Praca na komputerze możesz zlecić schemat okna PNG i otwarcie go w nowym oknie Painta.</p>}
         {agent?.warning && <p role="alert" className="mt-2 text-sm text-amber-200">{agent.warning}</p>}
       </header>
       <section aria-label="Rozmowa" aria-live="polite" className="flex-1 space-y-4 py-6">
