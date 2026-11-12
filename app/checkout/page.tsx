@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, LockKeyhole, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
 import { getCommercialPlan } from "../lib/commercialPlans";
 
 export const metadata = { title: "Wybór pakietu – NaviMind (podgląd)" };
@@ -24,7 +24,8 @@ export default function CheckoutPreview({ searchParams }: { searchParams?: { pla
           </div>
         ) : <p className="mt-6 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">Nie wybrano prawidłowego pakietu. Wróć do cennika.</p>}
         <div className="mt-6 flex items-start gap-3 text-sm text-slate-400"><ShieldCheck size={20} className="shrink-0 text-blue-300"/><p>Do czasu podłączenia bramki płatniczej, fakturowania i licencji zakup pozostaje wyłączony. Nie używamy starych linków PRO / PRO+.</p></div>
-        <Link href="/plans" className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-5 py-3 font-semibold text-white hover:bg-blue-400"><ArrowLeft size={17}/> Wróć do pakietów</Link>
+        <Link href="/license" className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/40 bg-blue-400/10 px-5 py-3 font-semibold text-blue-100 hover:bg-blue-400/20">Zobacz, jak będzie działać aktywacja <ArrowRight size={17}/></Link>
+        <Link href="/plans" className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-5 py-3 font-semibold text-white hover:bg-blue-400"><ArrowLeft size={17}/> Wróć do pakietów</Link>
       </section>
     </main>
   );
