@@ -13,3 +13,17 @@ test('real renderer turns synthetic PDF content into pixels; rotation and zoom r
  await assert.rejects(lib.pdfPageViews(rasters[0],13),/INVALID_PAGE_ORIENTATION/);
  await assert.rejects(lib.rasterPDF(data,2),/PDF_RENDER_PAGE_MISMATCH/);
 });
+
+
+test('renderer works when the caller is evaluated in a VM without an import callback',async()=>{
+ const vm=require('node:vm');const doc=await PDFDocument.create();doc.addPage([160,120]);
+ const data='data:application/pdf;base64,'+Buffer.from(await doc.save()).toString('base64');
+ const sandboxModule={exports:{}};
+ const code=ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText;
+ vm.runInNewContext(code,{module:sandboxModule,exports:sandboxModule.exports,require:Module.createRequire(filename),process,Buffer,console,Uint8Array,ArrayBuffer,setTimeout,clearTimeout},{filename});
+ const result=await sandboxModule.exports.rasterPDF(data,1);assert.equal(result.length,1);assert.equal(result[0].width,480);
+});
+
+test('synthetic readiness checks image rendering without customer data',async()=>{
+ assert.deepEqual(await lib.pdfRendererProbe(),{pages:1,views:3});
+});

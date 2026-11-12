@@ -9,5 +9,6 @@ mkdirSync(join(target,'legacy/build'),{recursive:true});
 for(const file of ['pdf.mjs','pdf.worker.mjs'])cpSync(join(source,'legacy/build',file),join(target,'legacy/build',file),{dereference:true});
 for(const folder of ['cmaps','standard_fonts','wasm'])cpSync(join(source,folder),join(target,folder),{recursive:true,dereference:true});
 cpSync(join(source,'LICENSE'),join(target,'LICENSE'));
+writeFileSync(join(target,'loader.cjs'),"exports.load = () => import('./legacy/build/pdf.mjs');\n");
 writeFileSync(join(target,'package.json'),JSON.stringify({type:'module',private:true,pdfjsVersion:require('pdfjs-dist/package.json').version}));
 console.log('PDF_RUNTIME_ASSETS=prepared');

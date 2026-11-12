@@ -103,3 +103,25 @@ te same pola i opcjonalny liczbowy status dostawcy, bez surowego wyjątku,
 PDF, obrazów, treści odczytu ani kluczy. Rozróżniamy limit, uwierzytelnienie,
 niedostępność modelu, timeout oraz błąd struktury odpowiedzi. Niepewne dane
 z poprawną strukturą dają czytelny szkic review, a nie ogólny błąd serwera.
+
+
+## Sprawdzenie pakietu i kontekstu wykonania (PDF-R2.1)
+
+Ładowanie PDF.js przez new Function z dynamicznym importem zostało zastąpione
+prawdziwym plikiem loader.cjs z natywnym importem ESM. Test regresji odtwarza
+ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING, gdy wywołujący kod działa w VM bez
+callbacka importu; nowy loader przechodzi ten test. Na tej podstawie usunięto
+podatny sposób ładowania; dawny ogólny log produkcyjny nie ujawniał przyczyny.
+
+Każde build kończy się scripts/check-pdf-package.cjs. Skrypt kopiuje WYŁĄCZNIE
+pliki wymienione w śladzie funkcji do oddzielnego katalogu, uruchamia zbudowany
+GET i sprawdza render syntetycznego dokumentu z obrazem i tekstem. Brak assets,
+workera lub zależności natywnych przerywa build. Test nie wywołuje API modelu.
+
+Prywatny GET /api/workspace/document-plan sprawdza gotowość renderera, zwraca
+jedynie ready, wersję czytnika, identyfikator albo bezpieczny kod błędu. POST
+wykonuje tę samą próbę przed odczytem klienta. Udana próba jest współdzielona
+w procesie; błąd można ponowić. Szczegółowy błąd próby dotyczy wyłącznie danych
+wygenerowanych w kodzie, dlatego może być zalogowany bez treści klientów.
+Nie logujemy surowych wyjątków z dokumentu użytkownika. Gotowość renderera
+nie potwierdza poprawności późniejszego odczytu modelu.

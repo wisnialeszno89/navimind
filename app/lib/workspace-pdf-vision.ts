@@ -1,16 +1,24 @@
 import {join} from 'path';
-import {pathToFileURL} from 'url';
+import {existsSync} from 'fs';
 import sharp from 'sharp';
 import * as canvasRuntime from '@napi-rs/canvas';
+import {PDFDocument} from 'pdf-lib';
 
 // Keep the ESM renderer outside the Next server bundle, with its copied worker assets and
 // native canvas included in the function trace (next.config.js).
-const importModule=new Function('specifier','return import(specifier)') as (specifier:string)=>Promise<any>;
+type NodeModuleAccess={createRequire:(filename:string)=>(id:string)=>{load:()=>Promise<any>}};
+function loadRuntime(root:string){
+ if(!existsSync(join(root,'loader.cjs'))||!existsSync(join(root,'legacy/build/pdf.mjs')))throw Error('PDF_RENDER_ASSETS_MISSING');
+ // A real CommonJS file owns the import callback. new Function(import(...))
+ // inherits the caller's VM context and can fail in hosted function runtimes.
+ const nativeModule=(process as unknown as {getBuiltinModule:(name:string)=>NodeModuleAccess}).getBuiltinModule('module');
+ return nativeModule.createRequire(join(root,'loader.cjs'))(join(root,'loader.cjs')).load();
+}
 export type PDFRaster={page:number;image:Buffer;width:number;height:number};
 export async function rasterPDF(data:string,expectedPages:number):Promise<PDFRaster[]>{
  if(typeof canvasRuntime.createCanvas!=='function')throw Error('PDF_RENDER_DEPENDENCY');
  const root=join(process.cwd(),'pdf-runtime');
- const {getDocument}=await importModule(pathToFileURL(join(root,'legacy/build/pdf.mjs')).href);
+ const {getDocument}=await loadRuntime(root);
  const task=getDocument({data:new Uint8Array(Buffer.from(data.split(',')[1],'base64')),isEvalSupported:false,stopAtErrors:true,
   cMapUrl:join(root,'cmaps/'),cMapPacked:true,standardFontDataUrl:join(root,'standard_fonts/'),wasmUrl:join(root,'wasm/'),verbosity:0});
  try{
@@ -46,4 +54,19 @@ export async function pdfPageViews(page:PDFRaster,rotation:number){
  const images=[{label:'cała strona',image:await sharp(upright.data).jpeg({quality:93}).toBuffer()}];
  for(let i=0;i<regions.length;i++)images.push({label:horizontal?(i?'prawa część':'lewa część'):(i?'dolna część':'górna część'),image:await sharp(upright.data).extract(regions[i]).jpeg({quality:95}).toBuffer()});
  return {page:page.page,width,height,images};
+}
+
+
+// A generated image PDF, not customer data. Used to check the actual packaged
+// function without calling a model or accessing any Windows executor.
+export async function pdfRendererProbe(){
+ const sample=await sharp({create:{width:80,height:60,channels:3,background:{r:230,g:30,b:20}}}).jpeg().toBuffer();
+ const pdf=await PDFDocument.create(),page=pdf.addPage();page.setSize(160,120);
+ page.drawImage(await pdf.embedJpg(sample),{x:0,y:0,width:160,height:120});
+ page.drawText('NaviMind PDF',{x:10,y:60,size:12});
+ const rasters=await rasterPDF('data:application/pdf;base64,'+Buffer.from(await pdf.save()).toString('base64'),1);
+ const views=await pdfPageViews(rasters[0],0);
+ const stats=await sharp(rasters[0].image).stats();
+ if(rasters.length!==1||views.images.length!==3||stats.channels[0].mean<stats.channels[1].mean+50)throw Error('PDF_RENDER_PROBE_FAILED');
+ return {pages:1,views:3};
 }

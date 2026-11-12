@@ -4,11 +4,23 @@ import {NextResponse} from 'next/server';
 import {isPrivateWorkspace,workspaceMessages} from '@/lib/workspace';
 import {readWorkspaceBody} from '@/lib/workspace-image';
 import {workspacePDF,documentReply,DOCUMENT_PROMPT,ORIENTATION_PROMPT,documentFormats,documentFailure} from '@/lib/workspace-document';
-import {rasterPDF,pdfPageViews} from '@/lib/workspace-pdf-vision';
+import {rasterPDF,pdfPageViews,pdfRendererProbe} from '@/lib/workspace-pdf-vision';
 import {pageReading,mergePageReadings,PAGE_READING_INSTRUCTIONS} from '@/lib/workspace-document-pages';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=120;
+const PDF_READER='PDF-R2.1';
+let rendererReady:Promise<unknown>|undefined;
+function ensureRenderer(){
+ if(!rendererReady)rendererReady=pdfRendererProbe().catch(problem=>{
+  rendererReady=undefined;
+  // This probe has only generated fixture data. Its errors cannot contain
+  // customer PDF text, model credentials, or provider responses.
+  console.error('WORKSPACE_PDF_RENDERER_PROBE_FAILED',{reader:PDF_READER,name:problem instanceof Error?problem.name:'unknown',code:(problem as {code?:unknown})?.code,message:problem instanceof Error?problem.message.slice(0,400):'unknown'});
+  throw problem;
+ });
+ return rendererReady;
+}
 export async function POST(req:Request){
  if(!isPrivateWorkspace())return NextResponse.json({message:'Przestrzeń pracy jest wyłączona.'},{status:403});
  let messages,pdf;
@@ -16,12 +28,13 @@ export async function POST(req:Request){
  catch(problem){const large=problem instanceof Error&&problem.message==='REQUEST_TOO_LARGE';return NextResponse.json({message:'Wybierz poprawny, niezabezpieczony hasłem PDF: do 2 MB i 10 stron. Nie wykonano działań na komputerze.'},{status:large?413:400});}
  if(!process.env.OPENAI_API_KEY)return NextResponse.json({message:'Brakuje konfiguracji modelu.'},{status:503});
  const requestId=randomUUID();
- const reader='PDF-R2';
+ const reader=PDF_READER;
  console.info('WORKSPACE_DOCUMENT_READ_STARTED',{reader,requestId,pages:pdf.pages});
  let stage='render_pages';
  const abort=new AbortController();
  const deadline=setTimeout(()=>abort.abort(),110000);
  try{
+  await ensureRenderer();
   const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY,maxRetries:0});
   const model=process.env.NAVIMIND_DOCUMENT_MODEL||'gpt-4.1';
   const formats=documentFormats(pdf.pages);
@@ -56,4 +69,12 @@ export async function POST(req:Request){
   console.info('WORKSPACE_DOCUMENT_READ_FINISHED',{reader,requestId,pages:pdf.pages,positions:report.positions.length,review:report.requires_clarification});
   return NextResponse.json({reply:documentReply(report)+`\n\nOdczyt: ${reader} · numer próby: ${requestId}`,specification:report,reader,requestId,agentConnected:false},{headers:{'Cache-Control':'no-store'}});
  }catch(problem){const failure=documentFailure(problem,stage,requestId);const status=(problem as {status?:unknown})?.status;console.error('WORKSPACE_DOCUMENT_READ_FAILED',{reader,stage,code:failure.code,requestId,provider_status:typeof status==='number'?status:undefined});abort.abort();return NextResponse.json({...failure,reader,message:failure.message+` Odczyt: ${reader}.`},{status:503,headers:{'Cache-Control':'no-store'}});}finally{clearTimeout(deadline);}
+}
+
+
+export async function GET(){
+ if(!isPrivateWorkspace())return NextResponse.json({ready:false},{status:403});
+ const requestId=randomUUID();
+ try{await ensureRenderer();return NextResponse.json({ready:true,reader:PDF_READER,requestId},{headers:{'Cache-Control':'no-store'}});}
+ catch(problem){const failure=documentFailure(problem,'render_pages',requestId);return NextResponse.json({ready:false,...failure},{status:503,headers:{'Cache-Control':'no-store'}});}
 }

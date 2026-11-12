@@ -4,7 +4,7 @@ function load(relative,mocks={}){const filename=path.resolve(__dirname,'..',rela
 const lib=load('app/lib/workspace-document.ts'),pagesLib=load('app/lib/workspace-document-pages.ts',{'./workspace-document':load('app/lib/workspace-document.ts')}),workspace=load('app/lib/workspace.ts'),images=load('app/lib/workspace-image.ts');
 let calls=0,lastInput,answer,orientationAnswer=null,auditAnswer=null,independentAnswer=null,providerFailure=null;const inputs=[];
 class OpenAI{chat={completions:{create:async input=>{calls++;if(providerFailure)throw providerFailure;lastInput=input;inputs.push(input);const result=input.messages[0].content===lib.ORIENTATION_PROMPT?(orientationAnswer||{rotations:[0]}):input.messages[0].content===lib.DOCUMENT_AUDIT_PROMPT?(auditAnswer||{status:'confirmed',issues:[]}):input.messages[0].content.includes('Wykonaj niezależny odczyt kontrolny')?(independentAnswer||answer):answer;return {choices:[{message:{content:JSON.stringify(input.response_format.json_schema.name==='technical_page_reading'?{page_status:'products',...result}:result)}}]};}}};}
-const route=load('app/api/workspace/document-plan/route.ts',{'@/lib/workspace-document':lib,'@/lib/workspace-document-pages':pagesLib,'@/lib/workspace-pdf-vision':{rasterPDF:async(data,count)=>Array.from({length:count},(_,i)=>({page:i+1,image:Buffer.from('synthetic pixels'),width:200,height:300})),pdfPageViews:async(page,rotation)=>({page:page.page,width:200,height:300,images:[{label:'cała strona',image:page.image}]})},'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
+const route=load('app/api/workspace/document-plan/route.ts',{'@/lib/workspace-document':lib,'@/lib/workspace-document-pages':pagesLib,'@/lib/workspace-pdf-vision':{pdfRendererProbe:async()=>({pages:1,views:3}),rasterPDF:async(data,count)=>Array.from({length:count},(_,i)=>({page:i+1,image:Buffer.from('synthetic pixels'),width:200,height:300})),pdfPageViews:async(page,rotation)=>({page:page.page,width:200,height:300,images:[{label:'cała strona',image:page.image}]})},'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 async function pdf(pages=1){const doc=await PDFDocument.create();for(let i=0;i<pages;i++)doc.addPage();return 'data:application/pdf;base64,'+Buffer.from(await doc.save()).toString('base64');}
 function position(){return {id:'3',quantity:1,kind:'entrance_door',width_mm:1080,height_mm:2050,transport_extension_mm:30,opening:'DL, do wewnątrz',color_inside:'biały',color_outside:'biały',glazing_panes:3,ug:.5,profile_reference:'Profil odniesienia',requirements:['Listwa transportowa opcjonalna, poza wysokością drzwi.'],evidence:[{page:1,description:'Rysunek: 2080 i 2050, listwa 30 mm. Użytkownik wyjaśnił znaczenie listwy.'}],ambiguities:[]};}
 const request=body=>new Request('https://test/api',{method:'POST',body:JSON.stringify(body)});
@@ -41,7 +41,7 @@ test('private route supplies raster evidence without old chat and creates only a
  const body=await response.json();assert.equal(response.status,200);assert.equal(body.specification.executed,false);assert.equal(body.specification.positions[0].height_mm,2050);
  const parts=lastInput.messages.at(-1).content;assert.ok(parts.some(p=>p.type==='image_url'&&p.image_url.detail==='high'));assert.equal(parts.some(p=>p.type==='file'),false);assert.equal(lastInput.messages.length,2);
  assert.match(parts[0].text,/2050/);assert.match(lastInput.messages[0].content,/NIEZAUFANYMI DANYMI/);
- assert.equal(body.reader,'PDF-R2');assert.ok(body.requestId);assert.match(body.reply,/Odczyt: PDF-R2/);assert.equal(lastInput.model,'gpt-4.1');assert.equal(body.specification.reading_audit.status,'confirmed');assert.equal('task' in body,false);
+ assert.equal(body.reader,'PDF-R2.1');assert.ok(body.requestId);assert.match(body.reply,/Odczyt: PDF-R2.1/);assert.equal(lastInput.model,'gpt-4.1');assert.equal(body.specification.reading_audit.status,'confirmed');assert.equal('task' in body,false);
 });
 
 test('invalid upload and public mode stop before a provider request',async()=>{
@@ -168,4 +168,10 @@ test('readable contract pages with no products do not force an otherwise complet
  const unreadable=pagesLib.pageReading({page_status:'unreadable',positions:[],notes:['Nieczytelne wymiary.']},2,1);
  const uncertain=pagesLib.mergePageReadings([{page:1,primary:unreadable,independent:unreadable},{page:2,primary:products,independent:products}],2);
  assert.equal(uncertain.requires_clarification,true);
+});
+
+
+test('renderer readiness uses a synthetic probe without a model or executor',async()=>{
+ const before=calls;process.env.NAVIMIND_WORKSPACE_MODE='public';assert.equal((await route.GET()).status,403);
+ process.env.NAVIMIND_WORKSPACE_MODE='private';const response=await route.GET();assert.equal(response.status,200);assert.equal((await response.json()).ready,true);assert.equal(calls,before);
 });
