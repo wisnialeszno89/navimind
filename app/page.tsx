@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import AppShell from "./components/AppShell";
+import Link from "next/link";
 import { useLanguage } from "./lib/useLanguage";
 
 export default function Page() {
@@ -32,15 +33,16 @@ export default function Page() {
 
         {/* CTA: miękko, bez agresji */}
         <button
-          onClick={() => router.push("/chat")}
+          onClick={() => router.push("/agent")}
           className="mt-3 px-7 py-3 rounded-xl bg-blue-600/90 text-white text-base hover:bg-blue-500 transition"
         >
-          {t("startChat")}
+          Otwórz NaviMind
         </button>
 
         {/* mini uspokajacz – opcjonalny, ale robi klimat */}
+        <Link href="/plans" className="rounded-xl border border-white/20 px-5 py-2.5 text-sm text-blue-200 hover:bg-white/10">Wybierz swój pakiet</Link>
         <p className="text-xs text-blue-200/60 max-w-md">
-          Bez ocen. Bez presji. Możesz zacząć od jednego zdania.
+          Pakiety i licencje są w przygotowaniu. Prywatne testy agenta odbywają się w chronionym Workspace.
         </p>
       </div>
     </AppShell>
