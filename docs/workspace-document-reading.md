@@ -125,3 +125,13 @@ w procesie; błąd można ponowić. Szczegółowy błąd próby dotyczy wyłącz
 wygenerowanych w kodzie, dlatego może być zalogowany bez treści klientów.
 Nie logujemy surowych wyjątków z dokumentu użytkownika. Gotowość renderera
 nie potwierdza poprawności późniejszego odczytu modelu.
+
+
+## Przyczyna pominięcia assets na wdrożeniu
+
+W vercel.json pozostawało buildCommand: next build. Nadpisywało to skrypt
+package.json, więc Vercel nie wykonywał prepare-pdf-runtime.mjs ani testu
+pakietu. Log wdrożenia potwierdzał wyłącznie Running next build i brak obu
+znaczników PDF_RUNTIME_ASSETS oraz PDF_PACKAGED_RENDER. Zmieniono komendę
+na pnpm run build. Po wdrożeniu wymagamy obu znaczników w logu serwera CI;
+samo READY albo udany lokalny build nie jest dowodem ich wykonania.
