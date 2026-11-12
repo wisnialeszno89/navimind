@@ -10,7 +10,7 @@ import type { BrowserSnapshot } from "@/lib/browser-plan";
 import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
 
-type Message = { role: "user" | "assistant"; content: string; image?: string };
+type Message = { role: "user" | "assistant"; content: string; image?: string; documentName?:string };
 type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; native?: {available:boolean;scope:string;title:string}; currentTable: (TableContext & { file: string }) | null };
 type TaskResult = { status: "verified" | "review"; message: string; browser_export?: {image_file:string;report_file:string;goal_verified:boolean;price_verified:boolean;screenshot_scope:string}; native?: NativeSnapshot; system_report?: any; native_result?: {saved_pixels_changed:boolean;goal_verified:boolean}; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
@@ -42,6 +42,7 @@ export default function WorkspaceChat() {
   const [error, setError] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [imageName, setImageName] = useState("");
+  const [pdf, setPDF] = useState<{data:string;name:string}|null>(null);
   const [imageBusy, setImageBusy] = useState(false);
   const imageGeneration = useRef(0);
   const [pairing, setPairing] = useState(false);
@@ -115,6 +116,7 @@ export default function WorkspaceChat() {
     setImageBusy(true);
     setImage(null);
     setImageName("");
+    setPDF(null);
     setError("");
     try {
       if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 2 * 1024 * 1024 || !file.size) throw new Error("Wybierz PNG, JPG lub WebP do 2 MB. Duży zrzut możesz zapisać jako JPG.");
@@ -130,27 +132,47 @@ export default function WorkspaceChat() {
     } finally { if (generation === imageGeneration.current) setImageBusy(false); }
   }
 
+  async function attachPDF(file:File){
+    if(sendingRef.current||pendingJob)return;
+    const generation=++imageGeneration.current;
+    setImageBusy(true);setImage(null);setImageName("");setPDF(null);setError("");
+    try{
+      if((file.type!=="application/pdf"&&!file.name.toLowerCase().endsWith(".pdf"))||!file.size||file.size>2*1024*1024)throw Error("Wybierz PDF do 2 MB i 10 stron, bez hasła.");
+      const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>typeof reader.result==='string'?resolve(reader.result):reject(Error("Nie odczytano PDF."));reader.onerror=()=>reject(Error("Nie odczytano PDF."));reader.readAsDataURL(file);});
+      if(generation===imageGeneration.current)setPDF({data:'data:application/pdf;base64,'+data.split(',')[1],name:file.name});
+    }catch(problem){if(generation===imageGeneration.current)setError(problem instanceof Error?problem.message:"Nie odczytano PDF.");}
+    finally{if(generation===imageGeneration.current)setImageBusy(false);}
+  }
+
   async function send(event: FormEvent) {
     event.preventDefault();
-    const content = text.trim() || (image ? "Pomóż zinterpretować ten zrzut i wskaż następny krok." : "");
+    const content = text.trim() || (pdf ? "Odczytaj z PDF pozycje stolarki na podstawie rysunków i opisów. Wskaż niejasne wymiary i brakujące dane. Nie wykonuj działań w programie." : image ? "Pomóż zinterpretować ten zrzut i wskaż następny krok." : "");
     if (!content || sendingRef.current || pendingJob || imageBusy) return;
     sendingRef.current = true;
     setSending(true);
     setError("");
     const previousMessages = messages;
-    const history = previousMessages.slice(-12).map(({role, content}) => ({role, content}));
+    const history = previousMessages.slice(-12).map(({role, content}) => ({role, content:content.length>8000?"Wcześniejszy odczyt dokumentu jest zbyt obszerny do historii. Nie zakładaj dostępności wszystkich pozycji. Poproś użytkownika o wskazanie konkretnej pozycji i parametrów przed wykonaniem.":content}));
     const attachedImage = image;
     const attachedName = imageName;
-    if (attachedImage) {setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}
-    setMessages(previous => [...previous, { role: "user", content, ...(attachedImage ? {image: attachedImage} : {}) }]);
+    const attachedPDF = pdf;
+    if (attachedImage||attachedPDF) {setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}
+    setMessages(previous => [...previous, { role: "user", content, ...(attachedImage ? {image: attachedImage} : {}), ...(attachedPDF?{documentName:attachedPDF.name}:{}) }]);
     setText("");
+    setPDF(null);
     setImage(null);
     setImageName("");
     let executionStarted = false;
     let browserActions = 0;
     stopBrowser.current = false;
     try {
-      if(nativeMode&&!attachedImage){
+      if(attachedPDF){
+        setBrowserProgress("Odczytuję rysunki i opisy z PDF…");
+        const response=await fetch("/api/workspace/document-plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:content,history,pdf:attachedPDF.data})});
+        const result=await response.json();
+        if(!response.ok)throw Error(result.message||"Nie udało się odczytać PDF.");
+        setMessages(previous=>[...previous,{role:"assistant",content:result.reply}]);
+      } else if(nativeMode&&!attachedImage){
         if(!connected||!tokenRef.current)throw Error("Najpierw połącz komputer.");
         const outcome=await runNativeCommand(tokenRef.current,content,history,{progress:setBrowserProgress,stopped:()=>stopBrowser.current,pending:(id)=>{setPendingJob(id);executionStarted=!!id;},executed:()=>{browserActions++;}});
         setMessages(previous=>[...previous,{role:"assistant",content:outcome.result?resultText(outcome.result)+"\n\nOcena modelu: "+outcome.reply:outcome.reply}]);
@@ -245,6 +267,7 @@ export default function WorkspaceChat() {
         setText(content);
         setImage(attachedImage);
         setImageName(attachedName);
+        setPDF(attachedPDF);
         setError(problem instanceof Error ? problem.message : "Błąd połączenia.");
       }
     } finally {
@@ -294,6 +317,7 @@ export default function WorkspaceChat() {
         {messages.map((message, index) => (
           <article key={index} className={`rounded-xl p-4 ${message.role === "user" ? "ml-6 bg-blue-900" : "mr-6 bg-slate-800"}`}>
             <p className="mb-2 text-xs text-slate-300">{message.role === "user" ? "Ty" : "NaviMind"}</p>
+            {message.documentName && <p className="mb-3 text-sm">Dokument PDF: {message.documentName}</p>}
             {message.image && <img src={message.image} alt="Zrzut dołączony do tej wiadomości" className="mb-3 max-h-80 max-w-full rounded border border-slate-500 object-contain" />}
             <div className="space-y-2 overflow-x-auto break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
           </article>
@@ -305,7 +329,7 @@ export default function WorkspaceChat() {
       </section>
       <form onSubmit={send} className="sticky bottom-0 space-y-3 border-t border-slate-700 bg-slate-950 py-4">
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <label htmlFor="workspace-command" className="block text-sm">{image ? "Pytanie do zrzutu ekranu" : nativeMode ? "Polecenie dla okna aplikacji" : browserMode ? "Polecenie dla przeglądarki" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
+        <label htmlFor="workspace-command" className="block text-sm">{pdf ? "Wskazówki do odczytu PDF" : image ? "Pytanie do zrzutu ekranu" : nativeMode ? "Polecenie dla okna aplikacji" : browserMode ? "Polecenie dla przeglądarki" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
         <textarea id="workspace-command" ref={inputRef} value={text} rows={3} maxLength={8000}
           disabled={sending || !!pendingJob} onChange={event => setText(event.target.value)}
           onPaste={event => { const file = Array.from(event.clipboardData.files).find(file => file.type.startsWith("image/")); if (file) { event.preventDefault(); void attachImage(file); } }}
@@ -323,6 +347,16 @@ export default function WorkspaceChat() {
             <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={sending || !!pendingJob || imageBusy}
               onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void attachImage(file); }} />
           </label>
+          <label className="ml-2 inline-block cursor-pointer rounded border border-slate-500 px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-blue-400">
+            Dołącz PDF zapytania
+            <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={sending||!!pendingJob||imageBusy}
+              onChange={event=>{const file=event.target.files?.[0];event.target.value="";if(file)void attachPDF(file);}}/>
+          </label>
+          {pdf&&<div className="rounded-lg border border-slate-600 p-3">
+            <p className="text-sm">PDF: {pdf.name}</p>
+            <p className="mt-1 text-xs text-amber-200">Do 2 MB i 10 stron. PDF, w tym rysunki i skany, zostanie przekazany do modelu do odczytu pozycji. Ta wiadomość nie uruchomi działań na komputerze. Wynik wymaga sprawdzenia.</p>
+            <button type="button" disabled={sending} onClick={()=>{imageGeneration.current++;setPDF(null);}} className="mt-2 text-sm underline">Usuń PDF</button>
+          </div>}
           <p className="text-xs text-slate-400">Możesz też wykonać zrzut przez Win+Shift+S i wkleić Ctrl+V w polu wiadomości. PNG, JPG, WebP, do 2 MB.</p>
           {image && <div className="rounded-lg border border-slate-600 p-3">
             <img src={image} alt="Zrzut przygotowany do wysłania" className="max-h-48 max-w-full rounded object-contain" />
@@ -333,7 +367,7 @@ export default function WorkspaceChat() {
         </div>
         <div className="flex items-start justify-between gap-3">
           <MicrophoneButton disabled={sending || !!pendingJob} onResult={transcript => setText(previous => [previous.trim(), transcript].filter(Boolean).join(" "))} />
-          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{image ? "Wyślij zrzut" : nativeMode ? "Wykonaj w aplikacji" : browserMode ? "Wykonaj w przeglądarce" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
+          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image && !pdf)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{pdf ? "Odczytaj PDF" : image ? "Wyślij zrzut" : nativeMode ? "Wykonaj w aplikacji" : browserMode ? "Wykonaj w przeglądarce" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
         </div>
         <p className="text-xs text-slate-400">Historia, zrzuty i parowanie działają w bieżącej karcie. Po odświeżeniu połącz komputer ponownie. Nagranie wysyłane jest do rozpoznania mowy po zatrzymaniu.</p>
       </form>
