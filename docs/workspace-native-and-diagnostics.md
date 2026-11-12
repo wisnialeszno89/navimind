@@ -11,3 +11,5 @@ Decyzja done nie jest samodzielnym potwierdzeniem sukcesu. Kontroler zapisuje is
 `inspect_computer` w trybie **Praca na komputerze** zbiera odczytowe fakty o systemie, RAM i dysku do nowego JSON. Nie jest automatyczną naprawą, skanem malware, pomiarem procesów ani SMART. Zebrane fakty są pokazywane w czacie i mogą służyć jako kontekst diagnozy. Planista ma rozróżniać dane potwierdzone, hipotezy i potrzebne dalsze pomiary.
 
 Testy: `node --test tests/native-plan.test.cjs tests/native-runner.test.cjs tests/desktop-plan.test.cjs`. Testy lokalne: `python -m pytest tests/test_navimind_native_system.py`. Dotychczasowe adaptery tabel, schematów i Chromium pozostają osobnymi metodami wykonywania zadań.
+
+Native snapshot może zawierać nazwy i położenia przycisków/kart/menu z UI Automation. `native_target` wybiera ref z bieżącego odczytu, który kontroler rozwiązuje lokalnie. Pola i ich wartości nie są pobierane przez tę metodę. Ref jest zmieniany przy odczycie. Lokalny identyfikator sesji chroni kroki przed wykonaniem po rozpoczęciu innego polecenia w tym oknie; pozostaje w pętli lokalnej i nie trafia do modelu.

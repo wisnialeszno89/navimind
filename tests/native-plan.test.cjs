@@ -20,3 +20,11 @@ test('private route validates before provider and actually supplies image input'
  replies=[{decision:'act',reply:'Krok',task:{kind:'native_click',x:0,y:0}}];const response=await route.POST(request());assert.equal(response.status,200);assert.equal(last.messages.at(-1).content[1].image_url.url,png);
  replies=[{decision:'act',reply:'Krok',task:{kind:'native_key',key:'WIN+R'}},{decision:'review',reply:'Potrzebna pomoc',task:null}];const result=await (await route.POST(request())).json();assert.equal(result.task,null);assert.equal(result.decision,'review');
 });
+
+test('named controls bind the proposal to the current observed reference',()=>{
+ const view={...snapshot,controls:[{ref:'e'+'a'.repeat(16),name:'Linia',x:0,y:0}]};
+ assert.deepEqual(lib.nativeSnapshot(view),view);
+ assert.equal(lib.nativeDecision({decision:'act',reply:'Wybieram Linię',task:{kind:'native_target',ref:view.controls[0].ref}},view).task.ref,view.controls[0].ref);
+ assert.throws(()=>lib.nativeDecision({decision:'act',reply:'Krok',task:{kind:'native_target',ref:'e'+'b'.repeat(16)}},view));
+ assert.throws(()=>lib.nativeSnapshot({...view,controls:[{...view.controls[0],x:1}]}));
+});
