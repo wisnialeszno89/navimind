@@ -12,6 +12,7 @@ const nextConfig = {
         './node_modules/pdfjs-dist/wasm/**/*',
         './node_modules/@napi-rs/canvas/**/*',
         './node_modules/@napi-rs/canvas-linux-*/**/*',
+        './node_modules/.pnpm/@napi-rs+canvas*/**/*',
       ],
     },
   },
