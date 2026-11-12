@@ -27,3 +27,17 @@ This branch is a **public-facing static preview only**.
 
 ## Acceptance
 All pages must remain usable without an authenticated session or external provider. No working activation control, payment URL, actual key or desktop connection is added by this PR.
+
+## Navigation and restricted test access
+- Public app: navbar links to `/agent` for a safe entry and to `/plans` for proposed subscriptions. On a public deployment, `/agent` links only to existing `/chat`; it does **not** reveal `/workspace` or trigger pairing.
+- Private deployment (`NAVIMIND_WORKSPACE_MODE=private`): `/agent` redirects to the existing protected `/workspace`; protected Workspace gets a top navigation with `Agent – testy` and `Wybierz swój pakiet`.
+- Existing Workspace pairing, desktop connection, local executor, remote endpoint, permissions and environment guards are unchanged.
+- Prior developer tests on a protected deployment continue under the **existing** pairing protocol. Future customer activation tokens must be independent, only issued after verified purchase; no public trial creates device access.
+- All navigation changes live on this branch. Do not merge or publish to production without checking the environment mode and protection settings.
+
+## Regression checklist
+1. Public `/` highlights agent entry; header offers Agent and Wybierz swój pakiet.
+2. Public `/agent` offers `/chat`, never a Connect Computer button or license activation.
+3. Protected `/agent` redirects to `/workspace`, with current local pairing behavior untouched and top navigation intact.
+4. `/plans`, `/checkout?plan=business`, `/license` render in both environments.
+5. No checkout provider, activation API, license issue or desktop connection API modified by this PR.
