@@ -96,3 +96,58 @@ body {
     0 0 0 1px rgba(198,163,107,0.25),
     0 0 30px rgba(198,163,107,0.12);
 }
+
+/* ===== Platinum Violet: sales/entry preview only =====
+ * Deliberately scoped; existing dark chat, private Workspace and execution UI
+ * retain their current visual system.
+ */
+.nm-page {
+  --pv-bg: #f8f8fb;
+  --pv-panel: #ffffff;
+  --pv-ink: #1c1b25;
+  --pv-text: #555362;
+  --pv-violet: #6753a6;
+  --pv-violet-dark: #51408e;
+  --pv-violet-wash: #eeebf8;
+  --pv-gold: #b69a62;
+  --pv-silver: #dadae1;
+  color: var(--pv-ink);
+  background:
+    radial-gradient(ellipse 48% 30% at 80% 8%, rgba(142,121,200,.11), transparent 90%),
+    linear-gradient(180deg,#fbfaff 0%,#f8f8fb 43%,#f4f4f8 100%);
+  min-height: calc(100vh - 64px);
+  position: relative;
+}
+.nm-page * { box-sizing: border-box; }
+.nm-page a { text-decoration: none; }
+.nm-shell { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
+.nm-eyebrow { color: var(--pv-violet); font-size: .72rem; font-weight: 750; letter-spacing: .19em; text-transform: uppercase; }
+.nm-display { font-size: clamp(2.55rem, 5.6vw, 5.3rem); line-height: 1.08; letter-spacing: -.055em; font-weight: 770; }
+.nm-lead { color: var(--pv-text); font-size: clamp(1rem,1.5vw,1.17rem); line-height: 1.8; }
+.nm-card { background: rgba(255,255,255,.91); border: 1px solid #e7e5ed; border-radius: 22px; box-shadow: 0 15px 45px rgba(34,29,63,.035); }
+.nm-card-featured { border-color: #b1a4d2; box-shadow: 0 20px 55px rgba(88,71,145,.09); }
+.nm-btn-primary, .nm-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 12px 22px; border-radius: 12px; font-size: .9rem; font-weight: 700; transition: transform .18s, background .18s; }
+.nm-btn-primary { background: #6753a6; color: #fff !important; }
+.nm-btn-primary:hover { background: #51408e; transform: translateY(-1px); }
+.nm-btn-secondary { border: 1px solid #d9d5e4; background: white; color: #262330 !important; }
+.nm-btn-secondary:hover { background: #f2effa; transform: translateY(-1px); }
+.nm-kicker { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; background: #eeebf8; color: #574390; border-radius: 999px; font-size: .76rem; font-weight: 720; }
+.nm-note { background: #f4f0ff; color: #594b79; border: 1px solid #e4dcef; border-radius: 14px; padding: 14px 17px; font-size: .85rem; line-height: 1.6; }
+.nm-muted { color: #6d6977; }
+.nm-step-number { background: #eeebf8; color: #6753a6; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 13px; font-weight: 800; }
+.nm-gold-line { height: 3px; width: 52px; background: #b69a62; border-radius: 4px; }
+.nm-label { font-size: .74rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; color: #786889; }
+.nm-page input:disabled, .nm-page button:disabled { cursor: not-allowed; opacity: .66; }
+.nm-page :is(a,button,input):focus-visible { outline: 3px solid #a18ccd; outline-offset: 3px; }
+
+/* Public marketing navigation only; do not restyle the legacy /chat UI. */
+body:has(.nm-page) .nm-public-header { background: rgba(250,249,253,.96) !important; border-bottom: 1px solid #e7e5ed !important; }
+body:has(.nm-page) .nm-public-header .nm-brand { color: #1c1b25 !important; }
+body:has(.nm-page) .nm-public-header .nm-nav-link { color: #383342 !important; background: #fff !important; border: 1px solid #e7e5ed !important; }
+body:has(.nm-page) .nm-public-header .nm-nav-link:hover { background: #f0edfa !important; }
+body:has(.nm-page) .nm-public-header .nm-nav-highlight { background: #6753a6 !important; color: white !important; border-color: #6753a6 !important; }
+body:has(.nm-page) .nm-public-header .nm-legal-link { color: #77717f !important; }
+body:has(.nm-page) .nm-public-header .nm-free-badge { color: #7b7586 !important; border-color: #e2dfeb !important; }
+@media (prefers-reduced-motion: reduce) {
+  .nm-page *, .nm-page *::before, .nm-page *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
