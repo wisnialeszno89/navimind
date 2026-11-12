@@ -2,31 +2,27 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
 import { getCommercialPlan } from "../lib/commercialPlans";
 
-export const metadata = { title: "Wybór pakietu – NaviMind (podgląd)" };
+export const metadata={title:"Wybór pakietu – NaviMind (podgląd)"};
 
-export default function CheckoutPreview({ searchParams }: { searchParams?: { plan?: string } }) {
-  // Display-only. No checkout session, payment provider, activation, or entitlement mutation.
-  const plan = getCommercialPlan(searchParams?.plan);
-
-  return (
-    <main className="relative z-10 flex min-h-[80vh] items-center justify-center px-4 py-16 text-slate-100">
-      <section className="w-full max-w-xl rounded-3xl border border-white/10 bg-slate-900/90 p-7 shadow-2xl sm:p-10">
-        <div className="mb-6 inline-flex rounded-xl border border-blue-400/25 bg-blue-400/10 p-3 text-blue-300"><LockKeyhole size={26}/></div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Podgląd ścieżki zakupu</p>
-        <h1 className="mt-3 text-3xl font-semibold">Płatności w przygotowaniu</h1>
-        <p className="mt-4 leading-7 text-slate-300">Ta strona jest demonstracją przyszłego zakupu. Nie pobieramy płatności, nie zapisujemy zamówienia i nie aktywujemy żadnego pakietu.</p>
-        {plan ? (
-          <div className="mt-7 rounded-2xl border border-white/10 bg-white/5 p-5">
-            <p className="text-sm text-slate-400">Wybrany pakiet</p>
-            <h2 className="mt-1 text-xl font-semibold">{plan.name}</h2>
-            <p className="mt-2 text-2xl font-bold">{plan.pricePln} zł <span className="text-sm font-normal text-slate-400">/ mies. · {plan.priceTax}</span></p>
-            <p className="mt-3 text-sm text-slate-300">Zakładany budżet AI: {plan.aiBudgetPln} zł / mies.</p>
-          </div>
-        ) : <p className="mt-6 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">Nie wybrano prawidłowego pakietu. Wróć do cennika.</p>}
-        <div className="mt-6 flex items-start gap-3 text-sm text-slate-400"><ShieldCheck size={20} className="shrink-0 text-blue-300"/><p>Do czasu podłączenia bramki płatniczej, fakturowania i licencji zakup pozostaje wyłączony. Nie używamy starych linków PRO / PRO+.</p></div>
-        <Link href="/license" className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/40 bg-blue-400/10 px-5 py-3 font-semibold text-blue-100 hover:bg-blue-400/20">Zobacz, jak będzie działać aktywacja <ArrowRight size={17}/></Link>
-        <Link href="/plans" className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-5 py-3 font-semibold text-white hover:bg-blue-400"><ArrowLeft size={17}/> Wróć do pakietów</Link>
-      </section>
-    </main>
-  );
+export default function CheckoutPreview({searchParams}:{searchParams?:{plan?:string}}){
+  const plan=getCommercialPlan(searchParams?.plan);
+  return <main className="nm-page flex items-center justify-center px-5 py-20">
+    <section className="nm-card w-full max-w-xl p-7 sm:p-11">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eeeaf8] text-[#6753a6]"><LockKeyhole size={27}/></div>
+      <p className="nm-eyebrow mt-7">Bezpieczny podgląd</p>
+      <h1 className="mt-3 text-4xl font-bold tracking-tight">Płatności <span className="text-[#6753a6]">w przygotowaniu.</span></h1>
+      <p className="nm-lead mt-5">To demonstracja przyszłego zakupu. Nie pobieramy pieniędzy, nie zapisujemy zamówień i nie aktywujemy żadnych licencji.</p>
+      {plan?<div className="mt-8 rounded-2xl border border-[#e7e2ed] bg-[#f8f6fc] p-6">
+        <p className="text-xs font-bold uppercase tracking-widest text-[#796c8e]">Wybrany pakiet</p>
+        <h2 className="mt-2 text-2xl font-bold">{plan.name}</h2>
+        <div className="mt-3 text-3xl font-bold">{plan.pricePln} zł <span className="text-sm font-normal text-[#7b7485]">/ mies. · {plan.priceTax}</span></div>
+        <p className="mt-3 text-sm text-[#6c6578]">Planowany budżet AI: {plan.aiBudgetPln} zł / mies.</p>
+      </div>:<div className="nm-note mt-7">Nie wybrano poprawnego pakietu. Wróć do cennika.</div>}
+      <div className="mt-6 flex items-start gap-3 text-sm leading-7 text-[#696274]"><ShieldCheck size={21} className="mt-1 shrink-0 text-[#6753a6]"/> Zakupy i generowanie licencji pozostają zablokowane do czasu ukończenia i przetestowania systemu.</div>
+      <div className="mt-8 flex flex-col gap-3">
+        <Link href="/license" className="nm-btn-primary w-full">Zobacz planowaną aktywację <ArrowRight size={17}/></Link>
+        <Link href="/plans" className="nm-btn-secondary w-full"><ArrowLeft size={17}/> Wróć do pakietów</Link>
+      </div>
+    </section>
+  </main>;
 }
