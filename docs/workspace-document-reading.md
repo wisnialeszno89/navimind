@@ -135,3 +135,19 @@ pakietu. Log wdrożenia potwierdzał wyłącznie Running next build i brak obu
 znaczników PDF_RUNTIME_ASSETS oraz PDF_PACKAGED_RENDER. Zmieniono komendę
 na pnpm run build. Po wdrożeniu wymagamy obu znaczników w logu serwera CI;
 samo READY albo udany lokalny build nie jest dowodem ich wykonania.
+
+
+## Powtórzona numeracja między stronami (PDF-R2.2)
+
+Łączenie stron nie odrzuca całego odczytu, gdy ten sam numer źródłowy pojawi
+się na kilku stronach. Zachowuje wszystkie rekordy, ich ilości, source_id,
+source_page i dowody. Kolizje otrzymują unikalne etykiety z numerem strony,
+bez kolizji z rzeczywistymi identyfikatorami źródłowymi. Oryginalny numer jest
+również pokazany w szczegółach pozycji. Porównania A/B są przypisane do strony
+i właściwego rekordu, zamiast do pierwszej pozycji o takim samym numerze.
+
+Powtórzenie numeru zawsze daje review: nie dowodzi, czy jest to kontynuacja,
+inny produkt, kopia czy błędny odczyt numeracji. Nawet identyczne parametry nie
+powodują automatycznego scalania lub sumowania ilości. Funkcja nie zmienia
+rekordów wejściowych. Ścisła walidacja duplikatów w jednym odczycie jednej
+strony oraz pozostałe limity nadal obowiązują.

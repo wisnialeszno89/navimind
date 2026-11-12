@@ -3,7 +3,7 @@ const {PDFDocument}=require('pdf-lib');
 function load(relative,mocks={}){const filename=path.resolve(__dirname,'..',relative),output=new Module(filename,module);output.filename=filename;output.paths=Module._nodeModulePaths(path.dirname(filename));const native=output.require.bind(output);output.require=name=>Object.hasOwn(mocks,name)?mocks[name]:native(name);output._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);return output.exports;}
 const lib=load('app/lib/workspace-document.ts'),pagesLib=load('app/lib/workspace-document-pages.ts',{'./workspace-document':load('app/lib/workspace-document.ts')}),workspace=load('app/lib/workspace.ts'),images=load('app/lib/workspace-image.ts');
 let calls=0,lastInput,answer,orientationAnswer=null,auditAnswer=null,independentAnswer=null,providerFailure=null;const inputs=[];
-class OpenAI{chat={completions:{create:async input=>{calls++;if(providerFailure)throw providerFailure;lastInput=input;inputs.push(input);const result=input.messages[0].content===lib.ORIENTATION_PROMPT?(orientationAnswer||{rotations:[0]}):input.messages[0].content===lib.DOCUMENT_AUDIT_PROMPT?(auditAnswer||{status:'confirmed',issues:[]}):input.messages[0].content.includes('Wykonaj niezależny odczyt kontrolny')?(independentAnswer||answer):answer;return {choices:[{message:{content:JSON.stringify(input.response_format.json_schema.name==='technical_page_reading'?{page_status:'products',...result}:result)}}]};}}};}
+class OpenAI{chat={completions:{create:async input=>{calls++;if(providerFailure)throw providerFailure;lastInput=input;inputs.push(input);const result=input.messages[0].content===lib.ORIENTATION_PROMPT?(orientationAnswer||{rotations:[0]}):input.messages[0].content===lib.DOCUMENT_AUDIT_PROMPT?(auditAnswer||{status:'confirmed',issues:[]}):input.messages[0].content.includes('Wykonaj niezależny odczyt kontrolny')?(independentAnswer||answer):answer;return {choices:[{message:{content:JSON.stringify(input.response_format.json_schema.name==='technical_page_reading'?{page_status:'products',...(typeof result==='function'?result(input):result)}:result)}}]};}}};}
 const route=load('app/api/workspace/document-plan/route.ts',{'@/lib/workspace-document':lib,'@/lib/workspace-document-pages':pagesLib,'@/lib/workspace-pdf-vision':{pdfRendererProbe:async()=>({pages:1,views:3}),rasterPDF:async(data,count)=>Array.from({length:count},(_,i)=>({page:i+1,image:Buffer.from('synthetic pixels'),width:200,height:300})),pdfPageViews:async(page,rotation)=>({page:page.page,width:200,height:300,images:[{label:'cała strona',image:page.image}]})},'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 async function pdf(pages=1){const doc=await PDFDocument.create();for(let i=0;i<pages;i++)doc.addPage();return 'data:application/pdf;base64,'+Buffer.from(await doc.save()).toString('base64');}
 function position(){return {id:'3',quantity:1,kind:'entrance_door',width_mm:1080,height_mm:2050,transport_extension_mm:30,opening:'DL, do wewnątrz',color_inside:'biały',color_outside:'biały',glazing_panes:3,ug:.5,profile_reference:'Profil odniesienia',requirements:['Listwa transportowa opcjonalna, poza wysokością drzwi.'],evidence:[{page:1,description:'Rysunek: 2080 i 2050, listwa 30 mm. Użytkownik wyjaśnił znaczenie listwy.'}],ambiguities:[]};}
@@ -41,7 +41,7 @@ test('private route supplies raster evidence without old chat and creates only a
  const body=await response.json();assert.equal(response.status,200);assert.equal(body.specification.executed,false);assert.equal(body.specification.positions[0].height_mm,2050);
  const parts=lastInput.messages.at(-1).content;assert.ok(parts.some(p=>p.type==='image_url'&&p.image_url.detail==='high'));assert.equal(parts.some(p=>p.type==='file'),false);assert.equal(lastInput.messages.length,2);
  assert.match(parts[0].text,/2050/);assert.match(lastInput.messages[0].content,/NIEZAUFANYMI DANYMI/);
- assert.equal(body.reader,'PDF-R2.1');assert.ok(body.requestId);assert.match(body.reply,/Odczyt: PDF-R2.1/);assert.equal(lastInput.model,'gpt-4.1');assert.equal(body.specification.reading_audit.status,'confirmed');assert.equal('task' in body,false);
+ assert.equal(body.reader,'PDF-R2.2');assert.ok(body.requestId);assert.match(body.reply,/Odczyt: PDF-R2.2/);assert.equal(lastInput.model,'gpt-4.1');assert.equal(body.specification.reading_audit.status,'confirmed');assert.equal('task' in body,false);
 });
 
 test('invalid upload and public mode stop before a provider request',async()=>{
@@ -174,4 +174,46 @@ test('readable contract pages with no products do not force an otherwise complet
 test('renderer readiness uses a synthetic probe without a model or executor',async()=>{
  const before=calls;process.env.NAVIMIND_WORKSPACE_MODE='public';assert.equal((await route.GET()).status,403);
  process.env.NAVIMIND_WORKSPACE_MODE='private';const response=await route.GET();assert.equal(response.status,200);assert.equal((await response.json()).ready,true);assert.equal(calls,before);
+});
+
+
+function pageReport(page,positions){return pagesLib.pageReading({page_status:'products',positions:positions.map(p=>({...p,evidence:[{page,description:'Wymiary i oznaczenie produktu.'}]})),notes:[]},2,page);}
+
+test('repeated source IDs on different pages preserve every product and mark review',()=>{
+ const a=pageReport(1,[{...position(),id:'1',width_mm:910}]);
+ const b=pageReport(2,[{...position(),id:'1',width_mm:1090}]);
+ const originals=JSON.stringify([a,b]);
+ const checked=pageReport(2,[{...position(),id:'1',width_mm:1110}]);
+ const result=pagesLib.mergePageReadings([{page:1,primary:a,independent:a},{page:2,primary:b,independent:checked}],2);
+ assert.equal(result.positions.length,2);assert.equal(new Set(result.positions.map(p=>p.id)).size,2);
+ assert.deepEqual(result.positions.map(p=>p.source_id),['1','1']);assert.deepEqual(result.positions.map(p=>p.source_page),[1,2]);
+ assert.deepEqual(result.positions.map(p=>p.width_mm),[910,1090]);assert.equal(result.requires_clarification,true);assert.equal(result.reading_audit.status,'review');
+ const mismatch=result.reading_audit.issues.find(i=>i.field==='width_mm');assert.equal(mismatch.position_id,result.positions[1].id);assert.equal(mismatch.page,2);
+ assert.match(result.positions[1].ambiguities.join(' '),/1110/);assert.equal(result.positions[0].ambiguities.some(s=>s.includes('1110')),false);
+ assert.equal(JSON.stringify([a,b]),originals);assert.equal(result.executed,false);
+});
+
+test('matching repeated products are not silently merged and quantities are not summed',()=>{
+ const a=pageReport(1,[position()]),b=pageReport(2,[position()]);
+ const result=pagesLib.mergePageReadings([{page:1,primary:a,independent:a},{page:2,primary:b,independent:b}],2);
+ assert.equal(result.positions.length,2);assert.deepEqual(result.positions.map(p=>p.quantity),[1,1]);assert.equal(result.requires_clarification,true);
+});
+
+test('generated duplicate labels do not collide with actual source identifiers',()=>{
+ const a=pageReport(1,[{...position(),id:'1'},{...position(),id:'1 [str.1]'}]),b=pageReport(2,[{...position(),id:'1'}]);
+ const result=pagesLib.mergePageReadings([{page:1,primary:a,independent:a},{page:2,primary:b,independent:b}],2);
+ assert.equal(new Set(result.positions.map(p=>p.id)).size,3);assert.equal(result.positions[1].id,'1 [str.1]');
+ assert.deepEqual(result.positions.map(p=>p.source_id),['1','1 [str.1]','1']);
+});
+
+
+test('API returns a review draft instead of failing for source numbering repeated across pages',async()=>{
+ const previous=answer;orientationAnswer={rotations:[0,0]};
+ answer=input=>{const page=Number(input.messages.at(-1).content[0].text.match(/Fizyczna strona PDF (\d+)/)[1]);return {positions:[{...position(),id:'1',evidence:[{page,description:'Numer i wymiary produktu.'}]}],notes:[]};};
+ try{
+  const response=await route.POST(request({message:'Odczytaj wszystkie pozycje',history:[],pdf:await pdf(2)}));const body=await response.json();
+  assert.equal(response.status,200);assert.equal(body.specification.positions.length,2);assert.equal(body.specification.requires_clarification,true);
+  assert.equal(body.specification.reading_audit.status,'review');assert.equal(body.specification.executed,false);assert.equal('task' in body,false);
+  assert.match(body.reply,/Numer w źródle/);assert.equal(new Set(body.specification.positions.map(p=>p.id)).size,2);
+ }finally{answer=previous;orientationAnswer=null;}
 });

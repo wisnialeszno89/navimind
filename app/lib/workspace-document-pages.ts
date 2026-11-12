@@ -1,5 +1,6 @@
 import {documentReport} from './workspace-document';
-type Report=ReturnType<typeof documentReport>&{page_status?:'products'|'non_product'|'unreadable'};
+type Position=ReturnType<typeof documentReport>['positions'][number]&{source_id?:string;source_page?:number};
+type Report=Omit<ReturnType<typeof documentReport>,'positions'>&{positions:Position[];page_status?:'products'|'non_product'|'unreadable'};
 type Issue={position_id:string|null;page:number;field:string;reason:string};
 export function pageReading(value:unknown,pages:number,page:number){
  const v=value as Record<string,unknown>;
@@ -34,15 +35,31 @@ export function comparePageReadings(primary:Report,independent:Report,page:numbe
 }
 export function mergePageReadings(readings:{page:number;primary:Report;independent:Report}[],pages:number){
  if(readings.length!==pages||readings.some((r,i)=>r.page!==i+1))throw Error('PDF_RENDER_PAGE_MISMATCH');
- const positions:Report['positions']=[],notes:string[]=[],issues:Issue[]=[];
- for(const r of readings){
-  positions.push(...r.primary.positions);
-  notes.push(...r.primary.notes);
-  issues.push(...comparePageReadings(r.primary,r.independent,r.page));
+ const positions:Position[]=[],notes:string[]=[],issues:Issue[]=[];
+ const sourcePages=new Map<string,number[]>();
+ for(const r of readings)for(const p of r.primary.positions){const found=sourcePages.get(p.id)||[];found.push(r.page);sourcePages.set(p.id,found);}
+ // Reserve source identifiers too: a generated label must not collide with a
+ // literal identifier on another page. A repeated number alone proves neither
+ // continuation nor identity, even when the dimensions happen to match.
+ const used=new Set(sourcePages.keys()),scopedIds=new Map<string,string>();
+ const key=(page:number,id:string)=>JSON.stringify([page,id]);
+ for(const r of readings)for(const p of r.primary.positions){
+  const pagesWithId=sourcePages.get(p.id)!;
+  let id=p.id;
+  if(pagesWithId.length>1){
+   const base=p.id.slice(0,30)+` [str.${r.page}]`;id=base;let suffix=2;
+   while(used.has(id))id=base+` #${suffix++}`;
+   used.add(id);
+   issues.push({position_id:id,page:r.page,field:'source_id',reason:`Numer źródłowy ${p.id} powtarza się na stronach ${pagesWithId.join(', ')}. Zachowano odczyty oddzielnie. Ustal, czy to różne produkty, kontynuacja czy błąd numeracji; ilości nie zsumowano.`});
+  }
+  scopedIds.set(key(r.page,p.id),id);
+  positions.push({...p,id,source_id:p.id,source_page:r.page,requirements:[...p.requirements,...(id!==p.id?[`Numer w źródle: ${p.id}. Strona PDF: ${r.page}.`]:[])],evidence:p.evidence.map(e=>({...e})),ambiguities:[...p.ambiguities]});
  }
  if(positions.length>20)throw Error('INVALID_DOCUMENT_POSITIONS');
- const seen=new Set<string>();
- for(const p of positions){if(seen.has(p.id))throw Error('DUPLICATE_POSITION');seen.add(p.id);}
+ for(const r of readings){
+  notes.push(...r.primary.notes);
+  for(const issue of comparePageReadings(r.primary,r.independent,r.page))issues.push({...issue,position_id:issue.position_id===null?null:scopedIds.get(key(r.page,issue.position_id))??null});
+ }
  // Avoid running the semantic warnings twice; both page reports were validated.
  const report:Report={status:'technical_draft',source:'model_pdf_reading',pages,positions,notes,requires_clarification:!positions.length||readings.some(r=>r.primary.requires_clarification),executed:false,sales_review_required:true};
  // auditDocument limits individual model audits to 40; here comparisons are

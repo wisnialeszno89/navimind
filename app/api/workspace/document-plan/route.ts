@@ -9,7 +9,7 @@ import {pageReading,mergePageReadings,PAGE_READING_INSTRUCTIONS} from '@/lib/wor
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=120;
-const PDF_READER='PDF-R2.1';
+const PDF_READER='PDF-R2.2';
 let rendererReady:Promise<unknown>|undefined;
 function ensureRenderer(){
  if(!rendererReady)rendererReady=pdfRendererProbe().catch(problem=>{
