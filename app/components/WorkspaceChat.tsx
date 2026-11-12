@@ -12,9 +12,10 @@ import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-conne
 
 type Message = { role: "user" | "assistant"; content: string; image?: string };
 type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; native?: {available:boolean;scope:string;title:string}; currentTable: (TableContext & { file: string }) | null };
-type TaskResult = { status: "verified" | "review"; message: string; native?: NativeSnapshot; system_report?: any; native_result?: {saved_pixels_changed:boolean;goal_verified:boolean}; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
+type TaskResult = { status: "verified" | "review"; message: string; browser_export?: {image_file:string;report_file:string;goal_verified:boolean;price_verified:boolean;screenshot_scope:string}; native?: NativeSnapshot; system_report?: any; native_result?: {saved_pixels_changed:boolean;goal_verified:boolean}; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
   if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message + (result.file ? "\n\nPlik: " + result.file : "");
+  if(result.browser_export)return `**Widok zapisany na Pulpicie.** ${result.message}\n\nZrzut PNG: ${result.browser_export.image_file}\n\nRaport JSON: ${result.browser_export.report_file}\n\nZapis obejmuje aktualny widok. Cena i zgodność całej oferty nie zostały niezależnie potwierdzone.`;
   if(result.native)return "**Krok w aplikacji odczytany.** "+result.message+" Sprawdź okno Painta i podaj dalsze polecenie; całego zadania nie wznowiono automatycznie.";
   if(result.native_result)return `**Zapis pliku potwierdzony.** ${result.message}\n\nPlik: ${result.file}\n\nZmianę pikseli sprawdzono lokalnie. Zgodność rysunku z poleceniem wymaga oceny wizualnej.`;
   if(result.system_report){const f=result.system_report;const gb=(n:number)=>typeof n==='number'?(n/1073741824).toFixed(1)+' GiB':'brak pomiaru';return `**Raport komputera zapisany.** ${result.message}\n\nPlik: ${result.file}\n\n| Pomiar | Wynik |\n|---|---|\n| System | ${f.os.system} ${f.os.release}, ${f.os.version} |\n| Architektura | ${f.os.architecture} |\n| Logiczne procesory | ${f.cpu.logical_processors} |\n| RAM razem | ${gb(f.memory?.total_bytes)} |\n| RAM dostępny | ${gb(f.memory?.available_bytes)} |\n| Dysk razem | ${gb(f.system_disk.total_bytes)} |\n| Dysk wolny | ${gb(f.system_disk.free_bytes)} |\n\nTo odczyt faktów. Przyczyna problemu nie została jeszcze ustalona; ustawienia pozostają bez zmian.`;}
@@ -191,6 +192,9 @@ export default function WorkspaceChat() {
             setMessages(previous=>[...previous,{role:"assistant",content:resultText(result)+" Nowej próby nie wykonano automatycznie."}]);return;
           }
           browserActions++;
+          if(result.browser_export){
+            setMessages(previous=>[...previous,{role:"assistant",content:resultText(result)+`\n\nOdczytana strona: ${result.browser?.url}`}]);return;
+          }
           snapshot=result.browser;
           if(plan.task.kind==='browser_click'&&viewKey(snapshot)===before)noEffect.set(actionKey,(noEffect.get(actionKey)||0)+1);
         }

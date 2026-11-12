@@ -83,3 +83,9 @@ test('initial destination proof permits later navigation within the site, not to
  assert.equal(lib.requiredBrowserNavigation({...snapshot,url:'https://other.example.org/lab'},[url],steps).decision,'act');
  assert.equal(lib.requiredBrowserNavigation({...snapshot,url:'https://example.org/unrelated'},[url],[]).decision,'act');
 });
+
+test('browser snapshot export accepts no arbitrary file path or execution payload',()=>{
+ const plan=lib.browserDecision({decision:'act',reply:'Zapisuję sprawdzony widok.',task:{kind:'browser_save_snapshot'}},snapshot);
+ assert.equal(plan.task.kind,'browser_save_snapshot');assert.equal(plan.expectedRevision,snapshot.revision);
+ assert.throws(()=>lib.browserDecision({decision:'act',reply:'Zapis',task:{kind:'browser_save_snapshot',path:'C:/Windows/test.png'}},snapshot));
+});
