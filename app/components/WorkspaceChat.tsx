@@ -158,7 +158,7 @@ export default function WorkspaceChat() {
         const status: AgentStatus = await localRequest(tokenRef.current, "/status");
         if (!status.browser?.available) throw new Error("Uruchom wykonawcę z --browser i połącz go ponownie, aby otworzyć okno Chromium NaviMind.");
         let snapshot: BrowserSnapshot = await localRequest(tokenRef.current, "/browser/observe");
-        const steps: string[] = [];
+        const steps: string[] = [JSON.stringify({observed_url:snapshot.url,source:"initial_observation"})];
         let staleRetries = 0;
         const noEffect = new Map<string,number>();
         const viewKey = (view: BrowserSnapshot) => JSON.stringify([view.url,view.text,view.controls.map(({ref,...control})=>control)]);
@@ -170,7 +170,7 @@ export default function WorkspaceChat() {
           if (!response.ok) throw new Error(plan.message || "Nie udało się przygotować kroku przeglądarki.");
           if (stopBrowser.current) break;
           if (!plan.task) {
-            setMessages(previous => [...previous,{role:"assistant",content:(plan.decision==='done'?"**Wynik pracy w przeglądarce.** ":"**Potrzebny kolejny krok.** ")+plan.reply}]);
+            setMessages(previous => [...previous,{role:"assistant",content:(plan.decision==='done'?"**Wynik pracy w przeglądarce.** ":"**Potrzebny kolejny krok.** ")+plan.reply+`\n\nOdczytana strona: ${snapshot.url}\n\nTytuł: ${snapshot.title}`}]);
             return;
           }
           const before=viewKey(snapshot);
@@ -183,7 +183,7 @@ export default function WorkspaceChat() {
           const id=crypto.randomUUID();setPendingJob(id);executionStarted=true;
           const result:TaskResult=await localRequest(tokenRef.current,"/execute",{id,task:plan.task,expectedRevision:plan.expectedRevision});
           setPendingJob(null);executionStarted=false;
-          steps.push(JSON.stringify({task:plan.task,result:result.message,status:result.status}).slice(0,1000));
+          steps.push(JSON.stringify({task:plan.task,result:result.message,status:result.status,observed_url:result.browser?.url}).slice(0,1000));
           if(result.code==='STALE_PAGE' && staleRetries<2 && !stopBrowser.current){
             staleRetries++;snapshot=await localRequest(tokenRef.current,"/browser/observe");continue;
           }

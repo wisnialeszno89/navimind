@@ -55,3 +55,31 @@ test('payment and submission proposals become manual review before a local task 
  const secret={...control,name:'Hasło',type:'password'};
  assert.equal(lib.browserDecision({decision:'act',reply:'Wpisuję',task:{kind:'browser_fill',ref:secret.ref,text:'not-a-real-secret'}},{...snapshot,controls:[secret]}).task,null);
 });
+
+test('explicit destination is opened before describing an old lab snapshot',async()=>{
+ const url='https://www.clean-invoice.com/fenster-konfigurator';
+ const wrong={...snapshot,url:'https://example.org/lab',title:'NaviMind laboratorium'};
+ const before=calls;
+ const response=await route.POST(request({message:'Otwórz '+url+' i odczytaj ustawienia.',history:[],snapshot:wrong,steps:[]}));
+ const plan=await response.json();assert.equal(calls,before);assert.equal(plan.task.kind,'browser_navigate');assert.equal(plan.task.url,url);assert.equal(plan.expectedRevision,wrong.revision);
+ assert.equal(lib.browserDecision({decision:'done',reply:'Odczytałem kreator.',task:null},wrong,[url]).decision,'review');
+});
+
+test('a navigation returning the wrong site stops instead of looping or claiming success',()=>{
+ const url='https://www.clean-invoice.com/fenster-konfigurator';
+ const steps=[JSON.stringify({task:{kind:'browser_navigate',url},status:'verified'})];
+ const plan=lib.requiredBrowserNavigation(snapshot,[url],steps);assert.equal(plan.decision,'review');assert.equal(plan.task,null);
+ assert.equal(lib.requiredBrowserNavigation({...snapshot,url},[url],steps),null);
+ assert.equal(lib.sameBrowserLocation('https://clean-invoice.com/fenster-konfigurator/','https://www.clean-invoice.com/fenster-konfigurator'),true);
+ assert.equal(lib.sameBrowserLocation('https://clean-invoice.com.evil.org/fenster-konfigurator',url),false);
+ assert.equal(lib.sameBrowserLocation('https://www.clean-invoice.com/other',url),false);
+ assert.equal(lib.requiredBrowserNavigation(snapshot,[url,'https://example.org/other']).decision,'clarify');
+});
+
+test('initial destination proof permits later navigation within the site, not to an unrelated lab',()=>{
+ const url='https://example.org/configurator';
+ const steps=[JSON.stringify({observed_url:url,source:'initial_observation'})];
+ assert.equal(lib.requiredBrowserNavigation({...snapshot,url:'https://example.org/configurator/summary'},[url],steps),null);
+ assert.equal(lib.requiredBrowserNavigation({...snapshot,url:'https://other.example.org/lab'},[url],steps).decision,'act');
+ assert.equal(lib.requiredBrowserNavigation({...snapshot,url:'https://example.org/unrelated'},[url],[]).decision,'act');
+});
