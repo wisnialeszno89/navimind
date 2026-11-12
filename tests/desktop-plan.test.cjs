@@ -175,3 +175,10 @@ test('route preserves the declared Paint parameters and returns no table revisio
  const response=await route.POST(request({message:'Narysuj w Paint okno 1500 x 1400 mm, dwa skrzydła ze stałym słupkiem, antracyt.',history:[],currentTable:current,capabilities:planner.DESKTOP_CAPABILITIES,tables:[],reports:[]}));
  const result=await response.json();assert.equal(response.status,200);assert.deepEqual(result.task,task);assert.equal(result.expectedRevision,null);
 });
+
+test('diagnostics are independent of the active table and cannot specify commands',()=>{
+ const task={kind:'inspect_computer',folder:'Diagnostyka',file_name:'raport.json'};
+ const result=planner.desktopPlan({decision:'execute',reply:'Plan',task},current,planner.DESKTOP_CAPABILITIES);assert.equal(result.expectedRevision,null);assert.deepEqual(result.task,task);
+ assert.throws(()=>planner.desktopPlan({decision:'execute',reply:'Plan',task:{...task,command:'anything'}},current));
+ assert.throws(()=>planner.desktopPlan({decision:'execute',reply:'Plan',task:{...task,file_name:'x.exe'}},current));
+});

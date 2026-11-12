@@ -3,16 +3,21 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {runNativeCommand} from "@/lib/native-runner";
 import MicrophoneButton from "./MicrophoneButton";
+import type {NativeSnapshot} from "@/lib/native-plan";
 import type { BrowserSnapshot } from "@/lib/browser-plan";
 import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
 
 type Message = { role: "user" | "assistant"; content: string; image?: string };
-type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; currentTable: (TableContext & { file: string }) | null };
-type TaskResult = { status: "verified" | "review"; message: string; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
+type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; native?: {available:boolean;scope:string;title:string}; currentTable: (TableContext & { file: string }) | null };
+type TaskResult = { status: "verified" | "review"; message: string; native?: NativeSnapshot; system_report?: any; native_result?: {saved_pixels_changed:boolean;goal_verified:boolean}; drawing?: {width_mm:number;height_mm:number;construction:string;frame_color:string;method:string}; browser?: BrowserSnapshot; code?: string; file?: string; preview?: string; summary?: {files:number;positions:number;quantity:number;area_m2:string;duplicate_rows:number;duplicate_groups:number}; rows?: { label: string; width_mm: number; height_mm: number; quantity: number }[] };
 function resultText(result: TaskResult) {
   if (result.status !== "verified") return "**Zadanie wymaga sprawdzenia.** " + result.message + (result.file ? "\n\nPlik: " + result.file : "");
+  if(result.native)return "**Krok w aplikacji odczytany.** "+result.message+" Sprawdź okno Painta i podaj dalsze polecenie; całego zadania nie wznowiono automatycznie.";
+  if(result.native_result)return `**Zapis pliku potwierdzony.** ${result.message}\n\nPlik: ${result.file}\n\nZmianę pikseli sprawdzono lokalnie. Zgodność rysunku z poleceniem wymaga oceny wizualnej.`;
+  if(result.system_report){const f=result.system_report;const gb=(n:number)=>typeof n==='number'?(n/1073741824).toFixed(1)+' GiB':'brak pomiaru';return `**Raport komputera zapisany.** ${result.message}\n\nPlik: ${result.file}\n\n| Pomiar | Wynik |\n|---|---|\n| System | ${f.os.system} ${f.os.release}, ${f.os.version} |\n| Architektura | ${f.os.architecture} |\n| Logiczne procesory | ${f.cpu.logical_processors} |\n| RAM razem | ${gb(f.memory?.total_bytes)} |\n| RAM dostępny | ${gb(f.memory?.available_bytes)} |\n| Dysk razem | ${gb(f.system_disk.total_bytes)} |\n| Dysk wolny | ${gb(f.system_disk.free_bytes)} |\n\nTo odczyt faktów. Przyczyna problemu nie została jeszcze ustalona; ustawienia pozostają bez zmian.`;}
   if (result.drawing) {
     const drawing=result.drawing;
     const construction:Record<string,string>={single_dkl:'Jednoskrzydłowe DKL',single_dkr:'Jednoskrzydłowe DKR',double_fixed:'Dwa skrzydła, stały słupek, lewe DKL / prawe DKR'};
@@ -47,6 +52,7 @@ export default function WorkspaceChat() {
   const [connecting, setConnecting] = useState(false);
   const [desktopMode, setDesktopMode] = useState(false);
   const [browserMode, setBrowserMode] = useState(false);
+  const [nativeMode, setNativeMode] = useState(false);
   const [browserProgress, setBrowserProgress] = useState("");
   const stopBrowser = useRef(false);
   const [agent, setAgent] = useState<AgentStatus | null>(null);
@@ -83,6 +89,7 @@ export default function WorkspaceChat() {
     setConnected(false);
     setDesktopMode(false);
     setBrowserMode(false);
+    setNativeMode(false);
     setAgent(null);
   }
 
@@ -133,7 +140,7 @@ export default function WorkspaceChat() {
     const history = previousMessages.slice(-12).map(({role, content}) => ({role, content}));
     const attachedImage = image;
     const attachedName = imageName;
-    if (attachedImage) {setDesktopMode(false);setBrowserMode(false);}
+    if (attachedImage) {setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}
     setMessages(previous => [...previous, { role: "user", content, ...(attachedImage ? {image: attachedImage} : {}) }]);
     setText("");
     setImage(null);
@@ -142,7 +149,11 @@ export default function WorkspaceChat() {
     let browserActions = 0;
     stopBrowser.current = false;
     try {
-      if (browserMode && !attachedImage) {
+      if(nativeMode&&!attachedImage){
+        if(!connected||!tokenRef.current)throw Error("Najpierw połącz komputer.");
+        const outcome=await runNativeCommand(tokenRef.current,content,history,{progress:setBrowserProgress,stopped:()=>stopBrowser.current,pending:(id)=>{setPendingJob(id);executionStarted=!!id;},executed:()=>{browserActions++;}});
+        setMessages(previous=>[...previous,{role:"assistant",content:outcome.result?resultText(outcome.result)+"\n\nOcena modelu: "+outcome.reply:outcome.reply}]);
+      } else if (browserMode && !attachedImage) {
         if (!connected || !tokenRef.current) throw new Error("Najpierw połącz komputer.");
         const status: AgentStatus = await localRequest(tokenRef.current, "/status");
         if (!status.browser?.available) throw new Error("Uruchom wykonawcę z --browser i połącz go ponownie, aby otworzyć okno Chromium NaviMind.");
@@ -223,7 +234,7 @@ export default function WorkspaceChat() {
       if (executionStarted) {
         setMessages(previous => [...previous, { role: "assistant", content: "**Brak potwierdzenia wyniku.** Połączenie przerwano podczas wykonania. Kliknij „Sprawdź wynik zadania”; nie wysyłaj ponownie tego samego polecenia." }]);
       } else if (browserActions > 0) {
-        setMessages(previous=>[...previous,{role:"assistant",content:`Przerwałem planowanie po ${browserActions} wykonanych krokach. Ich efekty pozostają w oknie Chromium NaviMind. Sprawdź aktualny widok i podaj dalsze polecenie.`}]);
+        setMessages(previous=>[...previous,{role:"assistant",content:`Przerwałem planowanie po ${browserActions} wykonanych krokach. Ich efekty pozostają w oknie zadania. Sprawdź aktualny widok i podaj dalsze polecenie.`}]);
         setError(problem instanceof Error ? problem.message : "Przerwano połączenie.");
       } else {
         setMessages(previousMessages);
@@ -252,10 +263,12 @@ export default function WorkspaceChat() {
           <button type="button" disabled={sending || connecting || !!pendingJob} onClick={() => connected ? disconnect() : setPairing(value => !value)} className="rounded border border-slate-500 px-3 py-1 disabled:opacity-50">
             {connected ? "Rozłącz" : "Połącz komputer"}
           </button>
-          {connected && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={desktopMode} disabled={sending || !!pendingJob} onChange={event => {setDesktopMode(event.target.checked);if(event.target.checked)setBrowserMode(false);}} />Praca na komputerze</label>}
+          {connected && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={desktopMode} disabled={sending || !!pendingJob} onChange={event => {setDesktopMode(event.target.checked);if(event.target.checked){setBrowserMode(false);setNativeMode(false);}}} />Praca na komputerze</label>}
         </div>
-        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={browserMode} disabled={sending || !!pendingJob || !agent?.browser?.available} onChange={event=>{setBrowserMode(event.target.checked);if(event.target.checked)setDesktopMode(false);}} />Przeglądarka · Chromium NaviMind</label>}
+        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={browserMode} disabled={sending || !!pendingJob || !agent?.browser?.available} onChange={event=>{setBrowserMode(event.target.checked);if(event.target.checked){setDesktopMode(false);setNativeMode(false);}}} />Przeglądarka · Chromium NaviMind</label>}
         {connected && !agent?.browser?.available && <p className="mt-2 text-xs text-amber-200">Obsługa stron wymaga aktualnego wykonawcy uruchomionego z --browser.</p>}
+        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={nativeMode} disabled={sending||!!pendingJob||!agent?.native?.available} onChange={event=>{setNativeMode(event.target.checked);if(event.target.checked){setDesktopMode(false);setBrowserMode(false);}}}/>Aplikacja · Paint sterowany obrazem</label>}
+        {nativeMode && <p className="mt-2 text-sm text-amber-100">Polecenie przełączy fokus na nowe okno Painta sesji. Zrzuty tego okna będą przesyłane do modelu po każdym kroku. Agent może klikać, przeciągać i wpisywać tekst. Zatrzymaj zadanie, aby przejąć sterowanie. Zapis potwierdza wykonawca; wygląd rysunku sprawdzamy wizualnie.</p>}
         {browserMode && <p className="mt-2 text-sm text-amber-100">Agent pracuje w osobnym oknie Chromium NaviMind. Po wysłaniu polecenia przekaże do modelu widoczny tekst i opisy elementów tej karty. Wartości pól, cookies i dane sesji nie są wysyłane do modelu. Logowanie oraz końcowe zatwierdzanie płatności, wysyłania i usuwania wykonujesz ręcznie.</p>}
         {pairing && <div className="mt-3 space-y-2 rounded-lg bg-slate-800 p-3">
           <p className="text-sm">Uruchom lokalnego wykonawcę w PowerShell. Wklej tutaj kod parowania z tego okna. Kod zostaje w tej karcie i służy wyłącznie do połączenia lokalnego.</p>
@@ -282,13 +295,13 @@ export default function WorkspaceChat() {
           </article>
         ))}
         {sending && <p role="status">{browserProgress || "NaviMind analizuje zadanie i przygotowuje wynik…"}</p>}
-        {sending && browserMode && <button type="button" onClick={()=>{stopBrowser.current=true;setBrowserProgress("Zatrzymuję po bieżącym kroku…");}} className="rounded border border-amber-300 px-3 py-2">Zatrzymaj po bieżącym kroku</button>}
+        {sending && (browserMode||nativeMode) && <button type="button" onClick={()=>{stopBrowser.current=true;setBrowserProgress("Zatrzymuję po bieżącym kroku…");}} className="rounded border border-amber-300 px-3 py-2">Zatrzymaj po bieżącym kroku</button>}
         {pendingJob && !sending && <button type="button" onClick={recover} className="rounded border border-amber-300 px-3 py-2">Sprawdź wynik zadania</button>}
         <div ref={bottomRef} />
       </section>
       <form onSubmit={send} className="sticky bottom-0 space-y-3 border-t border-slate-700 bg-slate-950 py-4">
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <label htmlFor="workspace-command" className="block text-sm">{image ? "Pytanie do zrzutu ekranu" : browserMode ? "Polecenie dla przeglądarki" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
+        <label htmlFor="workspace-command" className="block text-sm">{image ? "Pytanie do zrzutu ekranu" : nativeMode ? "Polecenie dla okna aplikacji" : browserMode ? "Polecenie dla przeglądarki" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
         <textarea id="workspace-command" ref={inputRef} value={text} rows={3} maxLength={8000}
           disabled={sending || !!pendingJob} onChange={event => setText(event.target.value)}
           onPaste={event => { const file = Array.from(event.clipboardData.files).find(file => file.type.startsWith("image/")); if (file) { event.preventDefault(); void attachImage(file); } }}
@@ -299,7 +312,7 @@ export default function WorkspaceChat() {
             }
           }}
           className="w-full resize-y rounded-xl border border-slate-600 bg-slate-900 p-3"
-          placeholder={browserMode ? "W formularzu wybierz Top Trans, ustaw 1100 × 1000 mm, antracyt i DKR. Pokaż podgląd." : desktopMode ? "Utwórz folder Oferta Top Trans i tabelę: 2 okna DKR 1000×1000 mm…" : "Napisz wiadomość…"} />
+          placeholder={nativeMode ? "W Paint narysuj dom, drzewo i słońce, dodaj napis NaviMind i zapisz rysunek." : browserMode ? "W formularzu wybierz Top Trans, ustaw 1100 × 1000 mm, antracyt i DKR. Pokaż podgląd." : desktopMode ? "Utwórz folder Oferta Top Trans i tabelę: 2 okna DKR 1000×1000 mm…" : "Napisz wiadomość…"} />
         <div className="space-y-2">
           <label className="inline-block cursor-pointer rounded border border-slate-500 px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-blue-400">
             {imageBusy ? "Wczytuję zrzut…" : "Dołącz zrzut ekranu"}
@@ -316,7 +329,7 @@ export default function WorkspaceChat() {
         </div>
         <div className="flex items-start justify-between gap-3">
           <MicrophoneButton disabled={sending || !!pendingJob} onResult={transcript => setText(previous => [previous.trim(), transcript].filter(Boolean).join(" "))} />
-          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{image ? "Wyślij zrzut" : browserMode ? "Wykonaj w przeglądarce" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
+          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{image ? "Wyślij zrzut" : nativeMode ? "Wykonaj w aplikacji" : browserMode ? "Wykonaj w przeglądarce" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
         </div>
         <p className="text-xs text-slate-400">Historia, zrzuty i parowanie działają w bieżącej karcie. Po odświeżeniu połącz komputer ponownie. Nagranie wysyłane jest do rozpoznania mowy po zatrzymaniu.</p>
       </form>

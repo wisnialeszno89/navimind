@@ -15,7 +15,7 @@ export function pairingCode(value: string) {
 
 // Pairing credentials travel only to loopback, never to the model or Vercel.
 export async function localRequest<T = any>(token: string, path: string, body?: unknown): Promise<T> {
-  if (path !== "/status" && path !== "/execute" && path !== "/browser/observe" && !/^\/result\/[a-zA-Z0-9-]{16,80}$/.test(path)) throw new Error("Nieprawidłowy adres lokalnego zadania.");
+  if (path !== "/status" && path !== "/execute" && path !== "/browser/observe" && path !== "/native/start" && path !== "/native/observe" && !/^\/result\/[a-zA-Z0-9-]{16,80}$/.test(path)) throw new Error("Nieprawidłowy adres lokalnego zadania.");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), body === undefined ? 10000 : 90000);
   try {
