@@ -89,3 +89,14 @@ test('browser snapshot export accepts no arbitrary file path or execution payloa
  assert.equal(plan.task.kind,'browser_save_snapshot');assert.equal(plan.expectedRevision,snapshot.revision);
  assert.throws(()=>lib.browserDecision({decision:'act',reply:'Zapis',task:{kind:'browser_save_snapshot',path:'C:/Windows/test.png'}},snapshot));
 });
+
+test('ordinary default-type buttons outside forms remain usable; actual form submits do not',()=>{
+ const button={...control,tag:'button',type:'submit',name:'1-flg. Dreh-Kipp',submits_form:false};
+ const view={...snapshot,controls:[button]};
+ assert.equal(lib.browserSnapshot(view).controls[0].submits_form,false);
+ const action={decision:'act',reply:'Wybieram konstrukcję.',task:{kind:'browser_click',ref:button.ref}};
+ assert.equal(lib.browserDecision(action,view).decision,'act');
+ const blocked=lib.browserDecision(action,{...view,controls:[{...button,submits_form:true}]});
+ assert.equal(blocked.decision,'review');assert.match(blocked.reply,/1-flg/);assert.equal(blocked.task,null);
+ assert.throws(()=>lib.browserSnapshot({...view,controls:[{...button,submits_form:'false'}]}));
+});

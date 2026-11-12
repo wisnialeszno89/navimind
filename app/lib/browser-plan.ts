@@ -1,4 +1,4 @@
-export type BrowserControl = {ref:string;tag:string;role:string;type:string;name:string;href:string;disabled:boolean;checked:boolean;value_present:boolean;options?:{label:string;value:string}[]};
+export type BrowserControl = {ref:string;tag:string;role:string;type:string;name:string;href:string;disabled:boolean;checked:boolean;value_present:boolean;submits_form?:boolean;options?:{label:string;value:string}[]};
 export type BrowserSnapshot = {revision:string;url:string;title:string;text:string;scope:'owned_chromium_tab';controls:BrowserControl[]};
 export type BrowserTask = {kind:'browser_navigate';url:string}|{kind:'browser_click';ref:string}|{kind:'browser_fill';ref:string;text:string}|{kind:'browser_select';ref:string;value:string}|{kind:'browser_scroll';direction:'up'|'down'}|{kind:'browser_back'}|{kind:'browser_save_snapshot'};
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw Error('INVALID_OBJECT');return v as Record<string,unknown>;}
@@ -14,9 +14,10 @@ export function browserSnapshot(value:unknown):BrowserSnapshot {
  const v=object(value);exact(v,['revision','url','title','text','scope','controls']);
  if(!/^[0-9a-f]{64}$/.test(text(v.revision,64))||v.scope!=='owned_chromium_tab'||!Array.isArray(v.controls)||v.controls.length>80)throw Error('INVALID_SNAPSHOT');
  const url=v.url==='about:blank'?'about:blank':browserURL(v.url);
- const controls=v.controls.map(raw=>{const c=object(raw);exact(c,['ref','tag','role','type','name','href','disabled','checked','value_present',...('options'in c?['options']:[])]);
+ const controls=v.controls.map(raw=>{const c=object(raw);exact(c,['ref','tag','role','type','name','href','disabled','checked','value_present',...('options'in c?['options']:[]),...('submits_form'in c?['submits_form']:[])]);
   const ref=text(c.ref,17);if(!/^e[0-9a-f]{16}$/.test(ref))throw Error('INVALID_REF');
   const result:BrowserControl={ref,tag:text(c.tag,30),role:text(c.role,40),type:text(c.type,40),name:text(c.name,180),href:text(c.href,2048),disabled:bool(c.disabled),checked:bool(c.checked),value_present:bool(c.value_present)};
+  if('submits_form'in c)result.submits_form=bool(c.submits_form);
   if('options'in c){if(!Array.isArray(c.options)||c.options.length>30)throw Error('INVALID_OPTIONS');result.options=c.options.map(raw=>{const o=object(raw);exact(o,['label','value']);return {label:text(o.label,100),value:text(o.value,2000)};});}return result;
  });
  if(new Set(controls.map(c=>c.ref)).size!==controls.length)throw Error('DUPLICATE_REF');
@@ -58,8 +59,8 @@ export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNa
  else {const ref=text(t.ref,17),control=snapshot.controls.find(c=>c.ref===ref);if(!control||control.disabled)throw Error('TARGET_NOT_IN_SNAPSHOT');
   const sensitive=/refund|zwrot|payout|wypłat|wyplat|pay now|purchase|buy now|zapła|zaplac|checkout|delete|usuń|usun|remove|send|wyślij|wyslij|submit|confirm|potwierd|place order|zamawiam|subscribe|subskryb|transfer|przelew|password|hasło|haslo|sign in|log in|zaloguj|otp|2fa|card number|numer karty|cvv|cvc/i;
   const fieldSecret=/password|hasło|haslo|otp|2fa|one.time|credit|card|karta|cvv|cvc|token|secret|api.key|ssn/i;
-  if(kind==='browser_click'&&(['input','textarea','select'].includes(control.tag)||['submit','reset'].includes(control.type)||sensitive.test(control.name)) || kind==='browser_fill'&&(!['input','textarea'].includes(control.tag)||!['text','search','email','url','tel','number','textarea',''].includes(control.type)||fieldSecret.test(control.name)) || kind==='browser_select'&&sensitive.test(control.name)) {
-   return {decision:'review' as const,reply:'Ten element wymaga ręcznej obsługi w oknie Chromium NaviMind. Agent nie zatwierdza płatności, zwrotów, wysyłania, logowania ani usuwania. Nie kliknąłem tego elementu.',task:null,expectedRevision:null};
+  if(kind==='browser_click'&&(['input','textarea','select'].includes(control.tag)||(control.type==='reset'||control.type==='submit'&&control.submits_form!==false)||sensitive.test(control.name)) || kind==='browser_fill'&&(!['input','textarea'].includes(control.tag)||!['text','search','email','url','tel','number','textarea',''].includes(control.type)||fieldSecret.test(control.name)) || kind==='browser_select'&&sensitive.test(control.name)) {
+   return {decision:'review' as const,reply:`Element „${control.name}” wymaga ręcznej obsługi albo innego narzędzia. ${['input','textarea','select'].includes(control.tag)?'To pole formularza: użyj wypełnienia lub wyboru opcji zamiast kliknięcia w celu fokusu.':control.type==='submit'&&control.submits_form!==false?'Przycisk wysyła formularz lub brak potwierdzenia jego powiązania z formularzem.':'Wykryto operację chronioną lub reset formularza.'} Nie kliknąłem tego elementu.`,task:null,expectedRevision:null};
   }
   if(kind==='browser_fill')task={kind,ref,text:text(t.text,2000)};
   else if(kind==='browser_select'){const value=text(t.value,2000);if(control.tag!=='select'||!control.options?.some(o=>o.value===value))throw Error('OPTION_NOT_IN_SNAPSHOT');task={kind,ref,value};}
