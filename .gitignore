@@ -3,3 +3,6 @@ node_modules/
 .env.local
 .vercel
 .env*.local
+
+# Build-generated PDF.js assets (real files, no dependency symlinks)
+pdf-runtime/

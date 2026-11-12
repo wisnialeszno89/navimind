@@ -2,6 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {PDFDocument,rgb}=require('pdf-lib');
 const filename=path.resolve(__dirname,'../app/lib/workspace-pdf-vision.ts'),m=new Module(filename,module);m.filename=filename;m.paths=Module._nodeModulePaths(path.dirname(filename));m._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const lib=m.exports;
+require('node:child_process').execFileSync(process.execPath,['scripts/prepare-pdf-runtime.mjs'],{stdio:'pipe'});
 test('real renderer turns synthetic PDF content into pixels; rotation and zoom retain geometry',async()=>{
  const doc=await PDFDocument.create();const page=doc.addPage([200,100]);page.drawRectangle({x:0,y:0,width:100,height:100,color:rgb(1,0,0)});page.drawRectangle({x:100,y:0,width:100,height:100,color:rgb(0,0,1)});
  const data='data:application/pdf;base64,'+Buffer.from(await doc.save()).toString('base64');

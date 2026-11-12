@@ -3,13 +3,13 @@ import {pathToFileURL} from 'url';
 import sharp from 'sharp';
 import * as canvasRuntime from '@napi-rs/canvas';
 
-// Keep the ESM renderer outside the Next server bundle, with its worker and
-// native canvas explicitly included in the function trace (next.config.js).
+// Keep the ESM renderer outside the Next server bundle, with its copied worker assets and
+// native canvas included in the function trace (next.config.js).
 const importModule=new Function('specifier','return import(specifier)') as (specifier:string)=>Promise<any>;
 export type PDFRaster={page:number;image:Buffer;width:number;height:number};
 export async function rasterPDF(data:string,expectedPages:number):Promise<PDFRaster[]>{
  if(typeof canvasRuntime.createCanvas!=='function')throw Error('PDF_RENDER_DEPENDENCY');
- const root=join(process.cwd(),'node_modules/pdfjs-dist');
+ const root=join(process.cwd(),'pdf-runtime');
  const {getDocument}=await importModule(pathToFileURL(join(root,'legacy/build/pdf.mjs')).href);
  const task=getDocument({data:new Uint8Array(Buffer.from(data.split(',')[1],'base64')),isEvalSupported:false,stopAtErrors:true,
   cMapUrl:join(root,'cmaps/'),cMapPacked:true,standardFontDataUrl:join(root,'standard_fonts/'),wasmUrl:join(root,'wasm/'),verbosity:0});

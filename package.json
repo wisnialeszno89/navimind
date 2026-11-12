@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/prepare-pdf-runtime.mjs && next dev",
+    "build": "node scripts/prepare-pdf-runtime.mjs && next build",
     "start": "next start",
     "test:agent-bridge": "node --test tests/agent-task-route.test.cjs",
     "test:workspace": "node --test tests/workspace-routes.test.cjs"

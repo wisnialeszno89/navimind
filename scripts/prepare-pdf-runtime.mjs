@@ -1,0 +1,13 @@
+import {createRequire} from 'node:module';
+import {dirname,join} from 'node:path';
+import {cpSync,mkdirSync,rmSync,writeFileSync} from 'node:fs';
+const require=createRequire(import.meta.url);
+const source=dirname(require.resolve('pdfjs-dist/package.json'));
+const target=join(process.cwd(),'pdf-runtime');
+rmSync(target,{recursive:true,force:true});
+mkdirSync(join(target,'legacy/build'),{recursive:true});
+for(const file of ['pdf.mjs','pdf.worker.mjs'])cpSync(join(source,'legacy/build',file),join(target,'legacy/build',file),{dereference:true});
+for(const folder of ['cmaps','standard_fonts','wasm'])cpSync(join(source,folder),join(target,folder),{recursive:true,dereference:true});
+cpSync(join(source,'LICENSE'),join(target,'LICENSE'));
+writeFileSync(join(target,'package.json'),JSON.stringify({type:'module',private:true,pdfjsVersion:require('pdfjs-dist/package.json').version}));
+console.log('PDF_RUNTIME_ASSETS=prepared');

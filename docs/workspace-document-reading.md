@@ -86,8 +86,11 @@ Dłuższy dokument może wyczerpać limit zamiast otrzymać niepełny sukces.
 Wywołania mają ścisły JSON Schema i lokalne kontrole. Schemat nie potwierdza
 poprawności odczytanych wymiarów.
 
-PDF.js jest zewnętrznym ESM, z workerem, fontami, CMap i WASM w śladzie
-funkcji; canvas oraz natywny moduł Linux są również dołączane. Nowe zależności:
+PDF.js jest zewnętrznym ESM. Przed dev/build skrypt kopiuje renderer, worker,
+fonty, CMap i WASM do generowanego pdf-runtime/ z dereferencją dowiązań pnpm.
+Ten katalog jest w śladzie funkcji. Canvas jest statycznym importem zewnętrznym;
+Next śledzi go razem z modułem natywnym. Jawne śledzenie plików pod aliasami
+node_modules pnpm powodowało niepoprawny pakiet funkcji na Vercel. Nowe zależności:
 `pdfjs-dist` i `@napi-rs/canvas`. Test natywny renderuje syntetyczny PDF i sprawdza
 piksele po obrocie, nakładanie widoków i zgodność liczby stron. Mechanizmy
 odczytu modelu są testowane atrapą; realny wynik nowego przebiegu trzeba

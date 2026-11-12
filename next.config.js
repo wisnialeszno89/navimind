@@ -4,16 +4,7 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['pdfjs-dist', '@napi-rs/canvas'],
     outputFileTracingIncludes: {
-      '/api/workspace/document-plan': [
-        './node_modules/pdfjs-dist/package.json',
-        './node_modules/pdfjs-dist/legacy/build/*.mjs',
-        './node_modules/pdfjs-dist/cmaps/**/*',
-        './node_modules/pdfjs-dist/standard_fonts/**/*',
-        './node_modules/pdfjs-dist/wasm/**/*',
-        './node_modules/@napi-rs/canvas/**/*',
-        './node_modules/@napi-rs/canvas-linux-*/**/*',
-        './node_modules/.pnpm/@napi-rs+canvas*/**/*',
-      ],
+      '/api/workspace/document-plan': ['./pdf-runtime/**/*'],
     },
   },
 };
