@@ -117,15 +117,16 @@ export function documentFormats(pages:number){
  return {
   orientation:format('pdf_page_orientation',object({rotations:array({type:'integer',enum:[0,90,180,270]},pages,pages)})),
   reading:format('technical_offer_reading',object({positions:array(position),notes:array(string())})),
+  pageReading:format('technical_page_reading',object({page_status:{type:'string',enum:['products','non_product','unreadable']},positions:array(position),notes:array(string())})),
   audit:format('technical_offer_audit',object({status:{type:'string',enum:['confirmed','review']},issues:array(object({position_id:nullable(string(50)),page,field:string(100),reason:string()}),40)})),
  };
 }
 
 export function documentFailure(problem:unknown,stage:string,requestId:string){
  const error=problem as {name?:string;message?:string;status?:number};
- const known=new Set(['INVALID_PAGE_ORIENTATION','INVALID_DOCUMENT_REPORT','INVALID_DOCUMENT_FIELDS','INVALID_DOCUMENT_TEXT','INVALID_DOCUMENT_LIST','INVALID_DOCUMENT_NUMBER','DUPLICATE_POSITION','INVALID_PRODUCT_KIND','INVALID_UG','MISSING_DOCUMENT_EVIDENCE','INVALID_EVIDENCE_PAGE','INVALID_READING_AUDIT','UNKNOWN_AUDIT_POSITION','INVALID_AUDIT_PAGE','INCONSISTENT_READING_AUDIT','MODEL_OUTPUT_TRUNCATED','MODEL_REFUSAL']);
- const code=problem instanceof SyntaxError?'INVALID_MODEL_JSON':known.has(error?.message||'')?error.message!:error?.name==='APIConnectionTimeoutError'?'MODEL_TIMEOUT':error?.status===401?'MODEL_AUTH':error?.status===429?'MODEL_LIMIT':error?.status===404?'MODEL_UNAVAILABLE':error?.status?'PROVIDER_ERROR':'DOCUMENT_PROCESSING_ERROR';
- const labels:Record<string,string>={orientation_request:'rozpoznawania orientacji stron',orientation_parse:'sprawdzania orientacji stron',reading_request:'odczytu pozycji',reading_parse:'sprawdzania formatu odczytanych pozycji',audit_request:'porównywania odczytu ze źródłem',audit_parse:'sprawdzania wyniku kontroli'};
+ const known=new Set(['PDF_RENDER_PAGE_MISMATCH','PDF_RENDER_GEOMETRY','INVALID_DOCUMENT_POSITIONS','INVALID_PAGE_ORIENTATION','INVALID_DOCUMENT_REPORT','INVALID_DOCUMENT_FIELDS','INVALID_DOCUMENT_TEXT','INVALID_DOCUMENT_LIST','INVALID_DOCUMENT_NUMBER','DUPLICATE_POSITION','INVALID_PRODUCT_KIND','INVALID_UG','MISSING_DOCUMENT_EVIDENCE','INVALID_EVIDENCE_PAGE','INVALID_READING_AUDIT','UNKNOWN_AUDIT_POSITION','INVALID_AUDIT_PAGE','INCONSISTENT_READING_AUDIT','MODEL_OUTPUT_TRUNCATED','MODEL_REFUSAL']);
+ const code=problem instanceof SyntaxError?'INVALID_MODEL_JSON':known.has(error?.message||'')?error.message!:(error?.name==='APIConnectionTimeoutError'||error?.name==='APIUserAbortError')?'MODEL_TIMEOUT':error?.status===401?'MODEL_AUTH':error?.status===429?'MODEL_LIMIT':error?.status===404?'MODEL_UNAVAILABLE':error?.status?'PROVIDER_ERROR':'DOCUMENT_PROCESSING_ERROR';
+ const labels:Record<string,string>={render_pages:'przygotowania obrazów stron',reading_pages:'niezależnego odczytu stron i powiększeń',compare_readings:'porównywania niezależnych odczytów',orientation_request:'rozpoznawania orientacji stron',orientation_parse:'sprawdzania orientacji stron',reading_request:'odczytu pozycji',reading_parse:'sprawdzania formatu odczytanych pozycji',audit_request:'porównywania odczytu ze źródłem',audit_parse:'sprawdzania wyniku kontroli'};
  const detail=code==='MODEL_TIMEOUT'?'Model przekroczył czas odpowiedzi.':code==='MODEL_LIMIT'?'Dostawca modelu zgłosił limit zapytań lub środków.':code==='MODEL_AUTH'?'Dostawca modelu odrzucił uwierzytelnienie.':code==='MODEL_UNAVAILABLE'?'Wybrany model lub endpoint nie jest dostępny.':code==='MODEL_REFUSAL'?'Model odmówił przetworzenia dokumentu.':'Nie potwierdzono poprawnego wyniku tego etapu.';
  return {error:'DOCUMENT_READ_FAILED',stage,code,requestId,message:`Odczyt zatrzymał się na etapie ${labels[stage]||'przetwarzania dokumentu'}. ${detail} Kod: ${code}. Identyfikator: ${requestId}. Nie wykonano działań na komputerze.`};
 }

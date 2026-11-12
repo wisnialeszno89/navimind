@@ -6,8 +6,8 @@ przełącza wiadomość w analizę dokumentu; nie wywołuje lokalnego wykonawcy.
 
 `/api/workspace/document-plan` wymaga prywatnego Workspace. Waliduje limit ciała,
 kanoniczny Base64, nagłówek i strukturę PDF oraz rzeczywistą liczbę stron przez
-pdf-lib. Oryginalny PDF jest przekazywany jako wejście plikowe modelu obsługującego
-rysunki i tekst stron. Nazwa pliku u dostawcy to stałe `zapytanie.pdf`.
+pdf-lib. PDF jest renderowany przez PDF.js do obrazów stron. Dostawca modelu otrzymuje
+obrazy całości i powiększenia, bez nazwy źródłowego pliku.
 Model: `NAVIMIND_DOCUMENT_MODEL`, domyślnie `gpt-4.1`; istniejący klucz modelu.
 Nie zapisujemy źródłowego dokumentu ani jego treści w logach aplikacji lub repo.
 Dokument jest przekazywany do dostawcy modelu, o czym informuje formularz.
@@ -48,46 +48,55 @@ listwy, brak akcji oraz przekazanie oryginalnego PDF do atrapy API. Nie dowodzą
 jakości odczytu rzeczywistych skanów; to sprawdzamy na dokumencie użytkownika.
 
 
-## Wzmocniony odczyt po błędnym wyniku na skanie
+## Odczyt obrazów stron po błędach na skanie
 
-Odczyt ma trzy przebiegi: ocena orientacji stron, odczyt z poprawnie obróconej
-kopii PDF oraz porównanie kandydata z tą samą kopią źródłową. Oryginalny plik
-pozostaje bez zmian; obrót zmienia metadane stron w kopii w pamięci. Kąty to
-0/90/180/270, dokładnie jeden na stronę. Nie zapisujemy na stałe prawidłowych
-wartości konkretnego zamówienia ani nie podstawiamy ręcznie odczytanej oferty.
+Poprzedni przebieg z plikiem PDF i audytem kandydata nie odczytał poprawnie
+rzeczywistego dokumentu. Przekazany przez użytkownika wynik pominął pozycję,
+podał błędne wymiary i otwieranie. Nie uznajemy tego za udany odczyt.
 
-Drugi odczyt kontrolny jest osobnym żądaniem modelu z dokumentem i kandydatem.
-`reading_audit.status=confirmed` oznacza tylko brak rozbieżności zgłoszonych
-przez kontrolę modelu — nie niezależny dowód poprawności. `review` dodaje
-konkretne problemy do pozycji i wstrzymuje użycie specyfikacji. Kontroler nie
-przepisuje po cichu podejrzanych wartości. Błędny format orientacji lub audytu
-powoduje błąd odczytu, a nie przejście do konfiguratora.
+Nowy przebieg renderuje każdą fizyczną stronę przez PDF.js i natywny canvas.
+Limit obrazu to 2400 px dłuższego boku, skala do 3. Model rozpoznaje orientację
+na obrazach; Sharp obraca rzeczywiste piksele, nie tylko metadane PDF.
+Dla każdej strony powstaje całość oraz dwie połówki z nakładaniem 12%:
+lewa/prawa dla poziomej strony, górna/dolna dla pionowej. Powiększenia nie są
+osobnymi produktami. Render i powiększenia pozostają wyłącznie w pamięci.
 
-Dodatkowe reguły oznaczają rozbieżność tekstu Eingangstür z typem okno,
-Dreh links z uchyłem oraz opisu Dreifach z liczbą szyb inną niż 3. Nietypowe
-proporcje drzwi i dwie szyby z niskim Ug wymagają sprawdzenia, nie dowodzą
-same w sobie niemożliwości technicznej. Wzmianka o przyjętych domyślnych
-parametrach w notatkach blokuje traktowanie odczytu jako jednoznacznego.
+Każda strona ma dwa osobne odczyty modelu. Każdy przebieg klasyfikuje stronę
+jako products, non_product lub unreadable. Czytelna umowa bez specyfikacji nie
+blokuje odczytanych produktów; strona nieczytelna wymaga sprawdzenia. Drugi otrzymuje wyłącznie źródło
+i aktualną instrukcję użytkownika, bez kandydata i bez wcześniejszych odpowiedzi
+czatu. Powiększenia są w nim pokazane przed widokiem całości. Poprzednie
+wskazówki trzeba zawrzeć w bieżącej wiadomości; nie pobieramy ich automatycznie
+z historii. Zapobiega to kopiowaniu starej, błędnej specyfikacji.
 
-Domyślnie używamy dokładniejszego modelu gpt-4.1; odczyt trwa dłużej i obejmuje
-więcej żądań modelu. Limit route to 120 sekund; poszczególne wywołania mają
-osobne limity 30/50/35 sekund, bez automatycznych ponowień. Testy sprawdzają
-mechanizmy i znane rodzaje sprzeczności. Jakość rzeczywistego odczytu nowego
-skanu wymaga porównania wyniku z rysunkami — sam wzrost liczby testów jej
-nie potwierdza.
+Porównanie jest wykonywane w kodzie: liczba i numery pozycji, ilości, rodzaj,
+wymiary, listwa, otwieranie, barwy, liczba szyb, Ug i profil odniesienia.
+Pominięta/dodatkowa pozycja lub rozbieżność danych daje review. Kod nie podmienia
+wartości na odczyt kontrolny ani na oczekiwany wynik testu. Zapis page_inventory
+zachowuje liczbę znalezionych pozycji w obu przebiegach dla każdej strony.
+Zgodne odczyty tego samego modelu mogą nadal popełnić ten sam błąd; to nie jest
+niezależne potwierdzenie prawdy. Cała oferta nadal wymaga sprawdzenia handlowca.
+Swobodne opisy wyposażenia nie są automatycznie porównywane słowo w słowo.
 
+Maksymalnie trzy strony / sześć żądań odczytu działa równocześnie. Występuje
+jedno żądanie orientacji oraz dwa żądania na każdą stronę, także stronę bez
+pozycji. Limit route to 120 s, globalne przerwanie żądań po 110 s, limit
+orientacji 30 s i pojedynczego odczytu 55 s, bez automatycznych ponowień.
+Dłuższy dokument może wyczerpać limit zamiast otrzymać niepełny sukces.
+Wywołania mają ścisły JSON Schema i lokalne kontrole. Schemat nie potwierdza
+poprawności odczytanych wymiarów.
 
-## Diagnostyka i struktura odpowiedzi
+PDF.js jest zewnętrznym ESM, z workerem, fontami, CMap i WASM w śladzie
+funkcji; canvas oraz natywny moduł Linux są również dołączane. Nowe zależności:
+`pdfjs-dist` i `@napi-rs/canvas`. Test natywny renderuje syntetyczny PDF i sprawdza
+piksele po obrocie, nakładanie widoków i zgodność liczby stron. Mechanizmy
+odczytu modelu są testowane atrapą; realny wynik nowego przebiegu trzeba
+sprawdzić na PDF użytkownika. Prywatny dokument nie jest fixture w repo.
 
-Wszystkie trzy żądania mają ścisły JSON Schema przekazany do dostawcy.
-Lokalna walidacja nadal kontroluje treść, identyfikatory i zakresy. Schemat
-ogranicza błędy formatu; nie potwierdza poprawności odczytanych wymiarów.
-Niepewny audyt bez szczegółów daje `review` z jawnym brakiem potwierdzenia.
-Audyt z rozbieżnościami zawsze daje `review`, również gdy model podał confirmed.
+## Diagnostyka
 
 Awaria zwraca etap, bezpieczny kod i losowy identyfikator żądania. Log zawiera
 te same pola i opcjonalny liczbowy status dostawcy, bez surowego wyjątku,
-PDF, treści odczytu ani kluczy. Użytkownik może przekazać kod bez dokumentu.
-Rozróżniamy limit, uwierzytelnienie, niedostępność modelu, timeout oraz
-błąd formatu odpowiedzi. Przyczyny poprzedniego ogólnego błędu nie można
-ustalić z dawnych logów; poprawka umożliwia rozpoznanie kolejnej próby.
+PDF, obrazów, treści odczytu ani kluczy. Rozróżniamy limit, uwierzytelnienie,
+niedostępność modelu, timeout oraz błąd struktury odpowiedzi. Niepewne dane
+z poprawną strukturą dają czytelny szkic review, a nie ogólny błąd serwera.
