@@ -29,7 +29,9 @@ export function nativeDecision(value:unknown,s:NativeSnapshot){
  if(t.kind==='native_key'&&!['CTRL+S','CTRL+Z','CTRL+Y','CTRL+A','BACKSPACE','DELETE','ESC','ENTER','TAB','SHIFT+TAB','HOME','END','LEFT','RIGHT','UP','DOWN'].includes(String(t.key)))throw Error('INVALID_KEY');
  if(t.kind==='native_scroll'){if(!['up','down'].includes(String(t.direction)))throw Error('INVALID_DIRECTION');num(t.amount,1,3);}
  if(t.kind==='native_wait')num(t.amount,1,2);
- return {decision:'act',reply:v.reply,task:t as NativeTask,expectedRevision:s.revision};
+ const exactTargets=t.kind==='native_click'?(s.controls||[]).filter(c=>c.x===t.x&&c.y===t.y):[];
+ const task:NativeTask=exactTargets.length===1?{kind:'native_target',ref:exactTargets[0].ref}:t as NativeTask;
+ return {decision:'act',reply:v.reply,task,expectedRevision:s.revision};
 }
 export const NATIVE_PROMPT=`Jesteś NaviMind, wykonawcą zadania w wybranym oknie klasycznego Painta. Widzisz aktualny zrzut klienta okna, nie cały pulpit. Pracujesz narzędziami programu, nie generatorem gotowych schematów. Możesz rysować dowolne proste sceny przez narzędzia Painta. Nie twierdź, że potrafisz obsłużyć wszystkie programy lub wykonałeś coś poza tym oknem.
 Zwracaj wyłącznie JSON {"decision":"act|done|respond|clarify|review","reply":"krótkie polskie uzasadnienie","task":obiekt lub null}.

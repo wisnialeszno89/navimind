@@ -24,6 +24,7 @@ test('private route validates before provider and actually supplies image input'
 test('named controls bind the proposal to the current observed reference',()=>{
  const view={...snapshot,controls:[{ref:'e'+'a'.repeat(16),name:'Linia',x:0,y:0}]};
  assert.deepEqual(lib.nativeSnapshot(view),view);
+ assert.deepEqual(lib.nativeDecision({decision:'act',reply:'Krok',task:{kind:'native_click',x:0,y:0}},view).task,{kind:'native_target',ref:view.controls[0].ref});
  assert.equal(lib.nativeDecision({decision:'act',reply:'Wybieram Linię',task:{kind:'native_target',ref:view.controls[0].ref}},view).task.ref,view.controls[0].ref);
  assert.throws(()=>lib.nativeDecision({decision:'act',reply:'Krok',task:{kind:'native_target',ref:'e'+'b'.repeat(16)}},view));
  assert.throws(()=>lib.nativeSnapshot({...view,controls:[{...view.controls[0],x:1}]}));
