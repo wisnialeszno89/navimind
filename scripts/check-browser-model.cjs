@@ -43,7 +43,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
     if(state.customer!=='Top Trans'||state.width!==(phase==='initial'?'1100':'1230')||state.height!=='1000'||state.color!=='antracyt'||state.opening!=='DKR'||!state.preview.includes('Szerokość: '+state.width+' mm'))throw Error('BROWSER_MODEL_LOOP_FALSE_SUCCESS '+phase);
     console.log('BROWSER_MODEL_PHASE=verified PHASE='+phase+' CALLS='+(i+1));return plan.reply;
    }
-   if(!plan.task)throw Error('BROWSER_MODEL_LOOP_STOPPED '+phase+' '+plan.decision);
+   if(!plan.task)throw Error('BROWSER_MODEL_LOOP_STOPPED '+phase+' '+plan.decision+' '+String(plan.reply).slice(0,350));
+   console.log('BROWSER_MODEL_STEP PHASE='+phase+' KIND='+plan.task.kind+' TARGET='+String(before.controls.find(c=>c.ref===plan.task.ref)?.name||'').slice(0,180));
    apply(plan.task,before);const after=snapshot();
    steps.push(browserStepReceipt(before,plan.task,{status:'verified',message:plan.task.kind==='browser_click'?'Kliknięto element i odczytano nowy widok.':'Sprawdzono wpisaną lub wybraną wartość pola.',browser:after}));
   }
