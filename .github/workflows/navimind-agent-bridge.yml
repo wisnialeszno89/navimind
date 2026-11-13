@@ -32,6 +32,9 @@ jobs:
       - name: Verify shared fixtures against the pinned Windows executor commit
         run: node scripts/check-browser-fixture-sync.cjs --remote
 
+      - name: Browser evaluation script preflight
+        run: node scripts/check-browser-eval-names.cjs
+
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
 

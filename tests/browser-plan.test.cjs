@@ -5,7 +5,7 @@ const control={ref:'e'+'a'.repeat(16),tag:'input',role:'',type:'number',name:'Sz
 const snapshot={revision:'a'.repeat(64),url:'about:blank',title:'Laboratorium',text:'Wybierz klienta',scope:'owned_chromium_tab',controls:[control]};
 let replies=[],calls=0,lastInput;
 class OpenAI{chat={completions:{create:async input=>{calls++;lastInput=input;return {choices:[{message:{content:JSON.stringify(replies.shift())}}]};}}};}
-const route=load('app/api/workspace/browser-plan/route.ts',{'@/lib/browser-plan':lib,'@/lib/browser-step-receipt':load('app/lib/browser-step-receipt.ts'),'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
+const route=load('app/api/workspace/browser-plan/route.ts',{'@/lib/browser-model':{browserPlanningOptions:()=>({model:'synthetic-browser-model',max_completion_tokens:1600,temperature:0})},'@/lib/browser-plan':lib,'@/lib/browser-session':load('app/lib/browser-session.ts',{'./browser-step-receipt':load('app/lib/browser-step-receipt.ts')}),'@/lib/browser-step-receipt':load('app/lib/browser-step-receipt.ts'),'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 const request=(body={message:'Ustaw szerokość 1100 mm',history:[],snapshot,steps:[]})=>new Request('https://test/api',{method:'POST',body:JSON.stringify(body)});
 test('only observed enabled targets and declared actions are accepted',()=>{
  const plan=lib.browserDecision({decision:'act',reply:'Ustawiam szerokość.',task:{kind:'browser_fill',ref:control.ref,text:'1100'}},snapshot);
@@ -113,6 +113,8 @@ test('similar customer results cannot be chosen from an ambiguous fragment even 
  assert.equal(lib.browserDecision(propose(a),view,[],[],'Wybierz dokładnie Top Trans.').task.ref,a.ref);
  assert.equal(lib.browserDecision(propose(b),view,[],[],'Wybierz dokładnie Top Trans S.A.').task.ref,b.ref);
  assert.throws(()=>lib.browserDecision(propose(a),view,[],[],'Wybierz dokładnie Top Trans S.A.'),/CUSTOMER_TARGET_MISMATCH/);
+ assert.equal(lib.browserDecision(propose(a),view,[],[],'Stary cel Top Trans S.A. Nowy klient Top Trans.', ['Stary cel Top Trans S.A.','Nowy klient Top Trans.']).task.ref,a.ref);
+ assert.equal(lib.browserDecision(propose(b),view,[],[],'Stary cel Top Trans S.A. Zmień klienta na Top.', ['Stary cel Top Trans S.A.','Zmień klienta na Top.']).decision,'clarify');
 });
 
 test('lab preview completion requires actual readiness and asks for the observed missing field',()=>{
@@ -121,4 +123,21 @@ test('lab preview completion requires actual readiness and asks for the observed
  const outcome=lib.browserDecision(done,view,[],[],'Pokaż podgląd.');assert.equal(outcome.decision,'clarify');assert.equal(outcome.task,null);assert.match(outcome.reply,/Wysokość/);
  assert.equal(lib.browserDecision(done,{...view,text:'PODGLĄD GOTOWY'},[],[],'Pokaż podgląd.').decision,'done');
  assert.equal(lib.browserDecision(done,view,[],[],'Ile pól widzisz?').decision,'done');
+});
+
+test('a verified identical input on the exact current revision cannot execute twice; changed pages can reapply it',()=>{
+ const value={decision:'act',reply:'Ustawiam wysokość.',task:{kind:'browser_fill',ref:control.ref,text:'1200'}};
+ const receipt=JSON.stringify({status:'verified',target:{name:control.name,tag:control.tag,type:control.type},task:value.task,verified_input_revision:snapshot.revision});
+ assert.throws(()=>lib.browserDecision(value,snapshot,[],[receipt]),/FIELD_ALREADY_VERIFIED_IN_CURRENT_VIEW/);
+ assert.equal(lib.browserDecision(value,{...snapshot,revision:'b'.repeat(64)},[],[receipt]).task.text,'1200');
+ assert.equal(lib.browserDecision({...value,task:{...value.task,text:'1230'}},snapshot,[],[receipt]).task.text,'1230');
+});
+
+test('a proposed unnecessary question is reviewed automatically and can become execution without asking the user',async()=>{
+ replies=[{decision:'clarify',reply:'Czy wpisać szerokość?',task:null},{decision:'act',reply:'Ustawiam podaną szerokość.',task:{kind:'browser_fill',ref:control.ref,text:'1100'}}];
+ const before=calls,result=await route.POST(request());const plan=await result.json();assert.equal(calls,before+2);assert.equal(plan.decision,'act');assert.equal(plan.task.text,'1100');assert.match(lastInput.messages.at(-1).content,/sprawdź jego konieczność/);
+});
+test('a genuinely missing dimension remains one concrete question after the bounded review',async()=>{
+ replies=[{decision:'clarify',reply:'Jaka wysokość?',task:null},{decision:'clarify',reply:'Podaj wysokość w mm.',task:null}];
+ const before=calls,result=await route.POST(request());const plan=await result.json();assert.equal(calls,before+2);assert.equal(plan.decision,'clarify');assert.equal(plan.task,null);assert.match(plan.reply,/wysokość/);
 });
