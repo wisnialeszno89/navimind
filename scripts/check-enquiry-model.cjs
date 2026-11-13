@@ -20,13 +20,20 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
   const response=await route.POST(new Request('https://fixture.invalid/api/workspace/enquiry-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:c.text,history:[]})}));
   const body=await response.json();if(response.status!==200)throw Error('ENQUIRY_LIVE_EVAL_REQUEST_FAILED '+c.name);
   const spec=body.offerSpecification,rows=new Map(spec.positions.map(p=>[String(Number(p.source_id)),p])),failures=[];
+  const color=value=>/anthra|antracyt/i.test(value||'')?'anthracite':/white|weiß|weiss|biały|bialy/i.test(value||'')?'white':'unknown';
   if(rows.size!==c.rows.length||spec.positions.length!==c.rows.length)failures.push('position_count');
   for(const [id,kind,quantity,width,height,opening] of c.rows){
    const p=rows.get(id);if(!p){failures.push('missing_'+id);continue;}
    for(const [field,expected] of Object.entries({kind,quantity,width_mm:width,height_mm:height,opening}))if(p[field]!==expected)failures.push(id+'_'+field);
    if(c.strike){const has=/elektro.*(?:zaczep|öffner|oeffner)|electric.*strike/i.test(p.requirements.join(' '));if(has!==(id===c.strike))failures.push(id+'_equipment_scope');}
+   if(c.strike){
+    const expectedOutside=p.kind==='window'?'anthracite':'white';
+    if(color(p.color_inside)!=='white'||color(p.color_outside)!==expectedOutside)failures.push(id+'_colors');
+   }
   }
+  if(c.name==='de_numbered_cm'&&!(rows.get('7')?.profile_reference||'').toUpperCase().replace(/[^A-Z0-9]/g,'').includes('TESTPROFILX'))failures.push('profile_reference');
   if(c.review&&!spec.requires_clarification)failures.push('ambiguity');
+  if(c.review&&spec.positions.some(p=>p.color_inside!==null||p.color_outside!==null))failures.push('ambiguous_color_sides');
   if(spec.source.kind!=='text'||spec.executed!==false||!spec.sales_review_required||body.task)failures.push('read_only');
   if(failures.length)throw Error('ENQUIRY_LIVE_EVAL_FIELDS_FAILED '+c.name+' '+failures.join(','));
   console.log('ENQUIRY_CASE=verified NAME='+c.name+' POSITIONS='+c.rows.length);
