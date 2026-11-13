@@ -14,6 +14,7 @@ export function continueBrowserSession(session:BrowserSession,message:string):Br
  return browserSession({...session,updates:[...session.updates,message],status:'active'})!;
 }
 export function rememberBrowserReceipt(session:BrowserSession,receipt:string):BrowserSession {
+ if(session.receipts.includes(receipt))return session;
  const all=[...session.receipts,receipt];let limited=session.evidence_limited;
  while(all.length>24||all.reduce((n,s)=>n+s.length,0)>36000){all.shift();limited=true;}
  return browserSession({...session,receipts:all,evidence_limited:limited})!;

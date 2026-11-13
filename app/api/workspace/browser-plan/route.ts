@@ -17,7 +17,7 @@ export async function POST(req:Request){
  const message=messages[messages.length-1].content;
  const command=browserSessionCommand(session,message);
  const commands=session?[session.goal,...session.updates,message]:[message];
- const urls=navigationURLs(message).length?navigationURLs(message):navigationURLs(session?.goal||'');
+ const urls=[...commands].reverse().map(navigationURLs).find(urls=>urls.length)||[];
  const evidence=[...new Set([...(session?.receipts||[]),...steps])];
  const navigation=requiredBrowserNavigation(snapshot,urls,evidence);
  if(navigation)return NextResponse.json(navigation);

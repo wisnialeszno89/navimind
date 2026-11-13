@@ -28,6 +28,7 @@ export async function runBrowserConversation(message:string,history:History,init
  save(turn.intent==='start'?newBrowserSession(ports.id(),message):continueBrowserSession(session!,message));
  let snapshot=await ports.observe();
  const steps:string[]=[JSON.stringify({observed_url:snapshot.url,source:'initial_observation'})];
+ if(session)save(rememberBrowserReceipt(session,steps[0]));
  const noEffect=new Map<string,number>();let stale=0;
  const viewKey=(view:BrowserSnapshot)=>JSON.stringify([view.url,view.text,view.controls.map(({ref,...control})=>control)]);
  for(let step=0;step<MAX_BROWSER_STEPS;step++){

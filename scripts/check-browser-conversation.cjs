@@ -24,7 +24,7 @@ const {createBrowserEval}=require('./browser-eval-environment.cjs');
   if(!kind.includes(outcome.kind))throw Error('CONVERSATION_WRONG_OUTCOME '+id+' '+outcome.kind+' '+outcome.reply.slice(0,220));
   if(noActions&&executions!==beforeActions||noRead&&observations!==beforeReads||requiresRead&&observations===beforeReads)throw Error('CONVERSATION_UNREQUESTED_ACTION '+id);
   if(expected){for(const key of Object.keys(expected))if(environment.state[key]!==expected[key])throw Error('CONVERSATION_WRONG_VALUE '+id+' '+key);if(environment.state.preview!==environment.summary())throw Error('CONVERSATION_FALSE_PREVIEW '+id);}
-  if(answerPattern&&!new RegExp(answerPattern,'i').test(outcome.reply))throw Error('CONVERSATION_UNGROUNDED_ANSWER '+id);
+  if(answerPattern&&!new RegExp(answerPattern,'i').test(outcome.reply))throw Error('CONVERSATION_UNGROUNDED_ANSWER '+id+' '+outcome.reply.slice(0,280));
   history.push({role:'user',content:message},{role:'assistant',content:outcome.reply});reports.push({id,kind:outcome.kind,actions:executions-beforeActions,reads:observations-beforeReads});console.log('BROWSER_CONVERSATION_CASE=verified CASE='+id+' KIND='+outcome.kind+' ACTIONS='+(executions-beforeActions));return outcome;
  }
  const all=Object.keys(base),first='Wybierz dokładnie Top Trans. Szerokość 1100 mm, kolor antracyt, otwieranie DKR. Pokaż podgląd. Nie wysyłaj zapytania.';

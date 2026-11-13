@@ -14,7 +14,7 @@ test('a short answer resumes the original goal after an intervening discussion, 
  const answer=await h.run('Co oznacza DKR?');assert.equal(answer.kind,'reply');assert.equal(h.session,before);assert.equal(h.calls.execute,0);assert.equal(h.calls.observe,1);
  h.turn('continue');h.plan(fill);h.plan(done);await h.run('1200 mm');
  assert.equal(h.session.goal,goal);assert.deepEqual(h.session.updates,['1200 mm']);assert.equal(h.session.status,'completed');assert.equal(h.calls.execute,1);
- assert.equal(h.calls.plan.at(-1).session.question,'Jaka wysokość?');assert.equal(JSON.parse(h.session.receipts[0]).task.text,'1200');
+ assert.equal(h.calls.plan.at(-1).session.question,'Jaka wysokość?');assert.equal(h.session.receipts.map(JSON.parse).find(r=>r.task)?.task.text,'1200');
 });
 test('conversation, current-page inspection and cancellation never execute a task',async()=>{
  const original=sessions.newBrowserSession('id','Wypełnij formularz.');const h=harness(original);
@@ -24,12 +24,12 @@ test('conversation, current-page inspection and cancellation never execute a tas
 });
 test('a new task clears prior execution evidence, while a correction preserves it',async()=>{
  let original=sessions.newBrowserSession('old','Poprzedni cel.');original=sessions.rememberBrowserReceipt(original,'{"status":"verified"}');
- const h=harness(original);h.turn('continue');h.plan(done);await h.run('Zmień tylko wysokość.');assert.equal(h.session.receipts.length,1);
- h.turn('start');h.plan(done);await h.run('Zacznij nowe zadanie w innym formularzu.');assert.equal(h.session.goal,'Zacznij nowe zadanie w innym formularzu.');assert.equal(h.session.receipts.length,0);assert.deepEqual(h.session.updates,[]);
+ const h=harness(original);h.turn('continue');h.plan(done);await h.run('Zmień tylko wysokość.');assert.ok(h.session.receipts.some(r=>JSON.parse(r).status==='verified'));
+ h.turn('start');h.plan(done);await h.run('Zacznij nowe zadanie w innym formularzu.');assert.equal(h.session.goal,'Zacznij nowe zadanie w innym formularzu.');assert.equal(h.session.receipts.filter(r=>JSON.parse(r).status==='verified').length,0);assert.deepEqual(h.session.updates,[]);
 });
 test('unknown execution failure leaves a recoverable pending job and is not retried',async()=>{
  const h=harness();h.turn('start');h.plan(fill);h.ports.execute=async()=>{h.calls.execute++;throw Error('network failure');};
- await assert.rejects(h.run('Ustaw wysokość 1200.'),/network failure/);assert.equal(h.calls.execute,1);assert.ok(h.calls.pending.at(-1));assert.equal(h.session.receipts.length,0);
+ await assert.rejects(h.run('Ustaw wysokość 1200.'),/network failure/);assert.equal(h.calls.execute,1);assert.ok(h.calls.pending.at(-1));assert.equal(h.session.receipts.filter(r=>JSON.parse(r).status==='verified').length,0);
 });
 test('repeated ineffective clicks pause the goal instead of looping or asking to approve each step',async()=>{
  const h=harness();h.turn('start');const click={...fill,task:{kind:'browser_click',ref:field.ref}};for(let i=0;i<3;i++)h.plan(click);
