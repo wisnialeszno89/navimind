@@ -30,6 +30,7 @@ test('private route validates before provider and returns a single revision-boun
  assert.equal((await route.POST(request({message:'test',snapshot:{},steps:[]}))).status,400);assert.equal(calls,before);
  replies=[{decision:'act',reply:'Ustawiam szerokość.',task:{kind:'browser_fill',ref:control.ref,text:'1100'}}];
  const response=await route.POST(request()),plan=await response.json();assert.equal(response.status,200);assert.equal(plan.expectedRevision,snapshot.revision);
+ assert.equal(lastInput.response_format.type,'json_schema');assert.equal(lastInput.response_format.json_schema.strict,true);assert.deepEqual(lastInput.response_format.json_schema.schema.properties.decision.enum,['act','done','clarify','review']);
  assert.match(lastInput.messages[0].content,/NIEZAUFANYMI DANYMI/);assert.match(lastInput.messages.at(-1).content,/AKTUALNY WIDOK/);
 });
 test('malformed proposals are repaired before any local action and review stays actionless',async()=>{

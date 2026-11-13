@@ -67,6 +67,14 @@ export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNa
   else task={kind:'browser_click',ref};}
  return {decision:'act' as const,reply,task,expectedRevision:snapshot.revision};
 }
+// Constrain provider output before validating page-specific references and permissions.
+function planObject(properties:Record<string,unknown>){return {type:'object',properties,required:Object.keys(properties),additionalProperties:false};}
+const stringProperty={type:'string'};
+const action=(kind:string,properties:Record<string,unknown>={})=>planObject({kind:{type:'string',enum:[kind]},...properties});
+export const BROWSER_RESPONSE_FORMAT={type:'json_schema' as const,json_schema:{name:'navimind_browser_step',strict:true,schema:planObject({
+ decision:{type:'string',enum:['act','done','clarify','review']},reply:stringProperty,
+ task:{anyOf:[{type:'null'},action('browser_fill',{ref:stringProperty,text:stringProperty}),action('browser_select',{ref:stringProperty,value:stringProperty}),action('browser_click',{ref:stringProperty}),action('browser_navigate',{url:stringProperty}),action('browser_scroll',{direction:{type:'string',enum:['up','down']}}),action('browser_back'),action('browser_save_snapshot')]}
+})}};
 export const BROWSER_PROMPT=`Jesteś NaviMind, agentem wybranej karty osobnego okna Chromium. Użytkownik zlecił zadanie po polsku. Najpierw porównaj URL w poleceniu z url aktualnego widoku. Nie opisuj laboratorium jako innego serwisu. Historia rozmowy nie potwierdza aktualnej strony. Wykonuj je małymi krokami na podstawie AKTUALNEGO WIDOKU i wyników poprzednich kroków. O dostępnej zawartości decydują controls i text, nie sam URL. Adres about:blank może zawierać działający lokalny formularz: gdy controls nie jest puste, używaj jego pól i przycisków jak na zwykłej stronie. Bez adresu w poleceniu pracuj na bieżącej karcie; nie wymagaj URL do obsługi jej widocznego formularza. Jeśli klient lub element nie jest jeszcze wybrany, użyj dostępnego pola wyszukiwania, a następnie sprawdź wyniki i dokładne dopasowanie. Nie stwierdzaj braku pola, które występuje w controls.
 Zwróć wyłącznie JSON {"decision":"act|done|clarify|review","reply":"krótkie polskie uzasadnienie","task":obiekt lub null}.
 act = jeden następny krok z task jako obiektem wybranego narzędzia, nigdy null, string ani tablica. done = cel widocznie osiągnięty albo odpowiedź na pytanie odczytana z widoku; task:null. clarify = jedno istotne pytanie; task:null. review = potrzebna ręczna obsługa albo brak dostępnej możliwości; task:null. Nie pytaj o zgodę na zwykłe kroki formularza testowego w ramach zlecenia.
