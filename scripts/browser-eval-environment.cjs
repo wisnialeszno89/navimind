@@ -6,6 +6,7 @@ const customers=['Top Trans S.A.','Top Trans','Baupartner'];
 const options={color:[{label:'Wybierz kolor',value:''},{label:'Biały',value:'bialy'},{label:'Antracyt',value:'antracyt'},{label:'Mahoń',value:'mahon'}],opening:[{label:'Wybierz okucie',value:''},{label:'DKL',value:'DKL'},{label:'DKR',value:'DKR'}]};
 function summary(s){return `PODGLĄD GOTOWY\nKlient: ${s.customer}\nSzerokość: ${s.width} mm\nWysokość: ${s.height} mm\nKolor: ${s.color}\nOkucie: ${s.opening}`;}
 function createBrowserEval(seed=null){
+ let sequence=0;
   const state={search:'',customer:'',width:'',height:'',color:'',opening:'',preview:'',results:[],...seed};
   if(seed)state.preview=summary(state);
   function snapshot(){
@@ -15,9 +16,10 @@ function createBrowserEval(seed=null){
    for(const name of state.results)add(name,'button','button');
    add(names.width,'input','number',state.width);add(names.height,'input','number',state.height);
    add(names.color,'select','select-one',state.color,{options:options.color});add(names.opening,'select','select-one',state.opening,{options:options.opening});add('Pokaż podgląd','button','button');
-   return {revision:crypto.randomBytes(32).toString('hex'),url:'about:blank',title:'NaviMind — laboratorium przeglądarki',scope:'owned_chromium_tab',controls,text:'Klient i okno\n'+(state.customer?'Wybrany klient: '+state.customer:'Nie wybrano klienta.')+'\nWyszukaj klienta\n'+state.results.join('\n')+'\nSzerokość [mm]\nWysokość [mm]\nKolor zewnętrzny Wybierz kolor Biały Antracyt Mahoń\nOtwieranie Wybierz okucie DKL DKR\nPokaż podgląd\n'+state.preview};
+   return {revision:crypto.createHash('sha256').update(JSON.stringify({state,sequence})).digest('hex'),url:'about:blank',title:'NaviMind — laboratorium przeglądarki',scope:'owned_chromium_tab',controls,text:'Klient i okno\n'+(state.customer?'Wybrany klient: '+state.customer:'Nie wybrano klienta.')+'\nWyszukaj klienta\n'+state.results.join('\n')+'\nSzerokość [mm]\nWysokość [mm]\nKolor zewnętrzny Wybierz kolor Biały Antracyt Mahoń\nOtwieranie Wybierz okucie DKL DKR\nPokaż podgląd\n'+state.preview};
   }
   function apply(task,before,phase){
+   sequence++;
    if(task.kind==='browser_scroll')return; // Small owned form; scrolling changes no values.
    const c=before.controls.find(c=>c.ref===task.ref);if(!c)throw Error('UNKNOWN_SYNTHETIC_TARGET');
    if(task.kind==='browser_fill'||task.kind==='browser_select'){

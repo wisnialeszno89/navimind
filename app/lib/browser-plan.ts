@@ -82,6 +82,10 @@ export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNa
     if(normalized(exact[0].name)!==name)throw Error('CUSTOMER_TARGET_MISMATCH');
    }
   }
+  if((kind==='browser_fill'||kind==='browser_select')&&snapshot.controls.filter(c=>c.name===control.name&&c.tag===control.tag&&c.type===control.type).length===1){
+   const alreadyVerified=steps.some(step=>{try{const r=JSON.parse(step);return r.status==='verified'&&r.observed_revision===snapshot.revision&&r.target?.name===control.name&&r.target?.tag===control.tag&&r.target?.type===control.type&&r.task?.kind===kind&&(kind==='browser_fill'?r.task.text===t.text:r.task.value===t.value);}catch{return false;}});
+   if(alreadyVerified)throw Error('FIELD_ALREADY_VERIFIED_IN_CURRENT_VIEW');
+  }
   if(kind==='browser_fill')task={kind,ref,text:text(t.text,2000)};
   else if(kind==='browser_select'){const value=text(t.value,2000);if(control.tag!=='select'||!control.options?.some(o=>o.value===value))throw Error('OPTION_NOT_IN_SNAPSHOT');task={kind,ref,value};}
   else task={kind:'browser_click',ref};}
