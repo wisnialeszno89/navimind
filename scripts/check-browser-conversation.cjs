@@ -4,8 +4,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {createBrowserEval}=require('./browser-eval-environment.cjs');
 (async()=>{
  if(!process.env.VERCEL){console.log('BROWSER_CONVERSATION=skipped_local');return;}
- const files=['app/api/workspace/browser-turn/route.ts','app/api/workspace/browser-plan/route.ts','app/lib/browser-session.ts','app/lib/browser-runner.ts','app/lib/browser-plan.ts','app/lib/browser-step-receipt.ts','app/components/WorkspaceChat.tsx','scripts/browser-eval-environment.cjs',__filename];
- const hash=crypto.createHash('sha256').update(process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini');for(const file of files)hash.update(fs.readFileSync(file));
+ const files=['app/lib/browser-model.ts','app/api/workspace/browser-turn/route.ts','app/api/workspace/browser-plan/route.ts','app/lib/browser-session.ts','app/lib/browser-runner.ts','app/lib/browser-plan.ts','app/lib/browser-step-receipt.ts','app/components/WorkspaceChat.tsx','scripts/browser-eval-environment.cjs',__filename];
+ const hash=crypto.createHash('sha256').update(process.env.NAVIMIND_BROWSER_MODEL||'gpt-5.4');for(const file of files)hash.update(fs.readFileSync(file));
  const cacheFile=path.join('.next/cache/navimind-browser-conversation',hash.digest('hex')+'.json');let previous;try{previous=JSON.parse(fs.readFileSync(cacheFile));}catch{}
  if(previous?.passed&&Date.now()-Date.parse(previous.checked_at)<86400000){console.log('BROWSER_CONVERSATION=verified_cached');return;}
  const modules={};function load(relative){if(modules[relative])return modules[relative];const file=path.resolve(relative),m=new Module(file,module);m.filename=file;m.paths=Module._nodeModulePaths(path.dirname(file));const native=m.require.bind(m);m.require=name=>name.startsWith('.')?load(path.relative(process.cwd(),path.resolve(path.dirname(file),name+'.ts'))):native(name);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,file);return modules[relative]=m.exports;}
@@ -51,5 +51,5 @@ const {createBrowserEval}=require('./browser-eval-environment.cjs');
  await turn('ambiguous_client','Wybierz klienta Top. Okno 1100 na 1000 mm, antracyt i DKR. Pokaż podgląd, nie wysyłaj.',{kind:['clarify'],allowed:['width','height','color','opening']});
  await turn('client_answer_resumes','Top Trans S.A.',{kind:['done'],expected:{...base,customer:'Top Trans S.A.',height:'1000'},allowed:all});
  fs.mkdirSync(path.dirname(cacheFile),{recursive:true});fs.writeFileSync(cacheFile,JSON.stringify({passed:true,checked_at:new Date().toISOString(),reports}));
- console.log('BROWSER_CONVERSATION=verified CASES='+reports.length+' REAL_MODEL=True SYNTHETIC_BROWSER=True SHARED_FRONTEND_RUNNER=True');
+ console.log('BROWSER_CONVERSATION=verified MODEL='+(process.env.NAVIMIND_BROWSER_MODEL||'gpt-5.4')+' CASES='+reports.length+' REAL_MODEL=True SYNTHETIC_BROWSER=True SHARED_FRONTEND_RUNNER=True');
 })().catch(problem=>{console.error(problem.message.slice(0,500));process.exitCode=1;});

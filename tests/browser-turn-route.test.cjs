@@ -3,7 +3,7 @@ function load(relative,mocks={}){const file=path.resolve(__dirname,'..',relative
 const receipt=load('app/lib/browser-step-receipt.ts'),sessions=load('app/lib/browser-session.ts',{'./browser-step-receipt':receipt}),browser=load('app/lib/browser-plan.ts');
 let response={intent:'reply',reply:'DKR to prawe okno rozwierno-uchylne.'},calls=0,last;
 class OpenAI{chat={completions:{create:async input=>{calls++;last=input;return {choices:[{message:{content:JSON.stringify(response)}}]};}}};}
-const route=load('app/api/workspace/browser-turn/route.ts',{'@/lib/browser-plan':browser,'@/lib/browser-session':sessions,'@/lib/workspace':load('app/lib/workspace.ts'),'@/lib/workspace-image':load('app/lib/workspace-image.ts'),openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
+const route=load('app/api/workspace/browser-turn/route.ts',{'@/lib/browser-model':{browserModel:()=> 'synthetic-browser-model'},'@/lib/browser-plan':browser,'@/lib/browser-session':sessions,'@/lib/workspace':load('app/lib/workspace.ts'),'@/lib/workspace-image':load('app/lib/workspace-image.ts'),openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 const req=body=>new Request('https://fixture.invalid',{method:'POST',body:JSON.stringify(body)});
 test('a conversation turn is authenticated, bounded, actionless and includes the original task context',async()=>{
  const body={message:'Co oznacza DKR?',history:[],session:sessions.newBrowserSession('session','Ustaw okno i pokaż podgląd.')};

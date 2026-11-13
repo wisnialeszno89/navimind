@@ -8,8 +8,8 @@ const fields=['customer','width','height','color','opening'];
 (async()=>{
  if(!process.env.VERCEL){console.log('BROWSER_MODEL_LOOP=skipped_local');return;}
  if(!process.env.OPENAI_API_KEY)throw Error('BROWSER_MODEL_LOOP_MISSING_CONFIGURATION');
- const model=process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini';
- const files=['app/api/workspace/browser-plan/route.ts','app/lib/browser-plan.ts','app/lib/browser-step-receipt.ts','app/components/WorkspaceChat.tsx',fixturePath,'scripts/browser-eval-environment.cjs',__filename];
+ const model=process.env.NAVIMIND_BROWSER_MODEL||'gpt-5.4';
+ const files=['app/lib/browser-model.ts','app/api/workspace/browser-plan/route.ts','app/lib/browser-plan.ts','app/lib/browser-step-receipt.ts','app/components/WorkspaceChat.tsx',fixturePath,'scripts/browser-eval-environment.cjs',__filename];
  const hash=crypto.createHash('sha256').update(model);for(const file of files)hash.update(fs.readFileSync(file));
  const cache=path.join('.next/cache/navimind-browser-loop',hash.digest('hex')+'.json');let previous;try{previous=JSON.parse(fs.readFileSync(cache));}catch{}
  if(previous?.passed&&Date.now()-Date.parse(previous.checked_at)<86400000){console.log('BROWSER_MODEL_LOOP=verified_cached FIXTURE_SHA256='+fixtureHash);return;}
