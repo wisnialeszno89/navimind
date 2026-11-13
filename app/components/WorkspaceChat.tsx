@@ -9,7 +9,8 @@ import type {NativeSnapshot} from "@/lib/native-plan";
 import type { BrowserSnapshot } from "@/lib/browser-plan";
 import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
-import {browserStepReceipt} from '@/lib/browser-step-receipt';
+import {runBrowserConversation} from '@/lib/browser-runner';
+import {invalidateBrowserEvidence,type BrowserSession} from '@/lib/browser-session';
 
 type Message = { role: "user" | "assistant"; content: string; image?: string; documentName?:string };
 type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; native?: {available:boolean;scope:string;title:string}; currentTable: (TableContext & { file: string }) | null };
@@ -59,6 +60,9 @@ export default function WorkspaceChat() {
   const [nativeMode, setNativeMode] = useState(false);
   const [browserProgress, setBrowserProgress] = useState("");
   const stopBrowser = useRef(false);
+  const browserSessionRef = useRef<BrowserSession|null>(null);
+  const [browserGoal,setBrowserGoal] = useState<BrowserSession|null>(null);
+  function rememberBrowserSession(session:BrowserSession|null){browserSessionRef.current=session;setBrowserGoal(session);}
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [pendingJob, setPendingJob] = useState<string | null>(null);
   const tokenRef = useRef("");
@@ -76,6 +80,7 @@ export default function WorkspaceChat() {
       const token = pairingCode(code);
       const status: AgentStatus = await localRequest(token, "/status");
       if (status.status !== "ready" || status.protocol !== 1) throw new Error("Zaktualizuj lokalnego wykonawcę.");
+      rememberBrowserSession(invalidateBrowserEvidence(browserSessionRef.current));
       tokenRef.current = token;
       setAgent(status);
       setConnected(true);
@@ -89,6 +94,7 @@ export default function WorkspaceChat() {
   }
 
   function disconnect() {
+    rememberBrowserSession(invalidateBrowserEvidence(browserSessionRef.current));
     tokenRef.current = "";
     setConnected(false);
     setDesktopMode(false);
@@ -180,50 +186,24 @@ export default function WorkspaceChat() {
         const outcome=await runNativeCommand(tokenRef.current,content,history,{progress:setBrowserProgress,stopped:()=>stopBrowser.current,pending:(id)=>{setPendingJob(id);executionStarted=!!id;},executed:()=>{browserActions++;}});
         setMessages(previous=>[...previous,{role:"assistant",content:outcome.result?resultText(outcome.result)+"\n\nOcena modelu: "+outcome.reply:outcome.reply}]);
       } else if (browserMode && !attachedImage) {
-        if (!connected || !tokenRef.current) throw new Error("Najpierw połącz komputer.");
-        const status: AgentStatus = await localRequest(tokenRef.current, "/status");
-        if (!status.browser?.available) throw new Error("Uruchom wykonawcę z --browser i połącz go ponownie, aby otworzyć okno Chromium NaviMind.");
-        let snapshot: BrowserSnapshot = await localRequest(tokenRef.current, "/browser/observe");
-        const steps: string[] = [JSON.stringify({observed_url:snapshot.url,source:"initial_observation"})];
-        let staleRetries = 0;
-        const noEffect = new Map<string,number>();
-        const viewKey = (view: BrowserSnapshot) => JSON.stringify([view.url,view.text,view.controls.map(({ref,...control})=>control)]);
-        for (let step = 0; step < 12; step++) {
-          if (stopBrowser.current) break;
-          setBrowserProgress(`Odczytuję stronę i planuję krok ${step+1}/12…`);
-          const response = await fetch("/api/workspace/browser-plan", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:content,history,snapshot,steps})});
-          const plan = await response.json();
-          if (!response.ok) throw new Error(plan.message || "Nie udało się przygotować kroku przeglądarki.");
-          if (stopBrowser.current) break;
-          if (!plan.task) {
-            setMessages(previous => [...previous,{role:"assistant",content:(plan.decision==='done'?"**Wynik pracy w przeglądarce.** ":"**Potrzebny kolejny krok.** ")+plan.reply+`\n\nOdczytana strona: ${snapshot.url}\n\nTytuł: ${snapshot.title}`}]);
-            return;
-          }
-          const before=viewKey(snapshot);
-          const target='ref' in plan.task?snapshot.controls.find(c=>c.ref===plan.task.ref)?.name:plan.task.url||plan.task.kind;
-          const actionKey=JSON.stringify([before,plan.task.kind,target]);
-          if ((noEffect.get(actionKey)||0)>=2) {
-            setMessages(previous=>[...previous,{role:"assistant",content:`Zatrzymałem zadanie: dwie próby nie zmieniły widoku strony. Krok: ${plan.task.kind}; element: ${String(target).slice(0,180)}. Odczytano ${snapshot.controls.length} kontrolek. Sprawdź aktualny stan w oknie Chromium NaviMind.`}]);return;
-          }
-          setBrowserProgress(`Krok ${step+1}/12: ${plan.reply}`);
-          const id=crypto.randomUUID();setPendingJob(id);executionStarted=true;
-          const result:TaskResult=await localRequest(tokenRef.current,"/execute",{id,task:plan.task,expectedRevision:plan.expectedRevision});
-          setPendingJob(null);executionStarted=false;
-          steps.push(browserStepReceipt(snapshot,plan.task,result));
-          if(result.code==='STALE_PAGE' && staleRetries<2 && !stopBrowser.current){
-            staleRetries++;snapshot=await localRequest(tokenRef.current,"/browser/observe");continue;
-          }
-          if(result.status!=='verified'||!result.browser){
-            setMessages(previous=>[...previous,{role:"assistant",content:resultText(result)+" Nowej próby nie wykonano automatycznie."}]);return;
-          }
-          browserActions++;
-          if(result.browser_export){
-            setMessages(previous=>[...previous,{role:"assistant",content:resultText(result)+`\n\nOdczytana strona: ${result.browser?.url}`}]);return;
-          }
-          snapshot=result.browser;
-          if(plan.task.kind==='browser_click'&&viewKey(snapshot)===before)noEffect.set(actionKey,(noEffect.get(actionKey)||0)+1);
+        async function post(path:string,body:unknown){
+          const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+          const result=await response.json();if(!response.ok)throw Error(result.message||'Nie udało się przygotować odpowiedzi.');return result;
         }
-        setMessages(previous=>[...previous,{role:"assistant",content:stopBrowser.current?"Zatrzymałem zadanie w przeglądarce. Wykonane kroki pozostają widoczne w oknie Chromium NaviMind.":"Zatrzymałem zadanie po 12 krokach. Sprawdź aktualny widok; nie uznaję całego zadania za zakończone."}]);
+        let browserChecked=false;
+        const outcome=await runBrowserConversation(content,history,browserSessionRef.current,{
+          turn:body=>post('/api/workspace/browser-turn',body),plan:body=>post('/api/workspace/browser-plan',body),
+          observe:async()=>{
+            if(!connected||!tokenRef.current)throw Error('Połącz komputer, aby odczytać stronę lub wykonać zadanie. Cel i rozmowa zostały zachowane.');
+            if(!browserChecked){const status:AgentStatus=await localRequest(tokenRef.current,'/status');if(!status.browser?.available)throw Error('Uruchom wykonawcę z --browser i połącz go ponownie.');browserChecked=true;}
+            return localRequest<BrowserSnapshot>(tokenRef.current,'/browser/observe');
+          },
+          execute:body=>localRequest<TaskResult>(tokenRef.current,'/execute',body),
+          changed:rememberBrowserSession,progress:setBrowserProgress,stopped:()=>stopBrowser.current,
+          pending:id=>{setPendingJob(id);executionStarted=!!id;},executed:()=>{browserActions++;},id:()=>crypto.randomUUID()
+        });
+        const reply=outcome.result?resultText(outcome.result):outcome.reply;
+        setMessages(previous=>[...previous,{role:'assistant',content:reply+(outcome.kind==='done'&&outcome.snapshot?`\n\nOdczytana strona: ${outcome.snapshot.url}\nTytuł: ${outcome.snapshot.title}`:'')}]);
       } else if (desktopMode && !attachedImage) {
         if (!connected || !tokenRef.current) throw new Error("Najpierw połącz komputer.");
         const status: AgentStatus = await localRequest(tokenRef.current, "/status");
@@ -260,11 +240,14 @@ export default function WorkspaceChat() {
         setMessages(previous => [...previous, { role: "assistant", content: result.reply }]);
       }
     } catch (problem) {
+      if(browserMode&&browserSessionRef.current)rememberBrowserSession({...browserSessionRef.current,status:'paused'});
       if (executionStarted) {
         setMessages(previous => [...previous, { role: "assistant", content: "**Brak potwierdzenia wyniku.** Połączenie przerwano podczas wykonania. Kliknij „Sprawdź wynik zadania”; nie wysyłaj ponownie tego samego polecenia." }]);
       } else if (browserActions > 0) {
         setMessages(previous=>[...previous,{role:"assistant",content:`Przerwałem planowanie po ${browserActions} wykonanych krokach. Ich efekty pozostają w oknie zadania. Sprawdź aktualny widok i podaj dalsze polecenie.`}]);
         setError(problem instanceof Error ? problem.message : "Przerwano połączenie.");
+      } else if(browserMode&&!attachedImage&&!attachedPDF){
+        setMessages(previous=>[...previous,{role:'assistant',content:problem instanceof Error?problem.message:'Przerwano połączenie. Zadanie zostało zachowane.'}]);
       } else {
         setMessages(previousMessages);
         setText(content);
@@ -299,6 +282,12 @@ export default function WorkspaceChat() {
         {connected && !agent?.browser?.available && <p className="mt-2 text-xs text-amber-200">Obsługa stron wymaga aktualnego wykonawcy uruchomionego z --browser.</p>}
         {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={nativeMode} disabled={sending||!!pendingJob||!agent?.native?.available} onChange={event=>{setNativeMode(event.target.checked);if(event.target.checked){setDesktopMode(false);setBrowserMode(false);}}}/>Aplikacja · Paint sterowany obrazem</label>}
         {nativeMode && <p className="mt-2 text-sm text-amber-100">Polecenie przełączy fokus na nowe okno Painta sesji. Zrzuty tego okna będą przesyłane do modelu po każdym kroku. Agent może klikać, przeciągać i wpisywać tekst. Zatrzymaj zadanie, aby przejąć sterowanie. Zapis potwierdza wykonawca; wygląd rysunku sprawdzamy wizualnie.</p>}
+        {browserMode && browserGoal && <div className="mt-3 rounded border border-slate-500 p-3 text-sm">
+          <p className="font-semibold">{browserGoal.status==='awaiting'?'Czekam na brakującą informację':browserGoal.status==='completed'?'Ostatnie zadanie — możesz je poprawić':browserGoal.status==='paused'?'Zadanie zachowane — możesz je wznowić':'Pracuję nad zadaniem'}</p>
+          <p className="mt-1 whitespace-pre-wrap">{browserGoal.goal.length>500?browserGoal.goal.slice(0,500)+'…':browserGoal.goal}</p>
+          <p className="mt-1 text-slate-300">Możesz zadawać pytania, doprecyzować polecenie albo napisać „kontynuuj”.</p>
+          <button type="button" disabled={sending||!!pendingJob} onClick={()=>rememberBrowserSession(null)} className="mt-2 underline">Zakończ to zadanie</button>
+        </div>}
         {browserMode && <p className="mt-2 text-sm text-amber-100">Agent pracuje w osobnym oknie Chromium NaviMind. Po wysłaniu polecenia przekaże do modelu widoczny tekst i opisy elementów tej karty. Wartości pól, cookies i dane sesji nie są wysyłane do modelu. Logowanie oraz końcowe zatwierdzanie płatności, wysyłania i usuwania wykonujesz ręcznie.</p>}
         {pairing && <div className="mt-3 space-y-2 rounded-lg bg-slate-800 p-3">
           <p className="text-sm">Uruchom lokalnego wykonawcę w PowerShell. Wklej tutaj kod parowania z tego okna. Kod zostaje w tej karcie i służy wyłącznie do połączenia lokalnego.</p>
@@ -332,7 +321,7 @@ export default function WorkspaceChat() {
       </section>
       <form onSubmit={send} className="sticky bottom-0 space-y-3 border-t border-slate-700 bg-slate-950 py-4">
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <label htmlFor="workspace-command" className="block text-sm">{pdf ? "Wskazówki do odczytu PDF" : image ? "Pytanie do zrzutu ekranu" : nativeMode ? "Polecenie dla okna aplikacji" : browserMode ? "Polecenie dla przeglądarki" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
+        <label htmlFor="workspace-command" className="block text-sm">{pdf ? "Wskazówki do odczytu PDF" : image ? "Pytanie do zrzutu ekranu" : nativeMode ? "Polecenie dla okna aplikacji" : browserMode ? "Rozmowa i zadania w przeglądarce" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
         <textarea id="workspace-command" ref={inputRef} value={text} rows={3} maxLength={8000}
           disabled={sending || !!pendingJob} onChange={event => setText(event.target.value)}
           onPaste={event => { const file = Array.from(event.clipboardData.files).find(file => file.type.startsWith("image/")); if (file) { event.preventDefault(); void attachImage(file); } }}
@@ -370,7 +359,7 @@ export default function WorkspaceChat() {
         </div>
         <div className="flex items-start justify-between gap-3">
           <MicrophoneButton disabled={sending || !!pendingJob} onResult={transcript => setText(previous => [previous.trim(), transcript].filter(Boolean).join(" "))} />
-          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image && !pdf)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{pdf ? "Odczytaj PDF" : image ? "Wyślij zrzut" : nativeMode ? "Wykonaj w aplikacji" : browserMode ? "Wykonaj w przeglądarce" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
+          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image && !pdf)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{pdf ? "Odczytaj PDF" : image ? "Wyślij zrzut" : nativeMode ? "Wykonaj w aplikacji" : browserMode ? "Wyślij do agenta" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
         </div>
         <p className="text-xs text-slate-400">Historia, zrzuty i parowanie działają w bieżącej karcie. Po odświeżeniu połącz komputer ponownie. Nagranie wysyłane jest do rozpoznania mowy po zatrzymaniu.</p>
       </form>
