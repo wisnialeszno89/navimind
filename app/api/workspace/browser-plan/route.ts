@@ -3,6 +3,7 @@ import {NextResponse} from 'next/server';
 import {isPrivateWorkspace,workspaceMessages} from '@/lib/workspace';
 import {readWorkspaceBody} from '@/lib/workspace-image';
 import {browserSnapshot,browserDecision,navigationURLs,requiredBrowserNavigation,BROWSER_PROMPT} from '@/lib/browser-plan';
+import {MAX_BROWSER_STEP_LENGTH} from '@/lib/browser-step-receipt';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
@@ -10,7 +11,7 @@ export async function POST(req:Request){
  if(!isPrivateWorkspace())return NextResponse.json({message:'Przestrzeń pracy jest wyłączona.'},{status:403});
  let messages,snapshot,steps;
  try{const body=await readWorkspaceBody(req);messages=workspaceMessages(body);snapshot=browserSnapshot(body.snapshot);
-  if(!Array.isArray(body.steps)||body.steps.length>12||body.steps.some((s:unknown)=>typeof s!=='string'||s.length>1000))throw Error('INVALID_STEPS');steps=body.steps as string[];
+  if(!Array.isArray(body.steps)||body.steps.length>12||body.steps.some((s:unknown)=>typeof s!=='string'||s.length>MAX_BROWSER_STEP_LENGTH))throw Error('INVALID_STEPS');steps=body.steps as string[];
  }catch{return NextResponse.json({message:'Nieprawidłowe polecenie lub widok przeglądarki.'},{status:400});}
  const urls=navigationURLs(messages[messages.length-1].content);
  const navigation=requiredBrowserNavigation(snapshot,urls,steps);

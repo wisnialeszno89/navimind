@@ -5,7 +5,7 @@ const control={ref:'e'+'a'.repeat(16),tag:'input',role:'',type:'number',name:'Sz
 const snapshot={revision:'a'.repeat(64),url:'about:blank',title:'Laboratorium',text:'Wybierz klienta',scope:'owned_chromium_tab',controls:[control]};
 let replies=[],calls=0,lastInput;
 class OpenAI{chat={completions:{create:async input=>{calls++;lastInput=input;return {choices:[{message:{content:JSON.stringify(replies.shift())}}]};}}};}
-const route=load('app/api/workspace/browser-plan/route.ts',{'@/lib/browser-plan':lib,'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
+const route=load('app/api/workspace/browser-plan/route.ts',{'@/lib/browser-plan':lib,'@/lib/browser-step-receipt':load('app/lib/browser-step-receipt.ts'),'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 const request=(body={message:'Ustaw szerokość 1100 mm',history:[],snapshot,steps:[]})=>new Request('https://test/api',{method:'POST',body:JSON.stringify(body)});
 test('only observed enabled targets and declared actions are accepted',()=>{
  const plan=lib.browserDecision({decision:'act',reply:'Ustawiam szerokość.',task:{kind:'browser_fill',ref:control.ref,text:'1100'}},snapshot);

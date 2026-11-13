@@ -9,6 +9,7 @@ import type {NativeSnapshot} from "@/lib/native-plan";
 import type { BrowserSnapshot } from "@/lib/browser-plan";
 import type { TableContext, TableInfo, ReportInfo } from "@/lib/desktop-plan";
 import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-connection";
+import {browserStepReceipt} from '@/lib/browser-step-receipt';
 
 type Message = { role: "user" | "assistant"; content: string; image?: string; documentName?:string };
 type AgentStatus = { status: string; protocol: number; capabilities?: string[]; tables?: TableInfo[]; reports?: ReportInfo[]; warning?: string | null; browser?: {available:boolean;scope:string}; paint?: {available:boolean;method:string}; native?: {available:boolean;scope:string;title:string}; currentTable: (TableContext & { file: string }) | null };
@@ -202,13 +203,13 @@ export default function WorkspaceChat() {
           const target='ref' in plan.task?snapshot.controls.find(c=>c.ref===plan.task.ref)?.name:plan.task.url||plan.task.kind;
           const actionKey=JSON.stringify([before,plan.task.kind,target]);
           if ((noEffect.get(actionKey)||0)>=2) {
-            setMessages(previous=>[...previous,{role:"assistant",content:"Zatrzymałem zadanie: dwie próby nie zmieniły widoku strony. Sprawdź aktualny stan w oknie Chromium NaviMind."}]);return;
+            setMessages(previous=>[...previous,{role:"assistant",content:`Zatrzymałem zadanie: dwie próby nie zmieniły widoku strony. Krok: ${plan.task.kind}; element: ${String(target).slice(0,180)}. Odczytano ${snapshot.controls.length} kontrolek. Sprawdź aktualny stan w oknie Chromium NaviMind.`}]);return;
           }
           setBrowserProgress(`Krok ${step+1}/12: ${plan.reply}`);
           const id=crypto.randomUUID();setPendingJob(id);executionStarted=true;
           const result:TaskResult=await localRequest(tokenRef.current,"/execute",{id,task:plan.task,expectedRevision:plan.expectedRevision});
           setPendingJob(null);executionStarted=false;
-          steps.push(JSON.stringify({task:plan.task,result:result.message,status:result.status,observed_url:result.browser?.url}).slice(0,1000));
+          steps.push(browserStepReceipt(snapshot,plan.task,result));
           if(result.code==='STALE_PAGE' && staleRetries<2 && !stopBrowser.current){
             staleRetries++;snapshot=await localRequest(tokenRef.current,"/browser/observe");continue;
           }
