@@ -40,7 +40,9 @@ function summary(s){return `PODGLĄD GOTOWY\nKlient: ${s.customer}\nSzerokość:
    if(task.kind==='browser_fill'||task.kind==='browser_select'){
     const key=Object.keys(names).find(key=>names[key]===c.name);if(!key)throw Error('UNKNOWN_SYNTHETIC_FIELD');
     if(key!=='search'&&!phase.allowed_write_fields.includes(key))throw Error('UNREQUESTED_FIELD_WRITE '+key);
-    state[key]=task.text??task.value;
+    const value=task.text??task.value;
+    if(key!=='search'&&phase.expected&&value!==phase.expected[key])throw Error('WRONG_REQUESTED_VALUE '+key);
+    state[key]=value;
     if(key==='search')state.results=customers.filter(name=>state.search&&name.toLowerCase().includes(state.search.toLowerCase()));
     else state.preview='';
    }else if(task.kind==='browser_click'&&customers.includes(c.name)){

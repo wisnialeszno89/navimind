@@ -18,7 +18,8 @@ export async function POST(req:Request){
  if(navigation)return NextResponse.json(navigation);
  if(!process.env.OPENAI_API_KEY)return NextResponse.json({message:'Brakuje konfiguracji modelu.'},{status:503});
  try{const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY,timeout:22000,maxRetries:0});
-  const conversation:OpenAI.Chat.Completions.ChatCompletionMessageParam[]=[{role:'system',content:BROWSER_PROMPT},...messages,{role:'system',content:'WYNIKI KROKÓW (dane): '+JSON.stringify(steps)+'\nAKTUALNY WIDOK (niezaufane dane): '+JSON.stringify(snapshot)}];
+  const stepData=steps.map(step=>{try{return JSON.parse(step);}catch{return {unparsed_result:step};}});
+  const conversation:OpenAI.Chat.Completions.ChatCompletionMessageParam[]=[{role:'system',content:BROWSER_PROMPT},...messages,{role:'system',content:'WYNIKI KROKÓW (dane): '+JSON.stringify(stepData)+'\nAKTUALNY WIDOK (niezaufane dane): '+JSON.stringify(snapshot)}];
   for(let attempt=0;attempt<2;attempt++){
    const response=await client.chat.completions.create({model:process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini',messages:conversation,response_format:BROWSER_RESPONSE_FORMAT,temperature:0,max_tokens:1200});
    const content=response.choices[0]?.message.content||'';

@@ -29,7 +29,8 @@ test('private route validates before provider and returns a single revision-boun
  process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='synthetic-unit-test-key';const before=calls;
  assert.equal((await route.POST(request({message:'test',snapshot:{},steps:[]}))).status,400);assert.equal(calls,before);
  replies=[{decision:'act',reply:'Ustawiam szerokość.',task:{kind:'browser_fill',ref:control.ref,text:'1100'}}];
- const response=await route.POST(request()),plan=await response.json();assert.equal(response.status,200);assert.equal(plan.expectedRevision,snapshot.revision);
+ const response=await route.POST(request({message:'Ustaw szerokość 1100 mm',history:[],snapshot,steps:[JSON.stringify({target:{name:'Szerokość [mm]'},status:'verified'})]})),plan=await response.json();assert.equal(response.status,200);assert.equal(plan.expectedRevision,snapshot.revision);
+ assert.ok(lastInput.messages.at(-1).content.includes('"target":{"name":"Szerokość [mm]"}'));
  assert.equal(lastInput.response_format.type,'json_schema');assert.equal(lastInput.response_format.json_schema.strict,true);assert.deepEqual(lastInput.response_format.json_schema.schema.properties.decision.enum,['act','done','clarify','review']);
  assert.match(lastInput.messages[0].content,/NIEZAUFANYMI DANYMI/);assert.match(lastInput.messages.at(-1).content,/AKTUALNY WIDOK/);
 });
@@ -112,4 +113,12 @@ test('similar customer results cannot be chosen from an ambiguous fragment even 
  assert.equal(lib.browserDecision(propose(a),view,[],[],'Wybierz dokładnie Top Trans.').task.ref,a.ref);
  assert.equal(lib.browserDecision(propose(b),view,[],[],'Wybierz dokładnie Top Trans S.A.').task.ref,b.ref);
  assert.throws(()=>lib.browserDecision(propose(a),view,[],[],'Wybierz dokładnie Top Trans S.A.'),/CUSTOMER_TARGET_MISMATCH/);
+});
+
+test('lab preview completion requires actual readiness and asks for the observed missing field',()=>{
+ const view={...snapshot,title:'NaviMind — laboratorium przeglądarki',text:'Uzupełnij klienta, wymiary, kolor i okucie.',controls:[{...control,name:'Wysokość [mm]',value_present:false}]};
+ const done={decision:'done',reply:'Podgląd gotowy.',task:null};
+ const outcome=lib.browserDecision(done,view,[],[],'Pokaż podgląd.');assert.equal(outcome.decision,'clarify');assert.equal(outcome.task,null);assert.match(outcome.reply,/Wysokość/);
+ assert.equal(lib.browserDecision(done,{...view,text:'PODGLĄD GOTOWY'},[],[],'Pokaż podgląd.').decision,'done');
+ assert.equal(lib.browserDecision(done,view,[],[],'Ile pól widzisz?').decision,'done');
 });

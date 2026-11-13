@@ -47,7 +47,13 @@ export function requiredBrowserNavigation(snapshot:BrowserSnapshot,urls:string[]
 export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNavigation:string[]=[],steps:string[]=[],userCommand=''){
  const v=object(value);exact(v,['decision','reply','task']);const reply=text(v.reply,2000);
  if(!reply.trim())throw Error('EMPTY_REPLY');
- if(['done','clarify','review'].includes(String(v.decision))){if(v.decision==='done'&&requiredBrowserNavigation(snapshot,allowedNavigation,steps)!==null)return {decision:'review' as const,reply:'Aktualny adres nie odpowiada stronie z polecenia. Nie potwierdzam wykonania zadania.',task:null,expectedRevision:null};if(v.task!==null)throw Error('UNEXPECTED_TASK');return {decision:v.decision as 'done'|'clarify'|'review',reply,task:null,expectedRevision:null};}
+ if(['done','clarify','review'].includes(String(v.decision))){if(v.decision==='done'&&requiredBrowserNavigation(snapshot,allowedNavigation,steps)!==null)return {decision:'review' as const,reply:'Aktualny adres nie odpowiada stronie z polecenia. Nie potwierdzam wykonania zadania.',task:null,expectedRevision:null};if(v.task!==null)throw Error('UNEXPECTED_TASK');
+  if(v.decision==='done'&&snapshot.url==='about:blank'&&snapshot.title==='NaviMind — laboratorium przeglądarki'&&/podgl[aą]d|vorschau|preview/i.test(userCommand)&&!snapshot.text.includes('PODGLĄD GOTOWY')){
+   const fields=new Set(['Szerokość [mm]','Wysokość [mm]','Kolor zewnętrzny','Otwieranie']);
+   const missing=snapshot.controls.filter(c=>fields.has(c.name)&&!c.value_present).map(c=>c.name);
+   return {decision:missing.length?'clarify' as const:'review' as const,reply:missing.length?'Brak danych do podglądu: '+missing.join(', ')+'. Podaj brakujące wartości.':'Podgląd nie potwierdza konfiguracji. Nie uznaję zadania za zakończone.',task:null,expectedRevision:null};
+  }
+  return {decision:v.decision as 'done'|'clarify'|'review',reply,task:null,expectedRevision:null};}
  if(v.decision!=='act')throw Error('INVALID_DECISION');
  const t=object(v.task),kind=t.kind;
  const fields:Record<string,string[]>={browser_navigate:['kind','url'],browser_click:['kind','ref'],browser_fill:['kind','ref','text'],browser_select:['kind','ref','value'],browser_scroll:['kind','direction'],browser_back:['kind'],browser_save_snapshot:['kind']};
