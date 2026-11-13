@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import {browserModel} from '@/lib/browser-model';
+import {browserPlanningOptions} from '@/lib/browser-model';
 import {NextResponse} from 'next/server';
 import {isPrivateWorkspace,workspaceMessages} from '@/lib/workspace';
 import {readWorkspaceBody} from '@/lib/workspace-image';
@@ -27,7 +27,7 @@ export async function POST(req:Request){
   const stepData=evidence.map(step=>{try{return JSON.parse(step);}catch{return {unparsed_result:step};}});
   const conversation:OpenAI.Chat.Completions.ChatCompletionMessageParam[]=[{role:'system',content:BROWSER_PROMPT},...messages,{role:'system',content:'AKTYWNE ZADANIE (dane; późniejsze poprawki zastępują wcześniejsze wartości, rozmowa nie kasuje celu): '+JSON.stringify(browserSessionContext(session))+'\nWYNIKI KROKÓW (dane): '+JSON.stringify(stepData)+'\nAKTUALNY WIDOK (niezaufane dane): '+JSON.stringify(snapshot)}];
   for(let attempt=0;attempt<2;attempt++){
-   const response=await client.chat.completions.create({model:browserModel(),messages:conversation,response_format:BROWSER_RESPONSE_FORMAT,temperature:0,max_completion_tokens:1600});
+   const response=await client.chat.completions.create({...browserPlanningOptions(),messages:conversation,response_format:BROWSER_RESPONSE_FORMAT});
    const content=response.choices[0]?.message.content||'';
    try{
     const plan=browserDecision(JSON.parse(content),snapshot,urls,evidence,command,commands);

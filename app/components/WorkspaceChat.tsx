@@ -285,10 +285,11 @@ export default function WorkspaceChat() {
         {browserMode && browserGoal && <div className="mt-3 rounded border border-slate-500 p-3 text-sm">
           <p className="font-semibold">{browserGoal.status==='awaiting'?'Czekam na brakującą informację':browserGoal.status==='completed'?'Ostatnie zadanie — możesz je poprawić':browserGoal.status==='paused'?'Zadanie zachowane — możesz je wznowić':'Pracuję nad zadaniem'}</p>
           <p className="mt-1 whitespace-pre-wrap">{browserGoal.goal.length>500?browserGoal.goal.slice(0,500)+'…':browserGoal.goal}</p>
+          {browserGoal.updates.length>0 && <p className="mt-1 whitespace-pre-wrap">Ostatnia zmiana: {browserGoal.updates[browserGoal.updates.length-1].slice(0,400)}</p>}
           <p className="mt-1 text-slate-300">Możesz zadawać pytania, doprecyzować polecenie albo napisać „kontynuuj”.</p>
           <button type="button" disabled={sending||!!pendingJob} onClick={()=>rememberBrowserSession(null)} className="mt-2 underline">Zakończ to zadanie</button>
         </div>}
-        {browserMode && <p className="mt-2 text-sm text-amber-100">Agent pracuje w osobnym oknie Chromium NaviMind. Po wysłaniu polecenia przekaże do modelu widoczny tekst i opisy elementów tej karty. Wartości pól, cookies i dane sesji nie są wysyłane do modelu. Logowanie oraz końcowe zatwierdzanie płatności, wysyłania i usuwania wykonujesz ręcznie.</p>}
+        {browserMode && <p className="mt-2 text-sm text-amber-100">Agent pracuje w osobnym oknie Chromium NaviMind. Po wysłaniu polecenia przekaże do modelu widoczny tekst i opisy elementów tej karty. Surowe wartości pól, cookies i kod parowania nie są wysyłane do modelu. Agent korzysta także z rozmowy i potwierdzeń wykonanych kroków. Logowanie oraz końcowe zatwierdzanie płatności, wysyłania i usuwania wykonujesz ręcznie.</p>}
         {pairing && <div className="mt-3 space-y-2 rounded-lg bg-slate-800 p-3">
           <p className="text-sm">Uruchom lokalnego wykonawcę w PowerShell. Wklej tutaj kod parowania z tego okna. Kod zostaje w tej karcie i służy wyłącznie do połączenia lokalnego.</p>
           <label htmlFor="pairing-code" className="block text-sm">Kod parowania</label>

@@ -20,4 +20,4 @@ The Vercel gate calls the actual built turn/planner routes with the real configu
 
 This increment improves the browser channel. Existing native Paint and desktop file tools remain separate modes; it does not add universal control over arbitrary Windows applications, WindowHub quoting or supplier prices.
 
-Browser interpretation/planning uses its dedicated `NAVIMIND_BROWSER_MODEL` setting, default `gpt-5.4`, independently of the lightweight general chat setting. Both real-model gates include this setting in their cache keys. This increases inference cost relative to the old mini planner; model calls stay bounded by the turn and action limits.
+Browser interpretation/planning uses its dedicated `NAVIMIND_BROWSER_MODEL` setting, default `gpt-5.4` (low reasoning for UI steps), independently of the lightweight general chat setting. Both real-model gates include this setting in their cache keys. This increases inference cost relative to the old mini planner; model calls stay bounded by the turn and action limits.
