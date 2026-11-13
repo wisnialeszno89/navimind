@@ -101,3 +101,15 @@ test('ordinary default-type buttons outside forms remain usable; actual form sub
  assert.equal(blocked.decision,'review');assert.match(blocked.reply,/1-flg/);assert.equal(blocked.task,null);
  assert.throws(()=>lib.browserSnapshot({...view,controls:[{...button,submits_form:'false'}]}));
 });
+
+test('similar customer results cannot be chosen from an ambiguous fragment even if the model proposes it',()=>{
+ const search={...control,type:'search',name:'Wyszukaj klienta'};
+ const a={...control,ref:'e'+'b'.repeat(16),tag:'button',type:'button',name:'Top Trans'};
+ const b={...a,ref:'e'+'c'.repeat(16),name:'Top Trans S.A.'};
+ const view={...snapshot,controls:[search,a,b]};
+ const propose=c=>({decision:'act',reply:'Wybieram klienta.',task:{kind:'browser_click',ref:c.ref}});
+ for(const c of [a,b]){const outcome=lib.browserDecision(propose(c),view,[],[],'Wybierz klienta Top.');assert.equal(outcome.decision,'clarify');assert.equal(outcome.task,null);assert.match(outcome.reply,/Top Trans S.A./);}
+ assert.equal(lib.browserDecision(propose(a),view,[],[],'Wybierz dokładnie Top Trans.').task.ref,a.ref);
+ assert.equal(lib.browserDecision(propose(b),view,[],[],'Wybierz dokładnie Top Trans S.A.').task.ref,b.ref);
+ assert.throws(()=>lib.browserDecision(propose(a),view,[],[],'Wybierz dokładnie Top Trans S.A.'),/CUSTOMER_TARGET_MISMATCH/);
+});

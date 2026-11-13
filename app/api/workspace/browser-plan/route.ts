@@ -22,7 +22,7 @@ export async function POST(req:Request){
   for(let attempt=0;attempt<2;attempt++){
    const response=await client.chat.completions.create({model:process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini',messages:conversation,response_format:BROWSER_RESPONSE_FORMAT,temperature:0,max_tokens:1200});
    const content=response.choices[0]?.message.content||'';
-   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,steps));}catch(problem){
+   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,steps,messages[messages.length-1].content));}catch(problem){
     const code=problem instanceof Error&&/^[A-Z_]+$/.test(problem.message)?problem.message:'INVALID_JSON';
     let shape;try{const v=JSON.parse(content);shape={root:Array.isArray(v)?'array':typeof v,decision:['act','done','clarify','review'].includes(v?.decision)?v.decision:'other',task:v?.task===null?'null':Array.isArray(v?.task)?'array':typeof v?.task};}catch{shape={root:'invalid_json'};}
     console.warn('BROWSER_PLAN_REPAIR',code,JSON.stringify(shape));

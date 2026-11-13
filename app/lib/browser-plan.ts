@@ -44,7 +44,7 @@ export function requiredBrowserNavigation(snapshot:BrowserSnapshot,urls:string[]
  if(attempted)return {decision:'review' as const,reply:'Po próbie otwarcia wskazanego adresu odczytano inną stronę. Sprawdź adres w Chromium NaviMind. Nie uznaję zadania za wykonane.',task:null,expectedRevision:null};
  return {decision:'act' as const,reply:'Otwieram adres wskazany w poleceniu przed odczytem ustawień.',task:{kind:'browser_navigate' as const,url:urls[0]},expectedRevision:snapshot.revision};
 }
-export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNavigation:string[]=[],steps:string[]=[]){
+export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNavigation:string[]=[],steps:string[]=[],userCommand=''){
  const v=object(value);exact(v,['decision','reply','task']);const reply=text(v.reply,2000);
  if(!reply.trim())throw Error('EMPTY_REPLY');
  if(['done','clarify','review'].includes(String(v.decision))){if(v.decision==='done'&&requiredBrowserNavigation(snapshot,allowedNavigation,steps)!==null)return {decision:'review' as const,reply:'Aktualny adres nie odpowiada stronie z polecenia. Nie potwierdzam wykonania zadania.',task:null,expectedRevision:null};if(v.task!==null)throw Error('UNEXPECTED_TASK');return {decision:v.decision as 'done'|'clarify'|'review',reply,task:null,expectedRevision:null};}
@@ -61,6 +61,19 @@ export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNa
   const fieldSecret=/password|hasło|haslo|otp|2fa|one.time|credit|card|karta|cvv|cvc|token|secret|api.key|ssn/i;
   if(kind==='browser_click'&&(['input','textarea','select'].includes(control.tag)||(control.type==='reset'||control.type==='submit'&&control.submits_form!==false)||sensitive.test(control.name)) || kind==='browser_fill'&&(!['input','textarea'].includes(control.tag)||!['text','search','email','url','tel','number','textarea',''].includes(control.type)||fieldSecret.test(control.name)) || kind==='browser_select'&&sensitive.test(control.name)) {
    return {decision:'review' as const,reply:`Element „${control.name}” wymaga ręcznej obsługi albo innego narzędzia. ${['input','textarea','select'].includes(control.tag)?'To pole formularza: użyj wypełnienia lub wyboru opcji zamiast kliknięcia w celu fokusu.':control.type==='submit'&&control.submits_form!==false?'Przycisk wysyła formularz lub brak potwierdzenia jego powiązania z formularzem.':'Wykryto operację chronioną lub reset formularza.'} Nie kliknąłem tego elementu.`,task:null,expectedRevision:null};
+  }
+  // Similar customer buttons require explicit identity evidence in the current
+  // command, independently of the model's proposed click. Do not resolve a short
+  // search fragment by arbitrarily choosing one of the prefix-related results.
+  if(kind==='browser_click'&&control.tag==='button'&&userCommand&&snapshot.controls.some(c=>c.tag==='input'&&c.type==='search'&&/klient|kund|customer/i.test(c.name))){
+   const normalized=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+   const name=normalized(control.name),query=' '+normalized(userCommand)+' ';
+   const peers=snapshot.controls.filter(c=>c.tag==='button'&&!c.disabled&&normalized(c.name).length>=3&&(normalized(c.name)===name||normalized(c.name).startsWith(name+' ')||name.startsWith(normalized(c.name)+' ')));
+   if(name.length>=3&&peers.length>1){
+    const exact=peers.filter(c=>query.includes(' '+normalized(c.name)+' ')).sort((a,b)=>normalized(b.name).length-normalized(a.name).length);
+    if(!exact.length)return {decision:'clarify' as const,reply:'Którego klienta wybrać: '+peers.map(c=>c.name).join(' czy ')+'? Podaj pełną nazwę.',task:null,expectedRevision:null};
+    if(normalized(exact[0].name)!==name)throw Error('CUSTOMER_TARGET_MISMATCH');
+   }
   }
   if(kind==='browser_fill')task={kind,ref,text:text(t.text,2000)};
   else if(kind==='browser_select'){const value=text(t.value,2000);if(control.tag!=='select'||!control.options?.some(o=>o.value===value))throw Error('OPTION_NOT_IN_SNAPSHOT');task={kind,ref,value};}
