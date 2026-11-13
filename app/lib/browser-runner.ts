@@ -1,7 +1,7 @@
 import type {BrowserSnapshot,BrowserTask} from './browser-plan';
 import {browserStepReceipt} from './browser-step-receipt';
 import {browserTurn,newBrowserSession,continueBrowserSession,rememberBrowserReceipt,MAX_BROWSER_STEPS,type BrowserSession} from './browser-session';
-export type BrowserExecution={status:'verified'|'review';message:string;code?:string;browser?:BrowserSnapshot;browser_export?:{image_file:string;report_file:string;goal_verified:boolean;price_verified:boolean;screenshot_scope:string}};
+export type BrowserExecution={status:'verified'|'review';message:string;code?:string;verified_input_revision?:string;browser?:BrowserSnapshot;browser_export?:{image_file:string;report_file:string;goal_verified:boolean;price_verified:boolean;screenshot_scope:string}};
 type History={role:string;content:string}[];
 type Plan={decision:string;reply:string;task:BrowserTask|null;expectedRevision:string|null};
 type Ports={
@@ -37,6 +37,10 @@ export async function runBrowserConversation(message:string,history:History,init
   const plan=await ports.plan({message,history,session,snapshot,steps});
   if(ports.stopped())return pause('Zatrzymałem przed następną akcją.');
   if(!plan.task){
+   const fresh=await ports.observe();
+   if(ports.stopped())return pause('Zatrzymałem po odczycie aktualnego stanu.');
+   if(fresh.revision!==snapshot.revision){snapshot=fresh;continue;}
+   snapshot=fresh;
    if(session)save({...session,status:plan.decision==='done'?'completed':plan.decision==='clarify'?'awaiting':'paused',question:plan.decision==='clarify'?plan.reply:null});
    return {kind:plan.decision,reply:plan.reply,snapshot};
   }

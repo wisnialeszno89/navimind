@@ -21,3 +21,7 @@ The Vercel gate calls the actual built turn/planner routes with the real configu
 This increment improves the browser channel. Existing native Paint and desktop file tools remain separate modes; it does not add universal control over arbitrary Windows applications, WindowHub quoting or supplier prices.
 
 Browser interpretation/planning uses its dedicated `NAVIMIND_BROWSER_MODEL` setting, default `gpt-5.4` (low reasoning for UI steps), independently of the lightweight general chat setting. Both real-model gates include this setting in their cache keys. This increases inference cost relative to the old mini planner; model calls stay bounded by the turn and action limits.
+
+Before surfacing a proposed question or manual stop, the planner reviews whether the answer was already supplied or can be obtained from the current page. A final fresh observation is required before accepting completion or a question; a changed revision triggers replanning.
+
+Skipping an already verified input requires `verified_input_revision` from the Windows bridge, matching the exact snapshot revision. The bridge rechecks the captured field value after the initial action readback, without publishing it. A change during capture produces a review result, never STALE_PAGE (which would permit a retry before execution). Ambiguous field descriptions receive no current-view proof. Older bridges remain compatible but cannot enable this deduplication proof; update the existing executor branch for that feature.

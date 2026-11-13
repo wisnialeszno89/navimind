@@ -19,3 +19,11 @@ test('long step records remain bounded valid JSON instead of being cut mid-prope
  assert.ok(receipt.length<=MAX_BROWSER_STEP_LENGTH);
  const parsed=JSON.parse(receipt);assert.equal(parsed.target.name,'Szerokość [mm]');assert.equal(parsed.task.value_omitted,true);assert.equal(parsed.task.text_length,2000);
 });
+
+test('current-view input proof requires the local executor to confirm the exact snapshot revision',()=>{
+ const task={kind:'browser_fill',ref:old,text:'1100'};
+ const browser={url:'about:blank',revision:'a'.repeat(64)};
+ const unproven=JSON.parse(browserStepReceipt(before,task,{status:'verified',message:'Read back before capture.',browser}));assert.equal(unproven.verified_input_revision,undefined);
+ const proven=JSON.parse(browserStepReceipt(before,task,{status:'verified',message:'Read back in capture.',browser,verified_input_revision:browser.revision}));assert.equal(proven.verified_input_revision,browser.revision);
+ const stale=JSON.parse(browserStepReceipt(before,task,{status:'verified',message:'Old proof.',browser,verified_input_revision:'b'.repeat(64)}));assert.equal(stale.verified_input_revision,undefined);
+});

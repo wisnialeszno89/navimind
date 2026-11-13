@@ -127,7 +127,7 @@ test('lab preview completion requires actual readiness and asks for the observed
 
 test('a verified identical input on the exact current revision cannot execute twice; changed pages can reapply it',()=>{
  const value={decision:'act',reply:'Ustawiam wysokość.',task:{kind:'browser_fill',ref:control.ref,text:'1200'}};
- const receipt=JSON.stringify({status:'verified',target:{name:control.name,tag:control.tag,type:control.type},task:value.task,observed_revision:snapshot.revision});
+ const receipt=JSON.stringify({status:'verified',target:{name:control.name,tag:control.tag,type:control.type},task:value.task,verified_input_revision:snapshot.revision});
  assert.throws(()=>lib.browserDecision(value,snapshot,[],[receipt]),/FIELD_ALREADY_VERIFIED_IN_CURRENT_VIEW/);
  assert.equal(lib.browserDecision(value,{...snapshot,revision:'b'.repeat(64)},[],[receipt]).task.text,'1200');
  assert.equal(lib.browserDecision({...value,task:{...value.task,text:'1230'}},snapshot,[],[receipt]).task.text,'1230');

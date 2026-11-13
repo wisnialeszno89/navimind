@@ -3,7 +3,7 @@ const cache={};function load(relative){if(cache[relative])return cache[relative]
 const sessions=load('app/lib/browser-session.ts'),{runBrowserConversation}=load('app/lib/browser-runner.ts');
 const field={ref:'e'+'a'.repeat(16),tag:'input',type:'number',name:'Wysokość [mm]',role:'',href:'',disabled:false,checked:false,value_present:false};
 const snapshot={revision:'a'.repeat(64),url:'about:blank',title:'NaviMind — laboratorium przeglądarki',scope:'owned_chromium_tab',text:'Niepełna konfiguracja',controls:[field]};
-function harness(session=null){let current=session,turns=[],plans=[],counter=0;const calls={observe:0,execute:0,plan:[],turn:[],pending:[]};const ports={id:()=>String(++counter).padStart(20,'0'),changed:s=>{current=s;},progress:()=>{},stopped:()=>false,pending:id=>calls.pending.push(id),executed:()=>{},turn:async body=>{calls.turn.push(body);return turns.shift();},plan:async body=>{calls.plan.push(body);return plans.shift();},observe:async()=>{calls.observe++;return snapshot;},execute:async()=>{calls.execute++;return {status:'verified',message:'Sprawdzono pole.',browser:{...snapshot,text:'PODGLĄD GOTOWY',controls:[{...field,value_present:true}]}};}};return {calls,ports,get session(){return current},turn:(intent,reply='Odpowiedź')=>turns.push({intent,reply}),plan:p=>plans.push(p),run:message=>runBrowserConversation(message,[],current,ports)};}
+function harness(session=null){let current=session,visible=snapshot,turns=[],plans=[],counter=0;const calls={observe:0,execute:0,plan:[],turn:[],pending:[]};const ports={id:()=>String(++counter).padStart(20,'0'),changed:s=>{current=s;},progress:()=>{},stopped:()=>false,pending:id=>calls.pending.push(id),executed:()=>{},turn:async body=>{calls.turn.push(body);return turns.shift();},plan:async body=>{calls.plan.push(body);return plans.shift();},observe:async()=>{calls.observe++;return visible;},execute:async()=>{calls.execute++;visible={...snapshot,revision:'b'.repeat(64),text:'PODGLĄD GOTOWY',controls:[{...field,value_present:true}]};return {status:'verified',message:'Sprawdzono pole.',browser:visible};}};return {calls,ports,get session(){return current},turn:(intent,reply='Odpowiedź')=>turns.push({intent,reply}),plan:p=>plans.push(p),run:message=>runBrowserConversation(message,[],current,ports)};}
 const done={decision:'done',reply:'Podgląd gotowy.',task:null,expectedRevision:null};
 const fill={decision:'act',reply:'Ustawiam wysokość.',task:{kind:'browser_fill',ref:field.ref,text:'1200'},expectedRevision:snapshot.revision};
 test('a short answer resumes the original goal after an intervening discussion, without another permission question',async()=>{
@@ -11,7 +11,7 @@ test('a short answer resumes the original goal after an intervening discussion, 
  await h.run('Ustaw Top Trans, szerokość 1100, antracyt, DKR i pokaż podgląd.');
  assert.equal(h.session.status,'awaiting');const goal=h.session.goal;
  h.turn('reply','DKR to prawe okno rozwierno-uchylne.');const before=h.session;
- const answer=await h.run('Co oznacza DKR?');assert.equal(answer.kind,'reply');assert.equal(h.session,before);assert.equal(h.calls.execute,0);assert.equal(h.calls.observe,1);
+ const answer=await h.run('Co oznacza DKR?');assert.equal(answer.kind,'reply');assert.equal(h.session,before);assert.equal(h.calls.execute,0);assert.equal(h.calls.observe,2);
  h.turn('continue');h.plan(fill);h.plan(done);await h.run('1200 mm');
  assert.equal(h.session.goal,goal);assert.deepEqual(h.session.updates,['1200 mm']);assert.equal(h.session.status,'completed');assert.equal(h.calls.execute,1);
  assert.equal(h.calls.plan.at(-1).session.question,'Jaka wysokość?');assert.equal(h.session.receipts.map(JSON.parse).find(r=>r.task)?.task.text,'1200');
@@ -43,4 +43,10 @@ test('pairing again invalidates browser evidence but preserves the user goal',()
 test('session validation bounds context explicitly and never silently truncates user instructions',()=>{
  const original=sessions.newBrowserSession('id','Cel.');assert.throws(()=>sessions.browserSession({...original,token:'secret'}));assert.throws(()=>sessions.continueBrowserSession(original,'x'.repeat(8001)));
  assert.deepEqual(original.updates,[]);let memory=original;for(let i=0;i<30;i++)memory=sessions.rememberBrowserReceipt(memory,'{"step":'+i+'}');assert.equal(memory.receipts.length,24);assert.equal(memory.evidence_limited,true);
+});
+
+test('completion reobserves the page and replans when the operator changed it during model planning',async()=>{
+ const h=harness();h.turn('start');h.plan(done);h.plan(done);let reads=0;
+ h.ports.observe=async()=>({...snapshot,revision:++reads===1?'a'.repeat(64):'b'.repeat(64)});
+ const result=await h.run('Sprawdź gotowy podgląd.');assert.equal(result.kind,'done');assert.equal(h.calls.plan.length,2);assert.equal(h.calls.execute,0);assert.equal(reads,3);
 });

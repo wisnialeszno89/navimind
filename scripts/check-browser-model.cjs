@@ -40,7 +40,7 @@ const fields=['customer','width','height','color','opening'];
     const key=JSON.stringify([state,plan.task.kind,target]);if((noEffect.get(key)||0)>=2)throw Error('NO_EFFECT_LOOP '+id);
     const prior=JSON.stringify(state);apply(plan.task,before,phase);if(JSON.stringify(state)===prior)noEffect.set(key,(noEffect.get(key)||0)+1);
     console.log('BROWSER_MODEL_STEP CASE='+id+' KIND='+plan.task.kind+' TARGET='+target);
-    steps.push(browserStepReceipt(before,plan.task,{status:'verified',message:plan.task.kind==='browser_click'?'Kliknięto element i odczytano nowy widok.':'Sprawdzono wpisaną lub wybraną wartość pola.',browser:snapshot()}));
+    steps.push(browserStepReceipt(before,plan.task,{status:'verified',verified_input_revision:['browser_fill','browser_select'].includes(plan.task.kind)?after.revision:undefined,message:plan.task.kind==='browser_click'?'Kliknięto element i odczytano nowy widok.':'Sprawdzono wpisaną lub wybraną wartość pola.',browser:snapshot()}));
    }
    if(!finished)throw Error('MODEL_STEP_BUDGET '+id);
   }
