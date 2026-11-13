@@ -32,5 +32,5 @@ jobs:
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
 
-      - name: Agent task route tests
-        run: pnpm test:agent-bridge
+      - name: Workspace and agent regression contracts
+        run: node --test tests/*.test.cjs
