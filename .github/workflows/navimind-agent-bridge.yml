@@ -29,8 +29,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify shared fixtures against the pinned Windows executor commit
+        run: node scripts/check-browser-fixture-sync.cjs --remote
+
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
 
-      - name: Agent task route tests
-        run: pnpm test:agent-bridge
+      - name: Workspace and agent regression contracts
+        run: node --test tests/*.test.cjs

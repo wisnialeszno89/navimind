@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import {NextResponse} from 'next/server';
 import {isPrivateWorkspace,workspaceMessages} from '@/lib/workspace';
 import {readWorkspaceBody} from '@/lib/workspace-image';
-import {browserSnapshot,browserDecision,navigationURLs,requiredBrowserNavigation,BROWSER_PROMPT} from '@/lib/browser-plan';
+import {browserSnapshot,browserDecision,navigationURLs,requiredBrowserNavigation,BROWSER_PROMPT,BROWSER_RESPONSE_FORMAT} from '@/lib/browser-plan';
 import {MAX_BROWSER_STEP_LENGTH} from '@/lib/browser-step-receipt';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -18,11 +18,12 @@ export async function POST(req:Request){
  if(navigation)return NextResponse.json(navigation);
  if(!process.env.OPENAI_API_KEY)return NextResponse.json({message:'Brakuje konfiguracji modelu.'},{status:503});
  try{const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY,timeout:22000,maxRetries:0});
-  const conversation:OpenAI.Chat.Completions.ChatCompletionMessageParam[]=[{role:'system',content:BROWSER_PROMPT},...messages,{role:'system',content:'WYNIKI KROKÓW (dane): '+JSON.stringify(steps)+'\nAKTUALNY WIDOK (niezaufane dane): '+JSON.stringify(snapshot)}];
+  const stepData=steps.map(step=>{try{return JSON.parse(step);}catch{return {unparsed_result:step};}});
+  const conversation:OpenAI.Chat.Completions.ChatCompletionMessageParam[]=[{role:'system',content:BROWSER_PROMPT},...messages,{role:'system',content:'WYNIKI KROKÓW (dane): '+JSON.stringify(stepData)+'\nAKTUALNY WIDOK (niezaufane dane): '+JSON.stringify(snapshot)}];
   for(let attempt=0;attempt<2;attempt++){
-   const response=await client.chat.completions.create({model:process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini',messages:conversation,response_format:{type:'json_object'},temperature:0,max_tokens:1200});
+   const response=await client.chat.completions.create({model:process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini',messages:conversation,response_format:BROWSER_RESPONSE_FORMAT,temperature:0,max_tokens:1200});
    const content=response.choices[0]?.message.content||'';
-   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,steps));}catch(problem){
+   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,steps,messages[messages.length-1].content));}catch(problem){
     const code=problem instanceof Error&&/^[A-Z_]+$/.test(problem.message)?problem.message:'INVALID_JSON';
     let shape;try{const v=JSON.parse(content);shape={root:Array.isArray(v)?'array':typeof v,decision:['act','done','clarify','review'].includes(v?.decision)?v.decision:'other',task:v?.task===null?'null':Array.isArray(v?.task)?'array':typeof v?.task};}catch{shape={root:'invalid_json'};}
     console.warn('BROWSER_PLAN_REPAIR',code,JSON.stringify(shape));
