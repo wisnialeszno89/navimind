@@ -29,7 +29,7 @@ const fields=['customer','width','height','color','opening'];
     const plan=await response.json();if(response.status!==200)throw Error('MODEL_REQUEST_FAILED '+id);
     if(!plan.task){
      if(!phase.terminal_decisions.includes(plan.decision))throw Error('WRONG_TERMINAL '+id+' '+plan.decision+' '+String(plan.reply).slice(0,250));
-     if(phase.required_reply_terms?.some(term=>!plan.reply.toLowerCase().includes(term.toLowerCase()))||phase.reply_pattern&&!new RegExp(phase.reply_pattern,'i').test(plan.reply))throw Error('UNGROUNDED_QUESTION '+id);
+     if(phase.required_reply_terms?.some(term=>!plan.reply.toLowerCase().includes(term.toLowerCase()))||phase.reply_pattern&&!new RegExp(phase.reply_pattern,'i').test(plan.reply))throw Error('UNGROUNDED_QUESTION '+id+' '+plan.reply.slice(0,280));
      for(const key of fields)if(!phase.allowed_write_fields.includes(key)&&state[key]!==start[key])throw Error('PRESERVED_FIELD_CHANGED '+id+' '+key);
      if(phase.expected){for(const key of fields)if(state[key]!==phase.expected[key])throw Error('FALSE_SUCCESS '+id+' '+key);if(state.preview!==summary())throw Error('PREVIEW_NOT_REFRESHED '+id);}
      reports.push({id,decision:plan.decision,calls:i+1,status:'passed'});

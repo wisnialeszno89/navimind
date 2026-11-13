@@ -132,3 +132,12 @@ test('a verified identical input on the exact current revision cannot execute tw
  assert.equal(lib.browserDecision(value,{...snapshot,revision:'b'.repeat(64)},[],[receipt]).task.text,'1200');
  assert.equal(lib.browserDecision({...value,task:{...value.task,text:'1230'}},snapshot,[],[receipt]).task.text,'1230');
 });
+
+test('a proposed unnecessary question is reviewed automatically and can become execution without asking the user',async()=>{
+ replies=[{decision:'clarify',reply:'Czy wpisać szerokość?',task:null},{decision:'act',reply:'Ustawiam podaną szerokość.',task:{kind:'browser_fill',ref:control.ref,text:'1100'}}];
+ const before=calls,result=await route.POST(request());const plan=await result.json();assert.equal(calls,before+2);assert.equal(plan.decision,'act');assert.equal(plan.task.text,'1100');assert.match(lastInput.messages.at(-1).content,/sprawdź jego konieczność/);
+});
+test('a genuinely missing dimension remains one concrete question after the bounded review',async()=>{
+ replies=[{decision:'clarify',reply:'Jaka wysokość?',task:null},{decision:'clarify',reply:'Podaj wysokość w mm.',task:null}];
+ const before=calls,result=await route.POST(request());const plan=await result.json();assert.equal(calls,before+2);assert.equal(plan.decision,'clarify');assert.equal(plan.task,null);assert.match(plan.reply,/wysokość/);
+});

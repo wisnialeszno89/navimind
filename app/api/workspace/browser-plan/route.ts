@@ -29,7 +29,14 @@ export async function POST(req:Request){
   for(let attempt=0;attempt<2;attempt++){
    const response=await client.chat.completions.create({model:browserModel(),messages:conversation,response_format:BROWSER_RESPONSE_FORMAT,temperature:0,max_completion_tokens:1600});
    const content=response.choices[0]?.message.content||'';
-   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,evidence,command,commands));}catch(problem){
+   try{
+    const plan=browserDecision(JSON.parse(content),snapshot,urls,evidence,command,commands);
+    if(attempt===0&&['clarify','review'].includes(plan.decision)){
+     conversation.push({role:'assistant',content:JSON.stringify({decision:plan.decision,reply:plan.reply,task:null})},{role:'system',content:'Zanim przekażesz to pytanie lub zatrzymanie użytkownikowi, sprawdź jego konieczność. Czy odpowiedź lub pełna nazwa klienta jest JUŻ w bieżącej wiadomości, goal albo updates? Czy można samemu wykonać dostępny krok z controls albo odczytać stan? Jeśli tak, NIE pytaj ponownie i NIE proś o zgodę: zwróć act z kolejnym dostępnym krokiem. Ustawienia zachowywane przy korekcie nie wymagają nowego pytania. Pytaj tylko o konkretny brak, którego faktycznie nie podano i nie da się odczytać. Podana dokładnie pełna nazwa nie jest niejednoznaczna tylko dlatego, że istnieje też dłuższa nazwa zaczynająca się tak samo. Jeśli użytkownik podał wyłącznie fragment pasujący do kilku nazw, pytanie jest potrzebne. Nie wymyślaj brakującego wymiaru i nie obchodź ograniczeń narzędzi. Gdy pytanie/blokada jest rzeczywiście konieczna, zachowaj clarify/review, ale sformułuj jedno konkretne pytanie lub faktyczny powód.'});
+     continue;
+    }
+    return NextResponse.json(plan);
+   }catch(problem){
     const code=problem instanceof Error&&/^[A-Z_]+$/.test(problem.message)?problem.message:'INVALID_JSON';
     let shape;try{const v=JSON.parse(content);shape={root:Array.isArray(v)?'array':typeof v,decision:['act','done','clarify','review'].includes(v?.decision)?v.decision:'other',task:v?.task===null?'null':Array.isArray(v?.task)?'array':typeof v?.task};}catch{shape={root:'invalid_json'};}
     console.warn('BROWSER_PLAN_REPAIR',code,JSON.stringify(shape));
