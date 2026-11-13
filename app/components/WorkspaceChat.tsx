@@ -284,7 +284,21 @@ export default function WorkspaceChat() {
         {nativeMode && <p className="mt-2 text-sm text-amber-100">Polecenie przełączy fokus na nowe okno Painta sesji. Zrzuty tego okna będą przesyłane do modelu po każdym kroku. Agent może klikać, przeciągać i wpisywać tekst. Zatrzymaj zadanie, aby przejąć sterowanie. Zapis potwierdza wykonawca; wygląd rysunku sprawdzamy wizualnie.</p>}
         {browserMode && browserGoal && <div className="mt-3 rounded border border-slate-500 p-3 text-sm">
           <p className="font-semibold">{browserGoal.status==='awaiting'?'Czekam na brakującą informację':browserGoal.status==='completed'?'Ostatnie zadanie — możesz je poprawić':browserGoal.status==='paused'?'Zadanie zachowane — możesz je wznowić':'Pracuję nad zadaniem'}</p>
-        …810 tokens truncated…div>}
+          <p className="mt-1 whitespace-pre-wrap">{browserGoal.goal.length>500?browserGoal.goal.slice(0,500)+'…':browserGoal.goal}</p>
+          {browserGoal.updates.length>0 && <p className="mt-1 whitespace-pre-wrap">Ostatnia zmiana: {browserGoal.updates[browserGoal.updates.length-1].slice(0,400)}</p>}
+          <p className="mt-1 text-slate-300">Możesz zadawać pytania, doprecyzować polecenie albo napisać „kontynuuj”.</p>
+          <button type="button" disabled={sending||!!pendingJob} onClick={()=>rememberBrowserSession(null)} className="mt-2 underline">Zakończ to zadanie</button>
+        </div>}
+        {browserMode && <p className="mt-2 text-sm text-amber-100">Agent pracuje w osobnym oknie Chromium NaviMind. Po wysłaniu polecenia przekaże do modelu widoczny tekst i opisy elementów tej karty. Surowe wartości pól, cookies i kod parowania nie są wysyłane do modelu. Agent korzysta także z rozmowy i potwierdzeń wykonanych kroków. Logowanie oraz końcowe zatwierdzanie płatności, wysyłania i usuwania wykonujesz ręcznie.</p>}
+        {pairing && <div className="mt-3 space-y-2 rounded-lg bg-slate-800 p-3">
+          <p className="text-sm">Uruchom lokalnego wykonawcę w PowerShell. Wklej tutaj kod parowania z tego okna. Kod zostaje w tej karcie i służy wyłącznie do połączenia lokalnego.</p>
+          <label htmlFor="pairing-code" className="block text-sm">Kod parowania</label>
+          <div className="flex gap-2"><input id="pairing-code" type={showPairingCode ? "text" : "password"} spellCheck={false} autoCapitalize="none" autoComplete="off" value={code} onChange={event => { setCode(event.target.value); setPairingError(""); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void connect(); } }} aria-describedby="pairing-help" aria-invalid={!!pairingError} className="min-w-0 flex-1 rounded bg-slate-900 p-2" /><button type="button" aria-pressed={showPairingCode} aria-controls="pairing-code" onClick={() => setShowPairingCode(value => !value)} className="rounded border border-slate-500 px-3 py-2">{showPairingCode ? "Ukryj kod" : "Pokaż kod"}</button><button type="button" onClick={connect} disabled={connecting || !code.trim()} className="rounded bg-blue-600 px-3 py-2 disabled:opacity-50">{connecting ? "Sprawdzam połączenie…" : "Połącz"}</button></div>
+          <p role="status" className="text-sm text-slate-200">Wklejono {codeLength} znaków kodu. Oczekiwane: 43.</p>
+          <p id="pairing-help" className="text-xs text-slate-300">Kod musi pochodzić z wykonawcy uruchomionego na tym samym komputerze. Zostaw jego okno otwarte.</p>
+          {connecting && <p role="status" className="text-sm text-blue-200">Łączę z lokalnym wykonawcą. Sprawdź pytanie przeglądarki o dostęp lokalny. Test odpowiedzi potrwa do 10 sekund.</p>}
+          {pairingError && <p role="alert" className="rounded border border-red-400 bg-red-950 p-3 text-sm text-red-100">{pairingError}</p>}
+        </div>}
         {connected && <p className="mt-2 text-xs text-slate-300">Tabele okien: edycja i osobne pliki. Raport XLSX: scalanie, sztuki, powierzchnia i powtórzenia. Pliki: Pulpit / NaviMind-Praca.{agent?.currentTable && ` Aktywny plik: ${agent.currentTable.folder} / ${agent.currentTable.file_name || "tabela-okien.txt"}.`}</p>}
         {connected && agent?.capabilities && !agent.capabilities.includes("append_window_rows") && <p className="mt-2 text-sm text-amber-200">Zaktualizuj lokalnego wykonawcę, aby dopisywać i edytować pozycje.</p>}
         {connected && agent?.capabilities && !agent.capabilities.includes("aggregate_window_tables") && <p className="mt-2 text-sm text-amber-200">Raport XLSX wymaga aktualizacji lokalnego wykonawcy.</p>}
