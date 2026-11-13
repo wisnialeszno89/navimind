@@ -22,11 +22,13 @@ export async function POST(req:Request){
   for(let attempt=0;attempt<2;attempt++){
    const response=await client.chat.completions.create({model:process.env.NAVIMIND_WORKSPACE_MODEL||'gpt-4.1-mini',messages:conversation,response_format:{type:'json_object'},temperature:0,max_tokens:1200});
    const content=response.choices[0]?.message.content||'';
-   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,steps));}catch{
+   try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,steps));}catch(problem){
+    const code=problem instanceof Error&&/^[A-Z_]+$/.test(problem.message)?problem.message:'INVALID_JSON';
+    console.warn('BROWSER_PLAN_REPAIR',code);
     if(attempt===1)throw Error('INVALID_PLAN');
-    conversation.push({role:'assistant',content},{role:'system',content:'Propozycja nie spełnia formatu albo odwołuje się do nieistniejącego elementu/opcji. Niczego nie wykonano. Popraw jeden krok na podstawie aktualnego controls albo zwróć review z task:null.'});
+    conversation.push({role:'assistant',content},{role:'system',content:'Propozycja nie spełnia formatu albo odwołuje się do nieistniejącego elementu/opcji. Powód walidacji: '+code+'. Niczego nie wykonano. browser_fill wymaga text jako string, browser_select value jako string. Każdy ref musi pochodzić z aktualnego controls; nie używaj nazwy ani id DOM zamiast ref. Popraw jeden krok na podstawie aktualnego controls albo zwróć review z task:null.'});
    }
   }
   throw Error('NO_BROWSER_PLAN');
- }catch{console.error('BROWSER_PLAN_FAILED');return NextResponse.json({message:'Nie udało się przygotować kroku. Nie wykonano nowej akcji. Odczytaj stronę ponownie.'},{status:503});}
+ }catch(problem){console.error('BROWSER_PLAN_FAILED',problem instanceof Error&&/^[A-Z_]+$/.test(problem.message)?problem.message:'PROVIDER_OR_TRANSPORT');return NextResponse.json({message:'Nie udało się przygotować kroku. Nie wykonano nowej akcji. Odczytaj stronę ponownie.'},{status:503});}
 }
