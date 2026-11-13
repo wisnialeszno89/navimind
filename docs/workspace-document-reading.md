@@ -78,7 +78,7 @@ wartości na odczyt kontrolny ani na oczekiwany wynik testu. Zapis page_inventor
 zachowuje liczbę znalezionych pozycji w obu przebiegach dla każdej strony.
 Zgodne odczyty tego samego modelu mogą nadal popełnić ten sam błąd; to nie jest
 niezależne potwierdzenie prawdy. Cała oferta nadal wymaga sprawdzenia handlowca.
-Swobodne opisy wyposażenia nie są automatycznie porównywane słowo w słowo.
+Dodatkowe wymagania każdej pozycji są również porównywane jako zbiory tekstów. Ignorujemy kolejność, powtórzenia, wielkość liter i białe znaki. Inna treść (także parafraza) wymaga review; nie zakładamy równoważności technicznej. Audyt i odpowiedź zachowują oba opisy, bez automatycznego scalania. Zgodne pominięcie dodatku w obu odczytach nadal może pozostać niewykryte.
 
 Maksymalnie trzy strony / sześć żądań odczytu działa równocześnie. Występuje
 jedno żądanie orientacji oraz dwa żądania na każdą stronę, także stronę bez

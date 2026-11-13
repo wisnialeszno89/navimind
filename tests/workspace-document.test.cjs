@@ -146,6 +146,50 @@ test('blind comparisons flag swapped sizes and directions without changing value
  for(const field of ['width_mm','height_mm','opening'])assert.ok(merged.reading_audit.issues.some(i=>i.field===field));
 });
 
+test('equipment and transom differences cannot pass the source comparison',()=>{
+ const a=lib.documentReport({positions:[{...position(),requirements:['Elektrozaczep 12 V','Naświetle górne 300 mm']}],notes:[]},1);
+ const before=JSON.stringify(a);
+ for(const requirements of [[],['Elektrozaczep 24 V','Naświetle górne 300 mm'],['Elektrozaczep 12 V']]){
+  const b=lib.documentReport({positions:[{...position(),requirements}],notes:[]},1);
+  const result=pagesLib.mergePageReadings([{page:1,primary:a,independent:b}],1);
+  assert.equal(result.requires_clarification,true);
+  assert.equal(result.reading_audit.status,'review');
+  assert.ok(result.reading_audit.issues.some(i=>i.position_id==='3'&&i.field==='requirements'));
+  assert.deepEqual(result.positions[0].requirements,a.positions[0].requirements);
+  const reply=lib.documentReply(result);
+  assert.match(reply,/Wymagania — pierwszy odczyt/);assert.match(reply,/Wymagania — drugi odczyt/);
+ }
+ assert.equal(JSON.stringify(a),before);
+});
+
+test('the PDF route exposes equipment disagreements and never creates an executor task',async()=>{
+ answer={positions:[{...position(),requirements:['Elektrozaczep 12 V']}],notes:[]};
+ independentAnswer={positions:[{...position(),requirements:['Bez elektrozaczepu']}],notes:[]};
+ try{
+  const response=await route.POST(request({message:'Odczytaj PDF',history:[],pdf:await pdf()}));
+  const body=await response.json();
+  assert.equal(response.status,200);assert.equal(body.specification.reading_audit.status,'review');
+  assert.equal(body.specification.requires_clarification,true);assert.equal(body.specification.executed,false);
+  assert.match(body.reply,/Elektrozaczep 12 V/);assert.match(body.reply,/Bez elektrozaczepu/);
+  assert.equal('task' in body,false);
+ }finally{independentAnswer=null;}
+});
+
+test('equipment comparison ignores only order, duplicates, case and whitespace',()=>{
+ const a=lib.documentReport({positions:[{...position(),requirements:['Elektrozaczep 12 V','Naświetle górne 300 mm']}],notes:[]},1);
+ const b=lib.documentReport({positions:[{...position(),requirements:[' naświetle   GÓRNE 300 mm ','ELEKTROZACZEP 12 V','Elektrozaczep 12 V']}],notes:[]},1);
+ assert.deepEqual(pagesLib.comparePageReadings(a,b,1),[]);
+});
+
+test('equipment stays scoped to its own source position',()=>{
+ const positions=[{...position(),requirements:['Elektrozaczep 12 V']},{...position(),id:'4',requirements:[]}];
+ const a=lib.documentReport({positions,notes:[]},1);
+ const b=lib.documentReport({positions:positions.map((p,i)=>({...p,requirements:positions[1-i].requirements})),notes:[]},1);
+ const result=pagesLib.mergePageReadings([{page:1,primary:a,independent:b}],1);
+ assert.deepEqual(result.reading_audit.issues.filter(i=>i.field==='requirements').map(i=>i.position_id),['3','4']);
+ assert.deepEqual(result.positions.map(p=>p.requirements),[['Elektrozaczep 12 V'],[]]);
+});
+
 test('each page is required and evidence cannot point to a different page',()=>{
  assert.throws(()=>pagesLib.pageReading({page_status:'products',positions:[position()],notes:[]},2,2),/INVALID_EVIDENCE_PAGE/);
  assert.throws(()=>pagesLib.mergePageReadings([],1),/PDF_RENDER_PAGE_MISMATCH/);
