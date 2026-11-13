@@ -24,9 +24,10 @@ export async function POST(req:Request){
    const content=response.choices[0]?.message.content||'';
    try{return NextResponse.json(browserDecision(JSON.parse(content),snapshot,urls,steps));}catch(problem){
     const code=problem instanceof Error&&/^[A-Z_]+$/.test(problem.message)?problem.message:'INVALID_JSON';
-    console.warn('BROWSER_PLAN_REPAIR',code);
+    let shape;try{const v=JSON.parse(content);shape={root:Array.isArray(v)?'array':typeof v,decision:['act','done','clarify','review'].includes(v?.decision)?v.decision:'other',task:v?.task===null?'null':Array.isArray(v?.task)?'array':typeof v?.task};}catch{shape={root:'invalid_json'};}
+    console.warn('BROWSER_PLAN_REPAIR',code,JSON.stringify(shape));
     if(attempt===1)throw Error('INVALID_PLAN');
-    conversation.push({role:'assistant',content},{role:'system',content:'Propozycja nie spełnia formatu albo odwołuje się do nieistniejącego elementu/opcji. Powód walidacji: '+code+'. Niczego nie wykonano. browser_fill wymaga text jako string, browser_select value jako string. Każdy ref musi pochodzić z aktualnego controls; nie używaj nazwy ani id DOM zamiast ref. Popraw jeden krok na podstawie aktualnego controls albo zwróć review z task:null.'});
+    conversation.push({role:'assistant',content},{role:'system',content:'Propozycja nie spełnia formatu albo odwołuje się do nieistniejącego elementu/opcji. Powód walidacji: '+code+'. Struktura otrzymanej odpowiedzi: '+JSON.stringify(shape)+'. Dla decision act task MUSI być obiektem narzędzia, np. {kind:browser_fill,ref:aktualny_ref,text:tekst_jako_string}; nie null/string/tablica. Dla done/clarify/review task musi być null. Niczego nie wykonano. browser_fill wymaga text jako string, browser_select value jako string. Każdy ref musi pochodzić z aktualnego controls; nie używaj nazwy ani id DOM zamiast ref. Popraw jeden krok na podstawie aktualnego controls albo zwróć review z task:null.'});
    }
   }
   throw Error('NO_BROWSER_PLAN');
