@@ -1,6 +1,6 @@
 # Shared browser regression pack
 
-The same `contracts/browser-regression-v1.json` is mirrored in NaviMind and wh-ai-parser. Both runners print its SHA-256. Compare the digests before treating their results as coverage of the same revision. Changes must update both copies.
+The same `contracts/browser-regression-v1.json` is mirrored in NaviMind and wh-ai-parser. Both runners print its SHA-256. Compare the digests before treating their results as coverage of the same revision. Changes must update both copies. NaviMind CI also verifies the bytes against the immutable Windows executor commit pinned in `contracts/browser-regression-executor.json`; a local-only fixture edit fails CI.
 
 Nine phases cover a four-command correction chain, a German command with centimetres and exact Top Trans S.A. selection, changing only the customer, ambiguous Top search, a missing height, and an unavailable green colour. Correction phases explicitly list writable fields. Rewriting a preserved field is rejected by the model evaluation even if its final value is unchanged. Missing inputs must produce an appropriate question; unavailable options must not be substituted.
 
