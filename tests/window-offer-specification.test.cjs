@@ -48,10 +48,21 @@ test('the text route exports the actual source and uses no history or executor',
   assert.equal(response.status,200);assert.deepEqual(body.offerSpecification,example);assert.equal('task' in body,false);assert.equal(body.agentConnected,false);assert.equal(inputs.length,2);
   for(const input of inputs){assert.equal(input.messages.length,2);assert.equal(input.messages[1].content,source);assert.ok(!JSON.stringify(input).includes('OLD_DOOR'));}
   independent={positions:[{...raw().positions[0],quantity:3}],notes:[]};
-  const checked=await (await route.POST(request({message:source,history:[]}))).json();assert.equal(checked.offerSpecification.requires_clarification,true);assert.equal(checked.offerSpecification.positions[0].quantity,2);
+  const checked=await (await route.POST(request({message:source,history:[]}))).json();assert.equal(checked.offerSpecification.requires_clarification,true);assert.equal(checked.offerSpecification.positions[0].quantity,2);assert.match(checked.reply,/Do wyjaśnienia — pozycja 1, ilość/);assert.match(checked.reply,/2 \/ 3/);
  }finally{independent=null;if(previous.mode===undefined)delete process.env.NAVIMIND_WORKSPACE_MODE;else process.env.NAVIMIND_WORKSPACE_MODE=previous.mode;if(previous.key===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous.key;}
 });
 test('disabled and invalid requests cannot invoke the model',async()=>{
  const before=inputs.length,mode=process.env.NAVIMIND_WORKSPACE_MODE;delete process.env.NAVIMIND_WORKSPACE_MODE;
  try{assert.equal((await route.POST(request({message:source}))).status,403);process.env.NAVIMIND_WORKSPACE_MODE='private';assert.equal((await route.POST(request({message:'x'.repeat(8001)}))).status,400);assert.equal((await route.POST(request({message:source,image:'data'}))).status,400);assert.equal(inputs.length,before);}finally{if(mode===undefined)delete process.env.NAVIMIND_WORKSPACE_MODE;else process.env.NAVIMIND_WORKSPACE_MODE=mode;}
+});
+
+test('text enquiry explains scoped equipment disagreements in the visible reply',()=>{
+ const a=lib.documentReport({positions:[{...raw().positions[0],requirements:['Elektrozaczep 12 V']}],notes:[]},1);
+ const b=lib.documentReport({positions:[{...raw().positions[0],requirements:['Bez elektrozaczepu']}],notes:[]},1);
+ const report=pages.mergePageReadings([{page:1,primary:a,independent:b}],1);
+ const spec=common.toOfferSpecification(report,example.source),before=JSON.stringify(spec),reply=enquiry.enquiryReply(spec);
+ assert.match(reply,/Do wyjaśnienia — pozycja 1, wyposażenie/);
+ assert.match(reply,/pierwszy odczyt: Elektrozaczep 12 V/);
+ assert.match(reply,/drugi odczyt: Bez elektrozaczepu/);
+ assert.equal(JSON.stringify(spec),before);
 });
