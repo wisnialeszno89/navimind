@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/prepare-pdf-runtime.mjs && next dev",
-    "build": "node scripts/prepare-pdf-runtime.mjs && node scripts/check-browser-eval-names.cjs && next build && node scripts/check-pdf-package.cjs && node scripts/check-pdf-model.cjs && node scripts/check-browser-model.cjs && node scripts/check-browser-conversation.cjs",
+    "build": "node scripts/prepare-pdf-runtime.mjs && node scripts/check-browser-eval-names.cjs && next build && node scripts/check-pdf-package.cjs && node scripts/check-pdf-model.cjs && node scripts/check-browser-model.cjs && node scripts/check-browser-conversation.cjs && node scripts/check-enquiry-model.cjs",
     "start": "next start",
     "test:agent-bridge": "node --test tests/agent-task-route.test.cjs",
     "test:workspace": "node --test tests/workspace-routes.test.cjs"
@@ -17,6 +17,7 @@
     "@vercel/analytics": "^1.6.1",
     "@vercel/blob": "^2.0.1",
     "@vercel/kv": "^3.0.0",
+    "ajv": "8.17.1",
     "groq-sdk": "0.7.0",
     "lucide-react": "^0.561.0",
     "next": "14.2.5",

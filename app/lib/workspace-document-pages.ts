@@ -1,7 +1,7 @@
 import {documentReport} from './workspace-document';
 type Position=ReturnType<typeof documentReport>['positions'][number]&{source_id?:string;source_page?:number};
 type Report=Omit<ReturnType<typeof documentReport>,'positions'>&{positions:Position[];page_status?:'products'|'non_product'|'unreadable'};
-type Issue={position_id:string|null;page:number;field:string;reason:string};
+type Issue={position_id:string|null;page:number;field:string;reason:string;primary_requirements?:string[];independent_requirements?:string[]};
 export function pageReading(value:unknown,pages:number,page:number){
  const v=value as Record<string,unknown>;
  if(!v||!['products','non_product','unreadable'].includes(String(v.page_status))||Object.keys(v).sort().join()!=='notes,page_status,positions')throw Error('INVALID_DOCUMENT_FIELDS');
@@ -18,6 +18,11 @@ function normalized(value:unknown){
  const s=value.trim().toLowerCase().replace(/\s+/g,' ');
  return ({white:'biały',weiss:'biały','weiß':'biały',bialy:'biały',anthrazit:'antracyt',anthracite:'antracyt'} as Record<string,string>)[s]||s;
 }
+// These are free-text source requirements, not catalog identifiers. Only
+// typography and ordering may be ignored; semantic equivalence needs review.
+function requirementSet(values:string[]){
+ return [...new Set(values.map(value=>value.trim().toLowerCase().replace(/\s+/g,' ')))].sort();
+}
 export function comparePageReadings(primary:Report,independent:Report,page:number):Issue[]{
  const issues:Issue[]=[];
  if(primary.page_status!==independent.page_status)issues.push({position_id:null,page,field:'page_status',reason:'Odczyty inaczej sklasyfikowały stronę: pozycje, brak produktów lub nieczytelność.'});
@@ -27,6 +32,7 @@ export function comparePageReadings(primary:Report,independent:Report,page:numbe
   const other=b.get(id);
   if(!other){issues.push({position_id:id,page,field:'id',reason:'Drugi odczyt nie potwierdził tej pozycji na stronie.'});continue;}
   for(const field of comparable)if(normalized(p[field])!==normalized(other[field]))issues.push({position_id:id,page,field,reason:`Rozbieżne niezależne odczyty pola ${field}: ${p[field]??'brak danych'} / ${other[field]??'brak danych'}. Sprawdź rysunek i opis.`});
+  if(JSON.stringify(requirementSet(p.requirements))!==JSON.stringify(requirementSet(other.requirements)))issues.push({position_id:id,page,field:'requirements',reason:'Odczyty różnią się wyposażeniem lub dodatkowymi wymaganiami tej pozycji (np. elektrozaczep, naświetle, kierunek otwierania). Porównaj oba opisy ze źródłem; różnica sformułowania też wymaga sprawdzenia. Nie przeniesiono ani nie scalono wyposażenia.',primary_requirements:[...p.requirements],independent_requirements:[...other.requirements]});
   for(const ambiguity of other.ambiguities)if(!p.ambiguities.includes(ambiguity))issues.push({position_id:id,page,field:'source',reason:'Drugi odczyt: '+ambiguity});
  }
  for(const id of b.keys())if(!a.has(id))issues.push({position_id:null,page,field:'positions',reason:`Drugi odczyt wskazał dodatkową pozycję ${id}, pominiętą w pierwszym. Nie wolno uznać szkicu za kompletny.`});
