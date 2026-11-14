@@ -34,5 +34,9 @@ export async function POST(req:Request){
    const reply=!reason||/^[A-Z_]+$/.test(reason)?'Nie potwierdzono zgodności poprawki ze specyfikacją. Podaj numer pozycji, pole i wartość z jednostką.':reason;
    return NextResponse.json({intent:'clarify',reply,pending:{request:instruction,question:reply}},{headers});
   }
- }catch{console.error('OFFER_TURN_FAILED');return NextResponse.json({message:'Nie potwierdzono poprawki. Zachowano dotychczasową specyfikację i oczekujące pytanie.'},{status:503,headers});}
+ }catch(problem){
+  const error=problem as {name?:unknown;status?:unknown;code?:unknown;param?:unknown;message?:unknown};
+  const safe=(value:unknown)=>typeof value==='string'&&/^[a-zA-Z0-9_.-]{1,100}$/.test(value)?value:undefined;
+  console.error('OFFER_TURN_FAILED',{name:safe(error?.name),status:typeof error?.status==='number'?error.status:undefined,code:safe(error?.code),param:safe(error?.param),internal:typeof error?.message==='string'&&/^[A-Z_]+$/.test(error.message)?error.message:undefined,schema:error?.code==='invalid_json_schema'&&typeof error.message==='string'?error.message.slice(0,800):undefined});
+  return NextResponse.json({message:'Nie potwierdzono poprawki. Zachowano dotychczasową specyfikację i oczekujące pytanie.'},{status:503,headers});}
 }
