@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: wisnialeszno89/wh-ai-parser
-          ref: 529fc06bb2e640358157fe8afca5b4da63c9cd5c
+          ref: a7b913bcaed8dc2ab9bdf6ba365c6aeac4514154
           path: .executor-contract
 
       - name: Setup Python for shared offer boundary

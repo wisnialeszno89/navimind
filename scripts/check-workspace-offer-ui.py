@@ -40,12 +40,17 @@ with tempfile.TemporaryFile(mode='w+') as log:
    assert not page.get_by_label('Odczytaj zapytanie okienne PL/DE').is_checked()
    corrected=json.loads(json.dumps(spec));corrected['positions'][0]['width_mm']=1300
    corrected['positions'][0]['field_status']['width_mm']='corrected'
-   corrected['corrections']=[{'position_id':'1','source_id':'1','field':'width_mm','before':1230,'value':1300,'quote':'Zmień szerokość na 1300 mm.'}]
+   corrected['corrections']=[{'position_id':'1','source_id':'1','field':'width_mm','before':1230,'value':1300,'quote':'Pozycja 1: szerokość 1300 mm, ilość 4 szt., na zewnątrz antracyt, otwieranie DKL.'}]
+   corrected['schema_version']='window-offer/2'
+   for field,value in [('quantity',4),('color_outside','antracyt'),('opening','DKL')]:
+    before=corrected['positions'][0][field];corrected['positions'][0][field]=value
+    corrected['positions'][0]['field_status'][field]='corrected'
+    corrected['corrections'].append({'position_id':'1','source_id':'1','field':field,'before':before,'value':value,'quote':'Pozycja 1: szerokość 1300 mm, ilość 4 szt., na zewnątrz antracyt, otwieranie DKL.'})
    pending={'request':'Ustaw wysokość.','question':'Jaka ma być wysokość w mm?'}
    turns=[]
    def offer(route):
     body=route.request.post_data_json;turns.append(body)
-    if body['message']=='Zmień szerokość na 1300 mm.':
+    if body['message']=='Pozycja 1: szerokość 1300 mm, ilość 4 szt., na zewnątrz antracyt, otwieranie DKL.':
      assert body['specification']==spec and body['pending'] is None
      route.fulfill(json={'intent':'correct','reply':'Szerokość 1230 → 1300 mm.','offerSpecification':corrected,'pending':None})
     elif body['message']=='Ustaw wysokość.':
@@ -65,7 +70,7 @@ with tempfile.TemporaryFile(mode='w+') as log:
     page.get_by_label('Rozmowa i poprawki specyfikacji',exact=True).fill(text)
     with page.expect_response('**/api/workspace/offer-turn'):
      page.get_by_role('button',name='Wyślij do agenta ofertowego',exact=True).click()
-   send_offer('Zmień szerokość na 1300 mm.')
+   send_offer('Pozycja 1: szerokość 1300 mm, ilość 4 szt., na zewnątrz antracyt, otwieranie DKL.')
    page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(1).wait_for()
    with page.expect_download() as download:
     page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(1).click()
@@ -104,7 +109,7 @@ with tempfile.TemporaryFile(mode='w+') as log:
    assert json.loads(pathlib.Path(download.value.path()).read_text())==spec
    assert errors==[], errors
    browser.close()
-  print('WORKSPACE_UI=verified CHROMIUM=actual API_RESPONSES=fixtures TEXT_DOWNLOAD=True PDF_DOWNLOAD=True ORIGINAL_RESULT_PRESERVED=True CORRECTION_SESSION=True PENDING_DISCUSSION=True FAILED_EDIT_PRESERVED=True VERSION_SWITCH=True')
+  print('WORKSPACE_UI=verified CHROMIUM=actual API_RESPONSES=fixtures TEXT_DOWNLOAD=True PDF_DOWNLOAD=True ORIGINAL_RESULT_PRESERVED=True CORRECTION_SESSION=True PENDING_DISCUSSION=True FAILED_EDIT_PRESERVED=True VERSION_SWITCH=True V2_COMMERCIAL=True')
  finally:
   server.terminate()
   try:server.wait(timeout=10)

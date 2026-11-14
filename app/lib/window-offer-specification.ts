@@ -1,22 +1,27 @@
 import Ajv from 'ajv/dist/2020';
 import schema from '../../contracts/window-offer-v1.schema.json';
+import schemaV2 from '../../contracts/window-offer-v2.schema.json';
 import type {documentReport} from './workspace-document';
 
 export const OFFER_FIELDS=['quantity','kind','width_mm','height_mm','transport_extension_mm','opening','color_inside','color_outside','glazing_panes','ug','profile_reference'] as const;
 type Field=typeof OFFER_FIELDS[number];
 type Reading=ReturnType<typeof documentReport>;
 type Issue={position_id:string|null;page:number|null;field:string;reason:string;primary_requirements?:string[];independent_requirements?:string[]};
-type Correction={position_id:string;source_id:string;field:'width_mm'|'height_mm'|'transport_extension_mm';before:number|null;value:number;quote:string};
+export type NumericOfferField='width_mm'|'height_mm'|'transport_extension_mm'|'quantity';
+export type TextOfferField='color_inside'|'color_outside'|'opening';
+type Correction={position_id:string;source_id:string;quote:string}&({field:NumericOfferField;before:number|null;value:number}|{field:TextOfferField;before:string|null;value:string});
 export type OfferSpecification={
- schema_version:'window-offer/1';source:{kind:'text'|'pdf';sha256:string;pages:number|null};
+ schema_version:'window-offer/1'|'window-offer/2';source:{kind:'text'|'pdf';sha256:string;pages:number|null};
  positions:(Omit<Reading['positions'][number],'evidence'>&{source_id:string;source_page:number|null;evidence:{page:number|null;description:string}[];field_status:Record<Field,'reported'|'missing'|'conflict'|'corrected'>})[];
  notes:string[];audit_issues:Issue[];corrections:Correction[];requires_clarification:boolean;sales_review_required:true;executed:false;
 };
 // Keep the schema byte-identical to wh-ai-parser/contracts; both runtimes
 // validate the exported payload, never infer readiness from a file extension.
 const validate=new Ajv({strict:true}).compile(schema);
+const validateV2=new Ajv({strict:true}).compile(schemaV2);
 export function offerSpecification(value:unknown):OfferSpecification {
- if(!validate(value))throw Error('INVALID_OFFER_SPECIFICATION');
+ const version=(value as {schema_version?:unknown}|null)?.schema_version;
+ if(!(version==='window-offer/1'?validate(value):version==='window-offer/2'?validateV2(value):false))throw Error('INVALID_OFFER_SPECIFICATION');
  const spec=value as OfferSpecification,ids=new Set(spec.positions.map(p=>p.id));
  if(ids.size!==spec.positions.length)throw Error('DUPLICATE_OFFER_POSITION');
  const pdf=spec.source.kind==='pdf',pages=spec.source.pages;

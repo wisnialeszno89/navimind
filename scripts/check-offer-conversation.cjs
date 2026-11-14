@@ -4,7 +4,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
  if(!process.env.VERCEL){console.log('OFFER_CONVERSATION=skipped_local');return;}
  if(!process.env.OPENAI_API_KEY)throw Error('OFFER_CONVERSATION_MISSING_CONFIGURATION');
  const model=process.env.NAVIMIND_BROWSER_MODEL||'gpt-5.4',hash=crypto.createHash('sha256').update(model);
- for(const f of ['app/api/workspace/offer-turn/route.ts','app/lib/offer-conversation.ts','app/lib/window-offer-specification.ts','app/lib/browser-model.ts','contracts/window-offer-v1.schema.json',__filename])hash.update(fs.readFileSync(f));
+ for(const f of ['app/api/workspace/offer-turn/route.ts','app/lib/offer-conversation.ts','app/lib/window-offer-specification.ts','app/lib/browser-model.ts','contracts/window-offer-v1.schema.json','contracts/window-offer-v2.schema.json','contracts/window-offer-v1.example.json',__filename])hash.update(fs.readFileSync(f));
  const cache=path.join('.next/cache/navimind-offer-conversation',hash.digest('hex')+'.json');
  let previous;try{previous=JSON.parse(fs.readFileSync(cache));}catch{}
  if(previous?.passed&&Date.now()-Date.parse(previous.checked_at)<86400000){console.log('OFFER_CONVERSATION=verified_cached');return;}
@@ -31,10 +31,21 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
  await step('short_answer_resumes','Pozycja 7','correct',()=>{assert.equal(row('7').height_mm,1000);assert.equal(row('9').height_mm,800);assert.equal(pending,null);});
  await step('transport_stays_separate','Pozycja 9: ustaw osobną listwę transportową 30 mm. Wysokość produktu zachowaj.','correct',()=>{assert.equal(row('9').transport_extension_mm,30);assert.equal(row('9').height_mm,800);});
  await step('all_positions_m','Wszystkim pozycjom ustaw wysokość 1,2 m.','correct',()=>assert.deepEqual(specification.positions.map(p=>p.height_mm),[1200,1200]));
- await step('unsupported_mixed_atomic','Pozycja 9: zmień szerokość na 1400 mm i kolor zewnętrzny na antracyt.','reply',(_,before)=>assert.deepEqual(specification,before));
+ await step('unsupported_mixed_atomic','Pozycja 9: zmień szerokość na 1400 mm i profil na Inny System.','reply',(_,before)=>assert.deepEqual(specification,before));
  await step('unitless_measure','Pozycja 9: ustaw szerokość na 1300.','clarify',()=>assert.equal(row('9').width_mm,1230));
  await step('cancel_pending','Anuluj tę poprawkę.','cancel',()=>assert.equal(pending,null));
  await step('unknown_position','Pozycja 99: szerokość 1100 mm.','clarify');
+ pending=null;
+ await step('quantity_set','Pozycja 9: ustaw ilość 4 szt.','correct',()=>{assert.equal(row('9').quantity,4);assert.equal(specification.schema_version,'window-offer/2');});
+ await step('quantity_relative_words','Pozycja 9: dodaj jeszcze dwie sztuki.','correct',()=>assert.equal(row('9').quantity,6));
+ await step('color_side_question','Pozycja 9: zmień kolor na antracyt.','clarify');
+ await step('color_discussion_preserves_question','Co oznacza kolor dwustronny? Na razie tylko wyjaśnij.','reply',(_,before,old)=>{assert.deepEqual(specification,before);assert.deepEqual(pending,old);});
+ await step('color_side_short_answer','Tylko na zewnątrz.','correct',()=>{assert.equal(row('9').color_outside,'antracyt');assert.equal(row('9').color_inside,'white');});
+ await step('both_sides_white','Pozycja 9: ustaw kolor biały obustronnie.','correct',()=>{assert.equal(row('9').color_outside,'biały');assert.equal(row('9').color_inside,'biały');});
+ await step('literal_ral_finish','Pozycja 9: na zewnątrz RAL 7016 mat.','correct',()=>{assert.equal(row('9').color_outside,'RAL 7016 mat');assert.equal(row('9').color_inside,'biały');});
+ specification.positions[1].kind='entrance_door';specification.positions[1].opening='DR';
+ await step('handedness_by_product','Wszystkim pozycjom ustaw otwieranie L.','correct',()=>{assert.equal(row('7').opening,'DKL');assert.equal(row('9').opening,'DL');});
+ await step('explicit_door_dkr','Pozycja 9: otwieranie DKR.','correct',()=>assert.equal(row('9').opening,'DKR'));
  if(specification.executed!==false||specification.sales_review_required!==true)throw Error('OFFER_EXECUTION_FLAGS_CHANGED');
  fs.mkdirSync(path.dirname(cache),{recursive:true});fs.writeFileSync(cache,JSON.stringify({passed:true,checked_at:new Date().toISOString(),model,cases:count}));
  console.log('OFFER_CONVERSATION=verified CASES='+count+' REAL_MODEL=True NO_DESKTOP_ACTIONS=True');

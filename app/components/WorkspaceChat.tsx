@@ -352,7 +352,7 @@ export default function WorkspaceChat() {
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
         {offerSession&&<div className="rounded border border-slate-500 p-3 text-sm">
           <label className="flex items-center gap-2"><input type="checkbox" checked={offerMode} disabled={sending||!!pendingJob} onChange={event=>{setOfferMode(event.target.checked);if(event.target.checked){setEnquiryMode(false);setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}}}/>Rozmowa o specyfikacji · {offerSession.specification.positions.length} pozycji</label>
-          {offerMode&&<p className="mt-2 text-slate-300">Możesz pytać i poprawiać szerokość, wysokość lub listwę transportową, np. „W drugiej pozycji zmień szerokość na 1230 mm”.</p>}
+          {offerMode&&<p className="mt-2 text-slate-300">Możesz pytać i poprawiać wymiary, ilość, kolory po stronach i otwieranie, np. „W drugiej pozycji zmień szerokość na 1230 mm”.</p>}
           {offerMode&&offerSession.pending&&<p className="mt-2 text-amber-200">Do doprecyzowania: {offerSession.pending.question}</p>}
         </div>}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enquiryMode} disabled={sending||!!pendingJob} onChange={event=>{setEnquiryMode(event.target.checked);if(event.target.checked){setOfferMode(false);setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}}}/>Odczytaj zapytanie okienne PL/DE</label>
