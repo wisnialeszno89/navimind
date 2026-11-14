@@ -69,3 +69,9 @@ test('disabled, invalid and invented execution specifications never invoke the m
  const old=process.env.NAVIMIND_WORKSPACE_MODE,before=inputs.length;delete process.env.NAVIMIND_WORKSPACE_MODE;
  try{assert.equal((await route.POST(req({message:'x'}))).status,403);process.env.NAVIMIND_WORKSPACE_MODE='private';const s=spec();s.executed=true;assert.equal((await route.POST(req({message:'x',specification:s}))).status,400);assert.equal(inputs.length,before);}finally{if(old===undefined)delete process.env.NAVIMIND_WORKSPACE_MODE;else process.env.NAVIMIND_WORKSPACE_MODE=old;}
 });
+
+test('an empty unused model reply cannot reject an otherwise valid correction',()=>{
+ const s=spec(),q='Pozycja 9: szerokość 1230 mm.',decision=lib.offerDecision({intent:'correct',reply:'',changes:[change(q)]});
+ assert.equal(lib.correctOffer(s,decision,decision,q).specification.positions[1].width_mm,1230);
+ assert.throws(()=>lib.offerDecision({intent:'reply',reply:'',changes:[]}),/INVALID/);
+});

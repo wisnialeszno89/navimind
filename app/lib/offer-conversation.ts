@@ -15,8 +15,8 @@ export function offerPending(value:unknown):OfferPending|null {
 }
 export function offerDecision(value:unknown):Decision {
  const v=value as Decision;
- if(!v||Object.keys(v).sort().join()!=='changes,intent,reply'||!['correct','reply','clarify','cancel'].includes(v.intent)||typeof v.reply!=='string'||!v.reply.trim()||v.reply.length>2000||!Array.isArray(v.changes)||v.changes.length>20)throw Error('INVALID_OFFER_DECISION');
- if((v.intent==='correct')!==(v.changes.length>0))throw Error('INVALID_OFFER_DECISION');
+ if(!v||Object.keys(v).sort().join()!=='changes,intent,reply'||!['correct','reply','clarify','cancel'].includes(v.intent)||typeof v.reply!=='string'||v.intent!=='correct'&&!v.reply.trim()||v.reply.length>2000||!Array.isArray(v.changes)||v.changes.length>20)throw Error('INVALID_OFFER_DECISION');
+ if((v.intent==='correct')!==(v.changes.length>0))throw Error('INCONSISTENT_OFFER_INTENT');
  for(const c of v.changes){
   if(!c||Object.keys(c).sort().join()!=='field,operation,quote,selector,target,value'||!['id','ordinal','all','only'].includes(c.selector)||typeof c.target!=='string'||c.target.length>50||!fields.includes(c.field)||!['set','add','subtract'].includes(c.operation)||!Number.isInteger(c.value)||c.value<1||c.value>100000||typeof c.quote!=='string'||!c.quote.trim()||c.quote.length>500)throw Error('INVALID_OFFER_CHANGE');
  }
