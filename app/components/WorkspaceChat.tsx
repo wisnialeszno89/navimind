@@ -12,6 +12,7 @@ import { cleanPairingCode, localRequest, pairingCode } from "@/lib/desktop-conne
 import {runBrowserConversation} from '@/lib/browser-runner';
 import {invalidateBrowserEvidence,type BrowserSession} from '@/lib/browser-session';
 import type {OfferSpecification} from '@/lib/window-offer-specification';
+import type {OfferSession} from '@/lib/offer-conversation';
 
 type Message = { role: "user" | "assistant"; content: string; image?: string; documentName?:string; offerSpecification?:OfferSpecification };
 function downloadSpecification(spec:OfferSpecification){
@@ -52,6 +53,11 @@ export default function WorkspaceChat() {
   const [imageName, setImageName] = useState("");
   const [pdf, setPDF] = useState<{data:string;name:string}|null>(null);
   const [enquiryMode,setEnquiryMode]=useState(false);
+  const [offerMode,setOfferMode]=useState(false);
+  const [offerSession,setOfferSession]=useState<OfferSession|null>(null);
+  function useOffer(specification:OfferSpecification){
+    setOfferSession({specification,pending:null});setOfferMode(true);setEnquiryMode(false);setDesktopMode(false);setBrowserMode(false);setNativeMode(false);
+  }
   const [imageBusy, setImageBusy] = useState(false);
   const imageGeneration = useRef(0);
   const [pairing, setPairing] = useState(false);
@@ -91,6 +97,7 @@ export default function WorkspaceChat() {
       setAgent(status);
       setConnected(true);
       setDesktopMode(true);
+      setOfferMode(false);
       setEnquiryMode(false);
       setCode("");
       setShowPairingCode(false);
@@ -188,11 +195,19 @@ export default function WorkspaceChat() {
         const result=await response.json();
         if(!response.ok)throw Error(result.message||"Nie udało się odczytać PDF.");
         setMessages(previous=>[...previous,{role:"assistant",content:result.reply,offerSpecification:result.offerSpecification}]);
+        if(result.offerSpecification)useOffer(result.offerSpecification);
       } else if(enquiryMode&&!attachedImage){
         setBrowserProgress('Odczytuję pełne zapytanie i porównuję dwa niezależne odczyty…');
         const response=await fetch('/api/workspace/enquiry-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:content,history:[]})});
         const result=await response.json();if(!response.ok)throw Error(result.message||'Nie udało się odczytać zapytania.');
         setMessages(previous=>[...previous,{role:'assistant',content:result.reply,offerSpecification:result.offerSpecification}]);
+        if(result.offerSpecification)useOffer(result.offerSpecification);
+      } else if(offerMode&&offerSession&&!attachedImage){
+        setBrowserProgress('Rozpatruję wiadomość i sprawdzam zakres poprawki…');
+        const response=await fetch('/api/workspace/offer-turn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:content,history,specification:offerSession.specification,pending:offerSession.pending})});
+        const result=await response.json();if(!response.ok)throw Error(result.message||'Nie udało się rozpatrzyć poprawki.');
+        setOfferSession({specification:result.offerSpecification??offerSession.specification,pending:result.pending});
+        setMessages(previous=>[...previous,{role:'assistant',content:result.reply,...(result.offerSpecification?{offerSpecification:result.offerSpecification}:{})}]);
       } else if(nativeMode&&!attachedImage){
         if(!connected||!tokenRef.current)throw Error("Najpierw połącz komputer.");
         const outcome=await runNativeCommand(tokenRef.current,content,history,{progress:setBrowserProgress,stopped:()=>stopBrowser.current,pending:(id)=>{setPendingJob(id);executionStarted=!!id;},executed:()=>{browserActions++;}});
@@ -288,11 +303,11 @@ export default function WorkspaceChat() {
           <button type="button" disabled={sending || connecting || !!pendingJob} onClick={() => connected ? disconnect() : setPairing(value => !value)} className="rounded border border-slate-500 px-3 py-1 disabled:opacity-50">
             {connected ? "Rozłącz" : "Połącz komputer"}
           </button>
-          {connected && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={desktopMode} disabled={sending || !!pendingJob} onChange={event => {setDesktopMode(event.target.checked);if(event.target.checked){setEnquiryMode(false);setBrowserMode(false);setNativeMode(false);}}} />Praca na komputerze</label>}
+          {connected && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={desktopMode} disabled={sending || !!pendingJob} onChange={event => {setDesktopMode(event.target.checked);if(event.target.checked){setOfferMode(false);setEnquiryMode(false);setBrowserMode(false);setNativeMode(false);}}} />Praca na komputerze</label>}
         </div>
-        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={browserMode} disabled={sending || !!pendingJob || !agent?.browser?.available} onChange={event=>{setBrowserMode(event.target.checked);if(event.target.checked){setEnquiryMode(false);setDesktopMode(false);setNativeMode(false);}}} />Przeglądarka · Chromium NaviMind</label>}
+        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={browserMode} disabled={sending || !!pendingJob || !agent?.browser?.available} onChange={event=>{setBrowserMode(event.target.checked);if(event.target.checked){setOfferMode(false);setEnquiryMode(false);setDesktopMode(false);setNativeMode(false);}}} />Przeglądarka · Chromium NaviMind</label>}
         {connected && !agent?.browser?.available && <p className="mt-2 text-xs text-amber-200">Obsługa stron wymaga aktualnego wykonawcy uruchomionego z --browser.</p>}
-        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={nativeMode} disabled={sending||!!pendingJob||!agent?.native?.available} onChange={event=>{setNativeMode(event.target.checked);if(event.target.checked){setEnquiryMode(false);setDesktopMode(false);setBrowserMode(false);}}}/>Aplikacja · Paint sterowany obrazem</label>}
+        {connected && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={nativeMode} disabled={sending||!!pendingJob||!agent?.native?.available} onChange={event=>{setNativeMode(event.target.checked);if(event.target.checked){setOfferMode(false);setEnquiryMode(false);setDesktopMode(false);setBrowserMode(false);}}}/>Aplikacja · Paint sterowany obrazem</label>}
         {nativeMode && <p className="mt-2 text-sm text-amber-100">Polecenie przełączy fokus na nowe okno Painta sesji. Zrzuty tego okna będą przesyłane do modelu po każdym kroku. Agent może klikać, przeciągać i wpisywać tekst. Zatrzymaj zadanie, aby przejąć sterowanie. Zapis potwierdza wykonawca; wygląd rysunku sprawdzamy wizualnie.</p>}
         {browserMode && browserGoal && <div className="mt-3 rounded border border-slate-500 p-3 text-sm">
           <p className="font-semibold">{browserGoal.status==='awaiting'?'Czekam na brakującą informację':browserGoal.status==='completed'?'Ostatnie zadanie — możesz je poprawić':browserGoal.status==='paused'?'Zadanie zachowane — możesz je wznowić':'Pracuję nad zadaniem'}</p>
@@ -325,7 +340,7 @@ export default function WorkspaceChat() {
             {message.documentName && <p className="mb-3 text-sm">Dokument PDF: {message.documentName}</p>}
             {message.image && <img src={message.image} alt="Zrzut dołączony do tej wiadomości" className="mb-3 max-h-80 max-w-full rounded border border-slate-500 object-contain" />}
             <div className="space-y-2 overflow-x-auto break-words"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
-            {message.offerSpecification&&<button type="button" onClick={()=>downloadSpecification(message.offerSpecification!)} className="mt-3 rounded border border-slate-400 px-3 py-2 text-sm">Pobierz specyfikację pozycji</button>}
+            {message.offerSpecification&&<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>downloadSpecification(message.offerSpecification!)} className="rounded border border-slate-400 px-3 py-2 text-sm">Pobierz specyfikację pozycji</button><button type="button" disabled={sending||!!pendingJob} onClick={()=>useOffer(message.offerSpecification!)} className="rounded border border-slate-400 px-3 py-2 text-sm disabled:opacity-50">Pracuj nad tą wersją</button></div>}
           </article>
         ))}
         {sending && <p role="status">{browserProgress || "NaviMind analizuje zadanie i przygotowuje wynik…"}</p>}
@@ -335,9 +350,14 @@ export default function WorkspaceChat() {
       </section>
       <form onSubmit={send} className="sticky bottom-0 space-y-3 border-t border-slate-700 bg-slate-950 py-4">
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enquiryMode} disabled={sending||!!pendingJob} onChange={event=>{setEnquiryMode(event.target.checked);if(event.target.checked){setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}}}/>Odczytaj zapytanie okienne PL/DE</label>
+        {offerSession&&<div className="rounded border border-slate-500 p-3 text-sm">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={offerMode} disabled={sending||!!pendingJob} onChange={event=>{setOfferMode(event.target.checked);if(event.target.checked){setEnquiryMode(false);setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}}}/>Rozmowa o specyfikacji · {offerSession.specification.positions.length} pozycji</label>
+          {offerMode&&<p className="mt-2 text-slate-300">Możesz pytać i poprawiać szerokość, wysokość lub listwę transportową, np. „W drugiej pozycji zmień szerokość na 1230 mm”.</p>}
+          {offerMode&&offerSession.pending&&<p className="mt-2 text-amber-200">Do doprecyzowania: {offerSession.pending.question}</p>}
+        </div>}
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enquiryMode} disabled={sending||!!pendingJob} onChange={event=>{setEnquiryMode(event.target.checked);if(event.target.checked){setOfferMode(false);setDesktopMode(false);setBrowserMode(false);setNativeMode(false);}}}/>Odczytaj zapytanie okienne PL/DE</label>
         {enquiryMode&&!pdf&&!image&&<p className="text-xs text-amber-200">Wklej pełne aktualne zapytanie. Powstanie specyfikacja i lista niejasności; historia rozmowy nie jest źródłem danych. Ten tryb nie steruje komputerem.</p>}
-        <label htmlFor="workspace-command" className="block text-sm">{pdf ? "Wskazówki do odczytu PDF" : image ? "Pytanie do zrzutu ekranu" : nativeMode ? "Polecenie dla okna aplikacji" : browserMode ? "Rozmowa i zadania w przeglądarce" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
+        <label htmlFor="workspace-command" className="block text-sm">{pdf ? "Wskazówki do odczytu PDF" : image ? "Pytanie do zrzutu ekranu" : offerMode ? "Rozmowa i poprawki specyfikacji" : nativeMode ? "Polecenie dla okna aplikacji" : browserMode ? "Rozmowa i zadania w przeglądarce" : desktopMode ? "Polecenie do wykonania na komputerze" : "Wiadomość"}</label>
         <textarea id="workspace-command" ref={inputRef} value={text} rows={3} maxLength={8000}
           disabled={sending || !!pendingJob} onChange={event => setText(event.target.value)}
           onPaste={event => { const file = Array.from(event.clipboardData.files).find(file => file.type.startsWith("image/")); if (file) { event.preventDefault(); void attachImage(file); } }}
@@ -375,7 +395,7 @@ export default function WorkspaceChat() {
         </div>
         <div className="flex items-start justify-between gap-3">
           <MicrophoneButton disabled={sending || !!pendingJob} onResult={transcript => setText(previous => [previous.trim(), transcript].filter(Boolean).join(" "))} />
-          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image && !pdf)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{pdf ? "Odczytaj PDF" : image ? "Wyślij zrzut" : enquiryMode ? 'Odczytaj zapytanie' : nativeMode ? "Wykonaj w aplikacji" : browserMode ? "Wyślij do agenta" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
+          <button type="submit" disabled={sending || !!pendingJob || imageBusy || (!text.trim() && !image && !pdf)} className="rounded-lg bg-blue-600 px-5 py-2 disabled:opacity-50">{pdf ? "Odczytaj PDF" : image ? "Wyślij zrzut" : enquiryMode ? 'Odczytaj zapytanie' : offerMode ? 'Wyślij do agenta ofertowego' : nativeMode ? "Wykonaj w aplikacji" : browserMode ? "Wyślij do agenta" : desktopMode ? "Wykonaj" : "Wyślij"}</button>
         </div>
         <p className="text-xs text-slate-400">Historia, zrzuty i parowanie działają w bieżącej karcie. Po odświeżeniu połącz komputer ponownie. Nagranie wysyłane jest do rozpoznania mowy po zatrzymaniu.</p>
       </form>

@@ -1,7 +1,7 @@
 // Catch script typos before a build spends API calls on real-model evaluations.
 const ts=require('typescript'),path=require('node:path');
 const files=process.argv.slice(2);
-const roots=(files.length?files:['scripts/check-browser-model.cjs','scripts/check-browser-conversation.cjs','scripts/browser-eval-environment.cjs','scripts/check-enquiry-model.cjs','scripts/check-offer-executor-boundary.cjs']).map(f=>path.resolve(f));
+const roots=(files.length?files:['scripts/check-browser-model.cjs','scripts/check-browser-conversation.cjs','scripts/browser-eval-environment.cjs','scripts/check-enquiry-model.cjs','scripts/check-offer-executor-boundary.cjs','scripts/check-offer-conversation.cjs']).map(f=>path.resolve(f));
 const included=new Set(roots);
 const program=ts.createProgram(roots,{allowJs:true,checkJs:true,noEmit:true,skipLibCheck:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS});
 const errors=ts.getPreEmitDiagnostics(program).filter(d=>d.file&&included.has(path.resolve(d.file.fileName))&&(d.code<2000||[2304,2552].includes(d.code)));
