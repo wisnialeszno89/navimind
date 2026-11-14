@@ -141,3 +141,24 @@ test('a genuinely missing dimension remains one concrete question after the boun
  replies=[{decision:'clarify',reply:'Jaka wysokość?',task:null},{decision:'clarify',reply:'Podaj wysokość w mm.',task:null}];
  const before=calls,result=await route.POST(request());const plan=await result.json();assert.equal(calls,before+2);assert.equal(plan.decision,'clarify');assert.equal(plan.task,null);assert.match(plan.reply,/wysokość/);
 });
+
+test('explicit current dimensions must be converted before filling a unique millimetre field',()=>{
+ const plan=text=>({decision:'act',reply:'Wpisuję wymiar.',task:{kind:'browser_fill',ref:control.ref,text}});
+ assert.throws(()=>lib.browserDecision(plan('120'),snapshot,[],[],'Breite 120 cm.'),/REQUESTED_DIMENSION_MM_MISMATCH/);
+ assert.equal(lib.browserDecision(plan('1200'),snapshot,[],[],'Breite 120 cm.').task.text,'1200');
+ assert.equal(lib.browserDecision(plan('1230'),snapshot,[],[],'Szerokość na 1,23 m.').task.text,'1230');
+ const height={...snapshot,controls:[{...control,name:'Wysokość [mm]'}]};
+ assert.throws(()=>lib.browserDecision(plan('90'),height,[],[],'Höhe 90 cm.'),/REQUESTED_DIMENSION_MM_MISMATCH/);
+ assert.equal(lib.browserDecision(plan('900'),height,[],[],'Höhe 90 cm.').task.text,'900');
+});
+test('dimension binding does not reinterpret increments or carry old goals over manual edits',()=>{
+ const plan={decision:'act',reply:'Wpisuję wymiar.',task:{kind:'browser_fill',ref:control.ref,text:'1277'}};
+ assert.equal(lib.browserDecision(plan,snapshot,[],[],'Szerokość 1100 mm. Zachowaj ręcznie zmienioną szerokość.',['Szerokość 1100 mm.','Zachowaj ręcznie zmienioną szerokość.']).task.text,'1277');
+ assert.equal(lib.browserDecision(plan,snapshot,[],[],'Zwiększ szerokość o 20 mm.').task.text,'1277');
+});
+test('a model unit conversion error is repaired before any desktop action',async()=>{
+ process.env.NAVIMIND_WORKSPACE_MODE='private';process.env.OPENAI_API_KEY='synthetic-unit-test-key';
+ replies=[{decision:'act',reply:'Wpisuję.',task:{kind:'browser_fill',ref:control.ref,text:'120'}},{decision:'act',reply:'Wpisuję 1200 mm.',task:{kind:'browser_fill',ref:control.ref,text:'1200'}}];
+ const before=calls,response=await route.POST(request({message:'Breite 120 cm.',history:[],snapshot,steps:[]})),body=await response.json();
+ assert.equal(response.status,200);assert.equal(body.task.text,'1200');assert.equal(calls,before+2);assert.match(lastInput.messages.at(-1).content,/REQUESTED_DIMENSION_MM_MISMATCH/);
+});

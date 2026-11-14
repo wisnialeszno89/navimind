@@ -124,3 +124,10 @@ Regresje obejmują rzeczywisty model na wygenerowanych danych, interfejs
 Chromium z fixtures API oraz przekazanie dwukrotnie poprawionego eksportu
 TypeScript do przypiętego walidatora i adaptera Python. Nie potwierdzają
 fizycznej zmiany już otwartego formularza ani gotowej wycenionej oferty.
+
+Dodatkowa kontrola sterowania przeglądarką odrzuca błędny wpis, jeśli bieżące
+polecenie ma jeden jawny absolutny wymiar szerokości/wysokości z jednostką,
+a docelowe pole jest jednoznacznie opisane w mm. Model otrzymuje jedną próbę
+naprawy przeliczenia przed wykonaniem. Kontrola nie przenosi wymiaru starego
+celu na późniejsze polecenie zachowania ręcznych zmian; nie interpretuje
+przyrostu jako wymiaru absolutnego ani kilku różnych wymiarów jako jednego.
