@@ -85,3 +85,9 @@ kod TypeScript i przekazuje wynik do walidatora oraz adaptera Python z przypięt
 rewizji wykonawcy. Sprawdza tekst, PDF i blokadę całego zlecenia, jeśli tylko
 jedna pozycja ma nieobsługiwane wymaganie. CI uruchamia tę kontrolę razem
 z regresjami rozmowy, przeglądarki i odczytu dokumentów. Nie wykonuje działań.
+
+Test `scripts/check-workspace-offer-ui.py` uruchamia produkcyjny Workspace
+w Chromium z odpowiedziami API z fixtures. Sprawdza wybór trybu, wysłanie
+bieżącego tekstu, dołączenie PDF, faktyczne pobranie JSON oraz zachowanie
+pierwotnej specyfikacji przy kolejnej odpowiedzi. Jakość odczytu modelu
+sprawdzają osobne bramki na Vercel; test interfejsu nie udaje wywołań modelu.

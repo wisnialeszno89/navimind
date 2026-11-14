@@ -58,3 +58,16 @@ jobs:
 
       - name: Verify text and PDF exports in the actual executor adapter
         run: node scripts/check-offer-executor-boundary.cjs
+
+      - name: Build the production workspace UI
+        run: pnpm build
+        env:
+          OPENAI_API_KEY: ui-fixture-not-a-credential
+
+      - name: Install browser for UI checks
+        run: |
+          python -m pip install playwright==1.62.0
+          python -m playwright install --with-deps chromium
+
+      - name: Verify enquiry and PDF specification downloads in Chromium
+        run: python scripts/check-workspace-offer-ui.py
