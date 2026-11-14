@@ -91,3 +91,43 @@ w Chromium z odpowiedziami API z fixtures. Sprawdza wybór trybu, wysłanie
 bieżącego tekstu, dołączenie PDF, faktyczne pobranie JSON oraz zachowanie
 pierwotnej specyfikacji przy kolejnej odpowiedzi. Jakość odczytu modelu
 sprawdzają osobne bramki na Vercel; test interfejsu nie udaje wywołań modelu.
+
+## Rozmowa i kolejne poprawki wymiarów
+
+Po odczycie tekstu lub PDF Workspace włącza rozmowę o aktualnej specyfikacji.
+`/api/workspace/offer-turn` rozróżnia rozmowę, poprawkę, pytanie o istotny brak
+oraz odwołanie oczekującej poprawki. Nie wykonuje działań w konfiguratorze.
+Obsługiwane są szerokość, wysokość i osobna listwa transportowa; absolutne
+wymiary oraz jawne przyrosty/zmniejszenia w mm, cm i m. Numer źródłowy i
+kolejność tabeli są osobnymi selektorami. Kilka pozycji bez wskazania zakresu
+wymaga doprecyzowania; dodatkowa rozmowa zachowuje oczekujące pytanie.
+
+Dwa niezależne rozstrzygnięcia korekty muszą prowadzić do identycznych pól,
+pozycji i wynikowych wartości. Kod sprawdza cytat, jednostki, selektory oraz
+zakres liczb i stosuje cały zestaw zmian atomowo. Rozbieżność nie tworzy nowej
+wersji. Jawna korekta usuwa wyłącznie audyt danego pola i pozycji; inne
+niejasności, wymagania, uwagi i ograniczenia wykonawcy pozostają zachowane.
+
+Kontrakt v1 zachowuje ostatnią korektę danego pola wraz z jego pierwotną
+wartością źródłową i najnowszym cytatem. Każda odpowiedź z poprawką przechowuje
+pełną wersję specyfikacji; poprzednie można pobrać lub wybrać przyciskiem
+„Pracuj nad tą wersją”. Historia wersji oraz pytanie są w pamięci karty, nie
+przetrwają odświeżenia. Należy pobrać potrzebne wersje przed zamknięciem karty.
+Nie rozszerzono schematu ani nie wprowadzono niezgodnej historii korekt do v1.
+
+Zmiany ilości, kolorów, konstrukcji, profilu, wyposażenia i cen nie są jeszcze
+stosowane tym endpointem. Polecenie mieszające obsługiwane i nieobsługiwane
+zmiany ma wyjaśnić ograniczenie zamiast zastosować tylko część. Odczyt nowego
+pełnego źródła nadal wymaga trybu „Odczytaj zapytanie okienne PL/DE” lub PDF.
+
+Regresje obejmują rzeczywisty model na wygenerowanych danych, interfejs
+Chromium z fixtures API oraz przekazanie dwukrotnie poprawionego eksportu
+TypeScript do przypiętego walidatora i adaptera Python. Nie potwierdzają
+fizycznej zmiany już otwartego formularza ani gotowej wycenionej oferty.
+
+Dodatkowa kontrola sterowania przeglądarką odrzuca błędny wpis, jeśli bieżące
+polecenie ma jeden jawny absolutny wymiar szerokości/wysokości z jednostką,
+a docelowe pole jest jednoznacznie opisane w mm. Model otrzymuje jedną próbę
+naprawy przeliczenia przed wykonaniem. Kontrola nie przenosi wymiaru starego
+celu na późniejsze polecenie zachowania ręcznych zmian; nie interpretuje
+przyrostu jako wymiaru absolutnego ani kilku różnych wymiarów jako jednego.

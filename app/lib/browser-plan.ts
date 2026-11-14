@@ -86,6 +86,18 @@ export function browserDecision(value:unknown,snapshot:BrowserSnapshot,allowedNa
    const alreadyVerified=steps.some(step=>{try{const r=JSON.parse(step);return r.status==='verified'&&r.verified_input_revision===snapshot.revision&&r.target?.name===control.name&&r.target?.tag===control.tag&&r.target?.type===control.type&&r.task?.kind===kind&&(kind==='browser_fill'?r.task.text===t.text:r.task.value===t.value);}catch{return false;}});
    if(alreadyVerified)throw Error('FIELD_ALREADY_VERIFIED_IN_CURRENT_VIEW');
   }
+  if(kind==='browser_fill'&&/\bmm\b/i.test(control.name)&&snapshot.controls.filter(c=>c.name===control.name&&c.tag===control.tag&&c.type===control.type).length===1){
+   const label=control.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+   const dimension=/szeroko|breite|width/.test(label)?'szeroko[\\p{L}]*|breite|width':/wysoko|hohe|height/.test(label)?'wysoko[\\p{L}]*|höhe|hoehe|height':null;
+   if(dimension){
+    // Only bind an explicit absolute measure from the current instruction.
+    // Do not carry an old goal over a later request to preserve manual edits.
+    const command=identityCommands.at(-1)??userCommand;
+    const pattern=new RegExp('(?:'+dimension+')\\s*(?:(?:na|auf|to)\\s*)?[:=]?\\s*(\\d+(?:[.,]\\d+)?)\\s*(mm|cm|m)\\b','giu');
+    const measurements=[...command.matchAll(pattern)].map(m=>Number(m[1].replace(',','.'))*({mm:1,cm:10,m:1000}[m[2].toLowerCase()]!));
+    if(measurements.length===1&&(!/^\d+(?:[.,]\d+)?$/.test(String(t.text))||Math.abs(Number(String(t.text).replace(',','.'))-measurements[0])>1e-7))throw Error('REQUESTED_DIMENSION_MM_MISMATCH');
+   }
+  }
   if(kind==='browser_fill')task={kind,ref,text:text(t.text,2000)};
   else if(kind==='browser_select'){const value=text(t.value,2000);if(control.tag!=='select'||!control.options?.some(o=>o.value===value))throw Error('OPTION_NOT_IN_SNAPSHOT');task={kind,ref,value};}
   else task={kind:'browser_click',ref};}

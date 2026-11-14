@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/prepare-pdf-runtime.mjs && next dev",
-    "build": "node scripts/prepare-pdf-runtime.mjs && node scripts/check-browser-eval-names.cjs && next build && node scripts/check-pdf-package.cjs && node scripts/check-pdf-model.cjs && node scripts/check-browser-model.cjs && node scripts/check-browser-conversation.cjs && node scripts/check-enquiry-model.cjs",
+    "build": "node scripts/prepare-pdf-runtime.mjs && node scripts/check-browser-eval-names.cjs && next build && node scripts/check-pdf-package.cjs && node scripts/check-offer-conversation.cjs && node scripts/check-pdf-model.cjs && node scripts/check-browser-model.cjs && node scripts/check-browser-conversation.cjs && node scripts/check-enquiry-model.cjs",
     "start": "next start",
     "test:agent-bridge": "node --test tests/agent-task-route.test.cjs",
     "test:workspace": "node --test tests/workspace-routes.test.cjs"

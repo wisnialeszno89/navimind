@@ -36,6 +36,53 @@ with tempfile.TemporaryFile(mode='w+') as log:
    assert download.value.suggested_filename=='specyfikacja-okien.json'
    assert json.loads(pathlib.Path(download.value.path()).read_text())==spec
    assert requests[0][1]['history']==[] and requests[0][1]['message']==spec['positions'][0]['evidence'][0]['description']
+   assert page.get_by_label('Rozmowa o specyfikacji').is_checked()
+   assert not page.get_by_label('Odczytaj zapytanie okienne PL/DE').is_checked()
+   corrected=json.loads(json.dumps(spec));corrected['positions'][0]['width_mm']=1300
+   corrected['positions'][0]['field_status']['width_mm']='corrected'
+   corrected['corrections']=[{'position_id':'1','source_id':'1','field':'width_mm','before':1230,'value':1300,'quote':'Zmień szerokość na 1300 mm.'}]
+   pending={'request':'Ustaw wysokość.','question':'Jaka ma być wysokość w mm?'}
+   turns=[]
+   def offer(route):
+    body=route.request.post_data_json;turns.append(body)
+    if body['message']=='Zmień szerokość na 1300 mm.':
+     assert body['specification']==spec and body['pending'] is None
+     route.fulfill(json={'intent':'correct','reply':'Szerokość 1230 → 1300 mm.','offerSpecification':corrected,'pending':None})
+    elif body['message']=='Ustaw wysokość.':
+     assert body['specification']==corrected
+     route.fulfill(json={'intent':'clarify','reply':pending['question'],'pending':pending})
+    elif body['message']=='Co oznacza DKR?':
+     assert body['specification']==corrected and body['pending']==pending
+     route.fulfill(json={'intent':'reply','reply':'Rozwierno-uchylne prawe.','pending':pending})
+    elif body['message']=='1000 mm':
+     assert body['specification']==corrected and body['pending']==pending
+     route.fulfill(status=503,json={'message':'Nie potwierdzono poprawki.'})
+    else:
+     assert body['message']=='Jakie są wymiary?' and body['specification']==spec and body['pending'] is None
+     route.fulfill(json={'intent':'reply','reply':'1230 × 1478 mm.','pending':None})
+   page.route('**/api/workspace/offer-turn',offer)
+   def send_offer(text):
+    page.get_by_label('Rozmowa i poprawki specyfikacji',exact=True).fill(text)
+    with page.expect_response('**/api/workspace/offer-turn'):
+     page.get_by_role('button',name='Wyślij do agenta ofertowego',exact=True).click()
+   send_offer('Zmień szerokość na 1300 mm.')
+   page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(1).wait_for()
+   with page.expect_download() as download:
+    page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(1).click()
+   assert json.loads(pathlib.Path(download.value.path()).read_text())==corrected
+   send_offer('Ustaw wysokość.')
+   page.get_by_text('Do doprecyzowania: '+pending['question'],exact=True).wait_for()
+   send_offer('Co oznacza DKR?')
+   page.get_by_text('Rozwierno-uchylne prawe.',exact=True).wait_for()
+   assert page.get_by_text('Do doprecyzowania: '+pending['question'],exact=True).is_visible()
+   send_offer('1000 mm')
+   page.get_by_role('alert').filter(has_text='Nie potwierdzono poprawki.').wait_for()
+   assert page.get_by_label('Rozmowa i poprawki specyfikacji',exact=True).input_value()=='1000 mm'
+   assert page.get_by_role('button',name='Pobierz specyfikację pozycji').count()==2
+   page.get_by_role('button',name='Pracuj nad tą wersją').nth(0).click()
+   send_offer('Jakie są wymiary?')
+   page.get_by_text('1230 × 1478 mm.',exact=True).wait_for()
+   assert len(turns)==5
    def document(route):
     body=route.request.post_data_json;requests.append(('pdf',body))
     pdfspec=json.loads(json.dumps(spec));pdfspec['source'].update(kind='pdf',pages=1)
@@ -46,9 +93,9 @@ with tempfile.TemporaryFile(mode='w+') as log:
    page.route('**/api/workspace/document-plan',document)
    page.locator('input[type=file][accept*="pdf"]').set_input_files({'name':'syntetyczny.pdf','mimeType':'application/pdf','buffer':b'%PDF-1.4\nsynthetic UI fixture'})
    page.get_by_role('button',name='Odczytaj PDF',exact=True).click()
-   page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(1).wait_for()
+   page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(2).wait_for()
    with page.expect_download() as download:
-    page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(1).click()
+    page.get_by_role('button',name='Pobierz specyfikację pozycji').nth(2).click()
    assert json.loads(pathlib.Path(download.value.path()).read_text())['source']['kind']=='pdf'
    assert requests[-1][0]=='pdf' and requests[-1][1]['pdf'].startswith('data:application/pdf;base64,')
    # The original result must still download its original text source.
@@ -57,7 +104,7 @@ with tempfile.TemporaryFile(mode='w+') as log:
    assert json.loads(pathlib.Path(download.value.path()).read_text())==spec
    assert errors==[], errors
    browser.close()
-  print('WORKSPACE_UI=verified CHROMIUM=actual API_RESPONSES=fixtures TEXT_DOWNLOAD=True PDF_DOWNLOAD=True ORIGINAL_RESULT_PRESERVED=True')
+  print('WORKSPACE_UI=verified CHROMIUM=actual API_RESPONSES=fixtures TEXT_DOWNLOAD=True PDF_DOWNLOAD=True ORIGINAL_RESULT_PRESERVED=True CORRECTION_SESSION=True PENDING_DISCUSSION=True FAILED_EDIT_PRESERVED=True VERSION_SWITCH=True')
  finally:
   server.terminate()
   try:server.wait(timeout=10)
