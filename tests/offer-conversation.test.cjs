@@ -44,7 +44,7 @@ test('explicit confirmation resolves only its own numeric audit conflict',()=>{
 });
 test('unknown correction fields and malformed pending contexts are rejected',()=>{
  assert.throws(()=>turn([change('Pozycja 9: ilość 2 szt.',{field:'quantity'})]),/INVALID/);
- assert.throws(()=>lib.offerDecision({intent:'reply',reply:'Opis',changes:[change('x')]}),/INVALID/);
+ assert.throws(()=>lib.offerDecision({intent:'reply',reply:'Opis',changes:[change('x')]}),/INCONSISTENT_OFFER_INTENT/);
  assert.throws(()=>lib.offerPending({request:'x',question:'y',extra:true}),/INVALID/);
 });
 let inputs=[],decisions=[],failure=null;
