@@ -47,6 +47,14 @@ export function enquiryReply(spec:OfferSpecification){
   for(const e of p.evidence)lines.push('Cytat źródłowy: '+clean(e.description));
   for(const a of p.ambiguities)lines.push('**Do wyjaśnienia:** '+clean(a));
  }
+ const labels:Record<string,string>={quantity:'ilość',kind:'rodzaj produktu',width_mm:'szerokość',height_mm:'wysokość',transport_extension_mm:'listwa transportowa',opening:'otwieranie',color_inside:'kolor wewnątrz',color_outside:'kolor na zewnątrz',glazing_panes:'liczba szyb',ug:'Ug',profile_reference:'profil',requirements:'wyposażenie',positions:'kompletność pozycji',source:'źródło',id:'numer pozycji',page_status:'zawartość źródła',source_id:'numer źródłowy'};
+ for(const issue of spec.audit_issues){
+  const scope=issue.position_id===null?'całe zapytanie':`pozycja ${clean(issue.position_id)}`;
+  const reason=issue.reason.replace(/\b(quantity|kind|width_mm|height_mm|transport_extension_mm|opening|color_inside|color_outside|glazing_panes|ug|profile_reference|requirements|positions|source_id|page_status)\b/g,key=>labels[key]);
+  lines.push('',`**Do wyjaśnienia — ${scope}, ${clean(labels[issue.field]??issue.field)}:** ${clean(reason)}`);
+  if(issue.primary_requirements)lines.push('Wyposażenie — pierwszy odczyt: '+(issue.primary_requirements.map(clean).join('; ')||'brak wymagań'));
+  if(issue.independent_requirements)lines.push('Wyposażenie — drugi odczyt: '+(issue.independent_requirements.map(clean).join('; ')||'brak wymagań'));
+ }
  for(const note of spec.notes)lines.push('',clean(note));
  lines.push('',spec.requires_clarification?'**Przed konfiguracją wyjaśnij wykryte braki lub rozbieżności.**':'Odczyt modelu i dostępność wybranych opcji wymagają sprawdzenia przed konfiguracją.');
  return lines.join('\n');
