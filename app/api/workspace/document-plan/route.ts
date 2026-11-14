@@ -7,6 +7,7 @@ import {workspacePDF,documentReply,DOCUMENT_PROMPT,ORIENTATION_PROMPT,documentFo
 import {rasterPDF,pdfPageViews,pdfRendererProbe} from '@/lib/workspace-pdf-vision';
 import {pageReading,mergePageReadings,PAGE_READING_INSTRUCTIONS} from '@/lib/workspace-document-pages';
 import {needsMeasurementDirectives,measurementDirectiveFormat,MEASUREMENT_DIRECTIVE_PROMPT,applyMeasurementDirectives} from '@/lib/workspace-document-directives';
+import {toOfferSpecification,normalizeSalesOpening} from '@/lib/window-offer-specification';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export const maxDuration=120;
@@ -70,7 +71,8 @@ export async function POST(req:Request){
    for(const view of views.images)parts.push({type:'text',text:`Strona ${raster.page}: ${view.label}`},image(view.image));
    const read=async(independent:boolean)=>{
     const response=await client.chat.completions.create({model,messages:[{role:'system',content:DOCUMENT_PROMPT+'\n'+PAGE_READING_INSTRUCTIONS+(independent?'\nWykonaj niezależny odczyt kontrolny: sprawdź kompletność wszystkich pozycji i dosłowne oznaczenia. Nie masz kandydata do potwierdzenia.':'')},{role:'user',content:independent&&parts.length>3?[parts[0],...parts.slice(3),...parts.slice(1,3)]:parts}],response_format:formats.pageReading,...parameters(10000,'medium')},{timeout:55000,signal:abort.signal});
-    return pageReading(JSON.parse(content(response)),pdf.pages,raster.page);
+    const checked=pageReading(JSON.parse(content(response)),pdf.pages,raster.page);
+    return {...checked,...normalizeSalesOpening(checked)};
    };
    const [primary,independent]=await Promise.all([read(false),read(true)]);
    readings[index]={page:raster.page,primary,independent};
@@ -93,7 +95,8 @@ export async function POST(req:Request){
   }
   const report={...(corrections||merged),page_rotations:angles.rotations,models_used:[...modelsUsed],source_digest:sourceDigest};
   console.info('WORKSPACE_DOCUMENT_READ_FINISHED',{reader,requestId,pages:pdf.pages,positions:report.positions.length,review:report.requires_clarification});
-  return NextResponse.json({reply:documentReply(report)+`\n\nOdczyt: ${reader} · model: ${[...modelsUsed].join(', ')||safeModel(model)} · numer próby: ${requestId}`,specification:report,reader,requestId,agentConnected:false},{headers:{'Cache-Control':'no-store'}});
+  const offerSpecification=toOfferSpecification(report,{kind:'pdf',sha256:createHash('sha256').update(Buffer.from(pdf.data.split(',')[1],'base64')).digest('hex'),pages:pdf.pages});
+  return NextResponse.json({reply:documentReply(report)+`\n\nOdczyt: ${reader} · model: ${[...modelsUsed].join(', ')||safeModel(model)} · numer próby: ${requestId}`,specification:report,offerSpecification,reader,requestId,agentConnected:false},{headers:{'Cache-Control':'no-store'}});
  }catch(problem){const failure=documentFailure(problem,stage,requestId);const status=(problem as {status?:unknown})?.status;console.error('WORKSPACE_DOCUMENT_READ_FAILED',{reader,stage,code:failure.code,requestId,provider_status:typeof status==='number'?status:undefined,...providerDiagnostic(problem)});abort.abort();return NextResponse.json({...failure,reader,message:failure.message+` Odczyt: ${reader}.`},{status:503,headers:{'Cache-Control':'no-store'}});}finally{clearTimeout(deadline);}
 }
 

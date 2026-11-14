@@ -5,7 +5,7 @@ const directives=load('app/lib/workspace-document-directives.ts');
 const lib=load('app/lib/workspace-document.ts'),pagesLib=load('app/lib/workspace-document-pages.ts',{'./workspace-document':load('app/lib/workspace-document.ts')}),workspace=load('app/lib/workspace.ts'),images=load('app/lib/workspace-image.ts');
 let calls=0,lastInput,answer,orientationAnswer=null,auditAnswer=null,independentAnswer=null,directiveAnswer={corrections:[],unresolved:[]},providerFailure=null;const inputs=[];
 class OpenAI{chat={completions:{create:async input=>{calls++;if(providerFailure)throw providerFailure;lastInput=input;inputs.push(input);const result=input.messages[0].content===lib.ORIENTATION_PROMPT?(orientationAnswer||{rotations:[0]}):input.messages[0].content===directives.MEASUREMENT_DIRECTIVE_PROMPT?directiveAnswer:input.messages[0].content===lib.DOCUMENT_AUDIT_PROMPT?(auditAnswer||{status:'confirmed',issues:[]}):input.messages[0].content.includes('Wykonaj niezależny odczyt kontrolny')?(independentAnswer||answer):answer;return {model:input.model,choices:[{message:{content:JSON.stringify(input.response_format.json_schema.name==='technical_page_reading'?{page_status:'products',...(typeof result==='function'?result(input):result)}:result)}}]};}}};}
-const route=load('app/api/workspace/document-plan/route.ts',{'@/lib/workspace-document':lib,'@/lib/workspace-document-directives':directives,'@/lib/workspace-document-pages':pagesLib,'@/lib/workspace-pdf-vision':{pdfRendererProbe:async()=>({pages:1,views:3}),rasterPDF:async(data,count)=>Array.from({length:count},(_,i)=>({page:i+1,image:Buffer.from('synthetic pixels'),width:200,height:300})),pdfPageViews:async(page,rotation)=>({page:page.page,width:200,height:300,images:[{label:'cała strona',image:page.image}]})},'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
+const route=load('app/api/workspace/document-plan/route.ts',{'@/lib/window-offer-specification':load('app/lib/window-offer-specification.ts'),'@/lib/workspace-document':lib,'@/lib/workspace-document-directives':directives,'@/lib/workspace-document-pages':pagesLib,'@/lib/workspace-pdf-vision':{pdfRendererProbe:async()=>({pages:1,views:3}),rasterPDF:async(data,count)=>Array.from({length:count},(_,i)=>({page:i+1,image:Buffer.from('synthetic pixels'),width:200,height:300})),pdfPageViews:async(page,rotation)=>({page:page.page,width:200,height:300,images:[{label:'cała strona',image:page.image}]})},'@/lib/workspace':workspace,'@/lib/workspace-image':images,openai:OpenAI,'next/server':{NextResponse:{json:(body,init={})=>new Response(JSON.stringify(body),{status:init.status||200})}}});
 async function pdf(pages=1){const doc=await PDFDocument.create();for(let i=0;i<pages;i++)doc.addPage();return 'data:application/pdf;base64,'+Buffer.from(await doc.save()).toString('base64');}
 function position(){return {id:'3',quantity:1,kind:'entrance_door',width_mm:1080,height_mm:2050,transport_extension_mm:30,opening:'DL, do wewnątrz',color_inside:'biały',color_outside:'biały',glazing_panes:3,ug:.5,profile_reference:'Profil odniesienia',requirements:['Listwa transportowa opcjonalna, poza wysokością drzwi.'],evidence:[{page:1,description:'Rysunek: 2080 i 2050, listwa 30 mm. Użytkownik wyjaśnił znaczenie listwy.'}],ambiguities:[]};}
 const request=body=>new Request('https://test/api',{method:'POST',body:JSON.stringify(body)});
@@ -144,6 +144,50 @@ test('blind comparisons flag swapped sizes and directions without changing value
  const merged=pagesLib.mergePageReadings([{page:1,primary:a,independent:b}],1);
  assert.equal(merged.positions[0].width_mm,1080);assert.equal(merged.requires_clarification,true);
  for(const field of ['width_mm','height_mm','opening'])assert.ok(merged.reading_audit.issues.some(i=>i.field===field));
+});
+
+test('equipment and transom differences cannot pass the source comparison',()=>{
+ const a=lib.documentReport({positions:[{...position(),requirements:['Elektrozaczep 12 V','Naświetle górne 300 mm']}],notes:[]},1);
+ const before=JSON.stringify(a);
+ for(const requirements of [[],['Elektrozaczep 24 V','Naświetle górne 300 mm'],['Elektrozaczep 12 V']]){
+  const b=lib.documentReport({positions:[{...position(),requirements}],notes:[]},1);
+  const result=pagesLib.mergePageReadings([{page:1,primary:a,independent:b}],1);
+  assert.equal(result.requires_clarification,true);
+  assert.equal(result.reading_audit.status,'review');
+  assert.ok(result.reading_audit.issues.some(i=>i.position_id==='3'&&i.field==='requirements'));
+  assert.deepEqual(result.positions[0].requirements,a.positions[0].requirements);
+  const reply=lib.documentReply(result);
+  assert.match(reply,/Wymagania — pierwszy odczyt/);assert.match(reply,/Wymagania — drugi odczyt/);
+ }
+ assert.equal(JSON.stringify(a),before);
+});
+
+test('the PDF route exposes equipment disagreements and never creates an executor task',async()=>{
+ answer={positions:[{...position(),requirements:['Elektrozaczep 12 V']}],notes:[]};
+ independentAnswer={positions:[{...position(),requirements:['Bez elektrozaczepu']}],notes:[]};
+ try{
+  const response=await route.POST(request({message:'Odczytaj PDF',history:[],pdf:await pdf()}));
+  const body=await response.json();
+  assert.equal(response.status,200);assert.equal(body.specification.reading_audit.status,'review');
+  assert.equal(body.specification.requires_clarification,true);assert.equal(body.specification.executed,false);
+  assert.match(body.reply,/Elektrozaczep 12 V/);assert.match(body.reply,/Bez elektrozaczepu/);
+  assert.equal('task' in body,false);
+ }finally{independentAnswer=null;}
+});
+
+test('equipment comparison ignores only order, duplicates, case and whitespace',()=>{
+ const a=lib.documentReport({positions:[{...position(),requirements:['Elektrozaczep 12 V','Naświetle górne 300 mm']}],notes:[]},1);
+ const b=lib.documentReport({positions:[{...position(),requirements:[' naświetle   GÓRNE 300 mm ','ELEKTROZACZEP 12 V','Elektrozaczep 12 V']}],notes:[]},1);
+ assert.deepEqual(pagesLib.comparePageReadings(a,b,1),[]);
+});
+
+test('equipment stays scoped to its own source position',()=>{
+ const positions=[{...position(),requirements:['Elektrozaczep 12 V']},{...position(),id:'4',requirements:[]}];
+ const a=lib.documentReport({positions,notes:[]},1);
+ const b=lib.documentReport({positions:positions.map((p,i)=>({...p,requirements:positions[1-i].requirements})),notes:[]},1);
+ const result=pagesLib.mergePageReadings([{page:1,primary:a,independent:b}],1);
+ assert.deepEqual(result.reading_audit.issues.filter(i=>i.field==='requirements').map(i=>i.position_id),['3','4']);
+ assert.deepEqual(result.positions.map(p=>p.requirements),[['Elektrozaczep 12 V'],[]]);
 });
 
 test('each page is required and evidence cannot point to a different page',()=>{

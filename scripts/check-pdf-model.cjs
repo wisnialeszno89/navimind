@@ -5,7 +5,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
  if(!process.env.VERCEL){console.log('PDF_LIVE_EVAL=skipped_local');return;}
  if(!process.env.OPENAI_API_KEY)throw Error('PDF_LIVE_EVAL_MISSING_MODEL_CONFIGURATION');
  const model=process.env.NAVIMIND_DOCUMENT_MODEL||'gpt-6.1-terra';
- const sources=['app/api/workspace/document-plan/route.ts','app/lib/workspace-document.ts','app/lib/workspace-document-pages.ts','app/lib/workspace-document-directives.ts','app/lib/workspace-pdf-vision.ts',__filename];
+ const sources=['app/api/workspace/document-plan/route.ts','app/lib/workspace-document.ts','app/lib/workspace-document-pages.ts','app/lib/window-offer-specification.ts','contracts/window-offer-v1.schema.json','app/lib/workspace-document-directives.ts','app/lib/workspace-pdf-vision.ts',__filename];
  const hash=crypto.createHash('sha256').update(model);for(const file of sources)hash.update(fs.readFileSync(file));
  const key=hash.digest('hex'),directory='.next/cache/navimind-pdf-eval',cache=path.join(directory,key+'.json');
  let previous;try{previous=JSON.parse(fs.readFileSync(cache));}catch{}
