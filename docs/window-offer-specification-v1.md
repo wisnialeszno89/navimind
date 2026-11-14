@@ -131,3 +131,34 @@ a docelowe pole jest jednoznacznie opisane w mm. Model otrzymuje jedną próbę
 naprawy przeliczenia przed wykonaniem. Kontrola nie przenosi wymiaru starego
 celu na późniejsze polecenie zachowania ręcznych zmian; nie interpretuje
 przyrostu jako wymiaru absolutnego ani kilku różnych wymiarów jako jednego.
+
+## Rozszerzenie handlowe: window-offer/2
+
+Wersja 2 dodaje typowane korekty ilości, koloru wewnętrznego i zewnętrznego
+oraz otwierania. Każde pole ma osobny typ wartości korekty: ilość jest liczbą
+całkowitą 1–10000, kolory tekstem pełnego oznaczenia, a otwieranie kodem.
+Oba repozytoria przechowują identyczny schemat i przykład v2. Walidatory
+czytają nadal v1; istniejących plików kontraktu v1 nie zmieniono. Nowy odczyt
+PDF/tekstu nadal eksportuje v1. Pierwsza zastosowana korekta handlowa
+przełącza specyfikację na v2; kolejne korekty wymiarów zachowują tę wersję.
+
+Ilość obsługuje wartość docelową i jawne dodanie/odjęcie sztuk, także małe
+liczebniki słowne PL/DE. Wymiary pozostają niezmienione. Kolor wymaga strony:
+wewnątrz, zewnątrz albo obie strony; krótkie dopowiedzenie rozstrzyga to samo
+oczekujące żądanie. Proste aliasy białego, antracytu i mahoniu mają wspólne
+nazwy; kodów RAL, oklein, struktur i wykończenia nie dobiera się automatycznie.
+Pełne oznaczenia są zachowywane, a kod RAL może mieć ujednolicony odstęp.
+
+Samo R/L jest normalizowane osobno dla każdej wskazanej pozycji: okno
+DKR/DKL, drzwi DR/DL. Jawny kod DKR przy drzwiach pozostaje DKR. Zmiana
+konstrukcji HST/PSK lub zastąpienie złożonego opisu otwierania samym kodem
+zatrzymuje całe polecenie do weryfikacji. Po zmianie koloru/otwierania
+wymagania źródłowe pozostają zachowane; jeśli pozycja ma dodatkowe wymagania,
+powstaje uwaga do sprawdzenia ich zgodności z nowym ustawieniem.
+
+Wykonawca v2 nadal ma ten sam zakres PAGEN. Ilość poprawionego FIX może
+przejść do uzupełnienia formularza; antracyt, inne nieobsługiwane barwy,
+DKR/DKL i pozostałe nieobsługiwane konstrukcje blokują całe zlecenie.
+Rozszerzenie rozumienia i korekt nie oznacza rozszerzenia katalogu narzędzia.
+Zaktualizuj lokalnego wykonawcę z gałęzi fix/window-enquiry-completeness-20261113
+przed przekazaniem mu pliku v2. Starszy wykonawca odrzuci go przed działaniem.

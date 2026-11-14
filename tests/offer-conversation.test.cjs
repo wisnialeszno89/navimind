@@ -43,7 +43,7 @@ test('explicit confirmation resolves only its own numeric audit conflict',()=>{
  const b=structuredClone(s);b.audit_issues=b.audit_issues.slice(0,1);b.positions[0].field_status.quantity='reported';assert.equal(apply(b,[change('Pozycja 9: szerokość 1000 mm.',{value:1000})]).specification.requires_clarification,false);
 });
 test('unknown correction fields and malformed pending contexts are rejected',()=>{
- assert.throws(()=>turn([change('Pozycja 9: ilość 2 szt.',{field:'quantity'})]),/INVALID/);
+ assert.throws(()=>turn([change('Pozycja 9: ilość 2 szt.',{field:'profile_reference'})]),/INVALID/);
  assert.throws(()=>lib.offerDecision({intent:'reply',reply:'Opis',changes:[change('x')]}),/INCONSISTENT_OFFER_INTENT/);
  assert.throws(()=>lib.offerPending({request:'x',question:'y',extra:true}),/INVALID/);
 });
@@ -74,4 +74,55 @@ test('an empty unused model reply cannot reject an otherwise valid correction',(
  const s=spec(),q='Pozycja 9: szerokość 1230 mm.',decision=lib.offerDecision({intent:'correct',reply:'',changes:[change(q)]});
  assert.equal(lib.correctOffer(s,decision,decision,q).specification.positions[1].width_mm,1230);
  assert.throws(()=>lib.offerDecision({intent:'reply',reply:'',changes:[]}),/INVALID/);
+});
+
+test('commercial quantity changes upgrade v1 only when necessary and keep the original quantity',()=>{
+ const s=spec(),q='Pozycja 9: ilość 4 szt.';
+ const a=apply(s,[change(q,{field:'quantity',value:4})]).specification;
+ assert.equal(a.schema_version,'window-offer/2');assert.equal(a.positions[1].quantity,4);assert.equal(s.schema_version,'window-offer/1');
+ const b=apply(a,[change('Pozycja 9: dodaj jeszcze dwie sztuki.',{field:'quantity',operation:'add',value:2})]).specification;
+ assert.equal(b.positions[1].quantity,6);assert.equal(b.corrections.length,1);assert.equal(b.corrections[0].before,2);assert.deepEqual(b.source,s.source);
+ assert.deepEqual(b.positions[0],s.positions[0]);
+});
+test('sided colors and both-sided changes are separate from quantities and dimensions',()=>{
+ const s=spec(),q='Pozycja 9: na zewnątrz Anthrazit.';
+ const a=apply(s,[change(q,{field:'color_outside',value:'antracyt'})]).specification;
+ assert.equal(a.positions[1].color_inside,'white');assert.equal(a.positions[1].color_outside,'antracyt');assert.equal(a.positions[1].width_mm,900);
+ const b=apply(a,[change('Pozycja 9: kolor biały obustronnie.',{field:'color_both',value:'biały'})]).specification;
+ assert.equal(b.positions[1].color_inside,'biały');assert.equal(b.positions[1].color_outside,'biały');
+ assert.equal(b.corrections.find(c=>c.field==='color_outside').before,'white');
+ assert.equal(b.corrections.filter(c=>c.field==='color_outside').length,1);
+});
+test('RAL and finish stay literal, while invented codes and dropped finish are rejected',()=>{
+ const s=spec(),q='Pozycja 9: na zewnątrz RAL 7016 mat.';
+ const a=apply(s,[change(q,{field:'color_outside',value:'RAL 7016 mat'})]).specification;
+ assert.equal(a.positions[1].color_outside,'RAL 7016 mat');assert.equal(a.positions[1].color_inside,'white');
+ assert.throws(()=>apply(s,[change('Pozycja 9: na zewnątrz antracyt.',{field:'color_outside',value:'RAL 7016'})]),/nazwy koloru/);
+ assert.throws(()=>apply(s,[change('Pozycja 9: na zewnątrz antracyt mat.',{field:'color_outside',value:'antracyt'})]),/pełne oznaczenie/);
+ assert.throws(()=>apply(s,[change('Pozycja 9: kolor antracyt.',{field:'color_outside',value:'antracyt'})]),/wnętrza/);
+});
+test('bare handedness follows product kind while an explicit door DKR is retained',()=>{
+ const s=spec();s.positions[1].kind='entrance_door';s.positions[1].opening='DR';
+ const a=apply(s,[change('Wszystkim pozycjom ustaw otwieranie L.',{selector:'all',target:'',field:'opening',value:'L'})]).specification;
+ assert.equal(a.positions[0].opening,'DKL');assert.equal(a.positions[1].opening,'DL');
+ const b=apply(a,[change('Pozycja 9: otwieranie DKR.',{field:'opening',value:'DKR'})]).specification;
+ assert.equal(b.positions[1].opening,'DKR');assert.equal(b.corrections.find(c=>c.position_id==='9'&&c.field==='opening').before,'DR');
+});
+test('sliding construction, complex opening metadata and ambiguous color stop the entire mixed correction',()=>{
+ for(const [old,c] of [['HST',change('Pozycja 9: otwieranie DKR.',{field:'opening',value:'DKR'})],['DKR, do wewnątrz',change('Pozycja 9: otwieranie DKL.',{field:'opening',value:'DKL'})],['FIX',change('Pozycja 9: kolor biały.',{field:'color_both',value:'biały'})]]){
+  const s=spec();s.positions[1].opening=old;const before=JSON.stringify(s);
+  assert.throws(()=>apply(s,[change('Pozycja 9: ilość 4 szt.',{field:'quantity',value:4}),c]));assert.equal(JSON.stringify(s),before);
+ }
+});
+test('changed opening preserves source requirements and visibly retains a review',()=>{
+ const s=spec();s.positions[1].requirements=['Skrzydło czynne prawe, widok od wewnątrz.'];
+ const a=apply(s,[change('Pozycja 9: otwieranie DKL.',{field:'opening',value:'DKL'})]);
+ assert.deepEqual(a.specification.positions[1].requirements,s.positions[1].requirements);assert.equal(a.specification.requires_clarification,true);
+ assert.match(a.reply,/pozostają uwagi/);assert.ok(a.specification.audit_issues.some(i=>i.field==='requirements'&&i.position_id==='9'));
+});
+test('both versions validate their own typed corrections without accepting a string quantity',()=>{
+ const v2=structuredClone(require('../contracts/window-offer-v2.example.json'));assert.equal(common.offerSpecification(v2).schema_version,'window-offer/2');
+ for(const mutate of [s=>s.corrections[0].value='4',s=>s.corrections[1].value=7016,s=>s.schema_version='window-offer/1']){
+  const copy=structuredClone(v2);mutate(copy);assert.throws(()=>common.offerSpecification(copy),/INVALID/);
+ }
 });
