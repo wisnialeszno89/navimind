@@ -230,7 +230,7 @@ function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-
       };
     }
     if (id === "@/lib/agent/temporaryV2Secret") {
-      const tempModulePath = path.resolve(__dirname, "../lib/agent/temporaryV2Secret.ts");
+      const tempModulePath = path.resolve(__dirname, "../app/lib/agent/temporaryV2Secret.ts");
       const tempSource = fs.readFileSync(tempModulePath, "utf8");
       const tempCompiled = ts.transpileModule(tempSource, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
