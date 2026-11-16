@@ -156,10 +156,13 @@ function validObserveDecision(task = validTaskV2()) {
   };
 }
 
-function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-test-openai-key" } = {}) {
+function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-test-openai-key", temporarySecret, issuedAt, expiresAt } = {}) {
   const keys = [
     "NODE_ENV",
     "NAVIMIND_AGENT_SECRET",
+    "NAVIMIND_AGENT_TEST_SECRET",
+    "NAVIMIND_AGENT_TEST_ISSUED_AT",
+    "NAVIMIND_AGENT_TEST_EXPIRES_AT",
     "NAVIMIND_AGENT_ALLOW_DEV_BYPASS",
     "OPENAI_API_KEY",
   ];
@@ -171,6 +174,12 @@ function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-
   else process.env.NODE_ENV = nodeEnv;
   if (secret === undefined) delete process.env.NAVIMIND_AGENT_SECRET;
   else process.env.NAVIMIND_AGENT_SECRET = secret;
+  if (temporarySecret === undefined) delete process.env.NAVIMIND_AGENT_TEST_SECRET;
+  else process.env.NAVIMIND_AGENT_TEST_SECRET = temporarySecret;
+  if (issuedAt === undefined) delete process.env.NAVIMIND_AGENT_TEST_ISSUED_AT;
+  else process.env.NAVIMIND_AGENT_TEST_ISSUED_AT = issuedAt;
+  if (expiresAt === undefined) delete process.env.NAVIMIND_AGENT_TEST_EXPIRES_AT;
+  else process.env.NAVIMIND_AGENT_TEST_EXPIRES_AT = expiresAt;
   if (bypass === undefined) delete process.env.NAVIMIND_AGENT_ALLOW_DEV_BYPASS;
   else process.env.NAVIMIND_AGENT_ALLOW_DEV_BYPASS = bypass;
   if (typeof openaiApiKey === "string") process.env.OPENAI_API_KEY = openaiApiKey;
@@ -219,6 +228,18 @@ function loadPost({ nodeEnv = "test", secret, bypass, openaiApiKey = "synthetic-
           },
         },
       };
+    }
+    if (id === "@/lib/agent/temporaryV2Secret") {
+      const tempModulePath = path.resolve(__dirname, "../app/lib/agent/temporaryV2Secret.ts");
+      const tempSource = fs.readFileSync(tempModulePath, "utf8");
+      const tempCompiled = ts.transpileModule(tempSource, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+      }).outputText;
+      const tempModule = new Module(tempModulePath, module);
+      tempModule.filename = tempModulePath;
+      tempModule.paths = Module._nodeModulePaths(path.dirname(tempModulePath));
+      tempModule._compile(tempCompiled, tempModulePath);
+      return tempModule.exports;
     }
     if (id === "@/lib/agent/agentTaskContractV2") {
       return v2Contract;
@@ -704,6 +725,18 @@ test("provider failures return a generic error and do not log exception contents
       if (id === "next/server") {
         return { NextResponse: { json(body, init = {}) { return new Response(JSON.stringify(body), { status: init.status ?? 200 }); } } };
       }
+      if (id === "@/lib/agent/temporaryV2Secret") {
+        const tempModulePath = path.resolve(__dirname, "../app/lib/agent/temporaryV2Secret.ts");
+        const tempSource = fs.readFileSync(tempModulePath, "utf8");
+        const tempCompiled = ts.transpileModule(tempSource, {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+        }).outputText;
+        const tempModule = new Module(tempModulePath, module);
+        tempModule.filename = tempModulePath;
+        tempModule.paths = Module._nodeModulePaths(path.dirname(tempModulePath));
+        tempModule._compile(tempCompiled, tempModulePath);
+        return tempModule.exports;
+      }
       if (id === "@/lib/agent/agentTaskContractV2") {
         return v2Contract;
       }
@@ -984,4 +1017,50 @@ test("NaviMind chat is independent of MenMind source and forwarded context", () 
   assert.doesNotMatch(chat.toLowerCase(), /menmind|initialcontext|contextmessage/);
   assert.doesNotMatch(page.toLowerCase(), /menmind|initialcontext|searchparams/);
   assert.match(page, /<ChatWindow\s*\/>/);
+});
+
+test("temporary 2h token permits V2 only and never bypasses v1", async () => {
+  const now = Date.now();
+  await withRoute({
+    nodeEnv: "production", secret: "production-secret",
+    temporarySecret: "temporary-credential",
+    issuedAt: new Date(now - 1000).toISOString(),
+    expiresAt: new Date(now + 90 * 60 * 1000).toISOString(),
+  }, async ({ post, calls, v2Calls }) => {
+    const accepted = await post(request(
+      JSON.stringify(validTaskV2()),
+      { secret: "temporary-credential" },
+    ));
+    assert.equal(accepted.status, 200);
+    assert.equal(v2Calls.length, 1);
+    const deniedV1 = await post(request(
+      JSON.stringify(validTask()),
+      { secret: "temporary-credential" },
+    ));
+    assert.equal(deniedV1.status, 401);
+    assert.equal(calls.length, 0);
+  });
+});
+
+test("temporary token expires and cannot exceed 2h of configured validity", async () => {
+  const now = Date.now();
+  for (const bounds of [
+    [now - 3 * 60 * 60 * 1000, now - 1000],
+    [now - 1000, now + 3 * 60 * 60 * 1000],
+    [now + 10000, now + 30 * 60 * 1000],
+  ]) {
+    await withRoute({
+      nodeEnv: "production", secret: "production-secret",
+      temporarySecret: "temporary-credential",
+      issuedAt: new Date(bounds[0]).toISOString(),
+      expiresAt: new Date(bounds[1]).toISOString(),
+    }, async ({ post, v2Calls }) => {
+      const denied = await post(request(
+        JSON.stringify(validTaskV2()),
+        { secret: "temporary-credential" },
+      ));
+      assert.equal(denied.status, 401);
+      assert.equal(v2Calls.length, 0);
+    });
+  }
 });
