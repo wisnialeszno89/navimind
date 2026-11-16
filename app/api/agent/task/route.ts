@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { validTemporaryV2Secret } from "@/lib/agent/temporaryV2Secret";
 import { NextResponse } from "next/server";
 import {
   reasonAgentTask,
@@ -494,15 +495,19 @@ export async function POST(req: Request) {
       process.env.NODE_ENV !== "production" &&
       process.env.NAVIMIND_AGENT_ALLOW_DEV_BYPASS === "1";
 
-    if (!configuredSecret) {
-      if (!allowDevBypass) {
-        return jsonError("AGENT_AUTH_NOT_CONFIGURED", 503);
-      }
-    } else {
-      const providedSecret = req.headers.get("x-navimind-agent-secret") || "";
-      if (!timingSafeSecretMatch(providedSecret, configuredSecret)) {
-        return jsonError("UNAUTHORIZED", 401);
-      }
+    const providedSecret = req.headers.get("x-navimind-agent-secret") || "";
+    const productionAuthorized = configuredSecret
+      ? timingSafeSecretMatch(providedSecret, configuredSecret)
+      : false;
+    const temporaryAuthorized = validTemporaryV2Secret(
+      providedSecret, process.env,
+    );
+    const usingTemporaryCredential = !productionAuthorized && temporaryAuthorized;
+    if (!configuredSecret && !allowDevBypass && !usingTemporaryCredential) {
+      return jsonError("AGENT_AUTH_NOT_CONFIGURED", 503);
+    }
+    if (configuredSecret && !productionAuthorized && !temporaryAuthorized) {
+      return jsonError("UNAUTHORIZED", 401);
     }
 
     if (!isJsonContentType(req)) {
@@ -526,6 +531,15 @@ export async function POST(req: Request) {
         return jsonError("INVALID_CONTENT_LENGTH", 400);
       }
       throw error;
+    }
+
+    // A temporary credential can never authorize the v1 task protocol.
+    // This check runs before provider/model reasoning.
+    if (usingTemporaryCredential && (
+      body === null || typeof body !== "object" || Array.isArray(body)
+      || (body as Record<string, unknown>).version !== "2"
+    )) {
+      return jsonError("UNAUTHORIZED", 401);
     }
 
     if (
