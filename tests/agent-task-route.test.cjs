@@ -725,6 +725,18 @@ test("provider failures return a generic error and do not log exception contents
       if (id === "next/server") {
         return { NextResponse: { json(body, init = {}) { return new Response(JSON.stringify(body), { status: init.status ?? 200 }); } } };
       }
+      if (id === "@/lib/agent/temporaryV2Secret") {
+        const tempModulePath = path.resolve(__dirname, "../app/lib/agent/temporaryV2Secret.ts");
+        const tempSource = fs.readFileSync(tempModulePath, "utf8");
+        const tempCompiled = ts.transpileModule(tempSource, {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+        }).outputText;
+        const tempModule = new Module(tempModulePath, module);
+        tempModule.filename = tempModulePath;
+        tempModule.paths = Module._nodeModulePaths(path.dirname(tempModulePath));
+        tempModule._compile(tempCompiled, tempModulePath);
+        return tempModule.exports;
+      }
       if (id === "@/lib/agent/agentTaskContractV2") {
         return v2Contract;
       }
