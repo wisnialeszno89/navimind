@@ -149,7 +149,7 @@ function review(task: AgentTaskV2Request, rationale: string): AgentTaskV2Respons
   };
 }
 
-export async function reasonAgentTaskV2(task: AgentTaskV2Request): Promise<AgentTaskV2Response> {
+export async function reasonAgentTaskV2(task: AgentTaskV2Request, validationFeedback?: string): Promise<AgentTaskV2Response> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("AGENT_PROVIDER_NOT_CONFIGURED");
   const model = process.env.NAVIMIND_AGENT_V2_MODEL?.trim()
@@ -157,13 +157,14 @@ export async function reasonAgentTaskV2(task: AgentTaskV2Request): Promise<Agent
     || "gpt-4.1-mini";
   const openai = new OpenAI({ apiKey, timeout: 25_000, maxRetries: 0 });
   const result = await openai.chat.completions.create({
-    model, temperature: 0.1, max_tokens: 900,
+    model, temperature: 0.1, max_tokens: 1200,
     response_format: {
       type: "json_schema",
       json_schema: { name: "agent_observe_act_v2_decision", strict: true, schema: DECISION_SCHEMA },
     },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
+      ...(validationFeedback ? [{ role: "system" as const, content: `Your previous decision failed server validation (${validationFeedback}). Reconsider the current request, use only exact exposed capability IDs and target refs, respect the postcondition contract, and return manual_review if no valid decision is possible. Do not repeat the invalid decision.` }] : []),
       { role: "user", content: JSON.stringify({ protocol: "agent_observe_act_v2", request: task }) },
     ],
   });
