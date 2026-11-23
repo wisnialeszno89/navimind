@@ -555,13 +555,27 @@ export async function POST(req: Request) {
       }
 
       const v2Request = body as AgentTaskV2Request;
-      const v2Result = await reasonAgentTaskV2(v2Request);
-      try {
-        validateAgentTaskV2Response(v2Result, v2Request);
-        return NextResponse.json(v2Result);
-      } catch {
-        return NextResponse.json(invalidAgentTaskV2Response(v2Request));
+      // A valid JSON model response can still select a capability, target or
+      // postcondition that is incompatible with the observed world. Give the
+      // reasoner exactly one opportunity to correct itself; never execute or
+      // return an unvalidated decision.
+      let validationFeedback: string | undefined;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const v2Result = await reasonAgentTaskV2(v2Request, validationFeedback);
+        try {
+          validateAgentTaskV2Response(v2Result, v2Request);
+          return NextResponse.json(v2Result);
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "unknown_validation_error";
+          // Contract validator errors are fixed codes, not raw model payloads.
+          validationFeedback = reason.slice(0, 180);
+          console.warn("NAVIMIND_V2_DECISION_VALIDATION_FAILED", {
+            attempt: attempt + 1,
+            code: validationFeedback,
+          });
+        }
       }
+      return NextResponse.json(invalidAgentTaskV2Response(v2Request));
     }
 
     // V1 remains deliberately isolated and unchanged. V2 requests are
